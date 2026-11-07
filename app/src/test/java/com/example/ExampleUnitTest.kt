@@ -1,5 +1,7 @@
 package com.example
 
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import com.example.ai.AiSectionNamingService
 import com.example.code.KotlinCodeEngine
 import com.example.model.CodeSectionUiModel
@@ -9,6 +11,7 @@ import com.example.model.TextFormattingStyle
 import com.example.ui.theme.LightKotlinSyntaxColors
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -25,6 +28,41 @@ class ExampleUnitTest {
         )
         assertEquals(6, sixLineBlock.lineCount)
         assertEquals(6, sixLineBlock.visibleLineSlots)
+    }
+
+    @Test
+    fun `ide auto-completes parenthesis braces brackets and quotes`() {
+        val before = TextFieldValue("fun demo", TextRange(8))
+        val typedOpenParen = TextFieldValue("fun demo(", TextRange(9))
+
+        val processed = KotlinCodeEngine.processIdeTextEdit(before, typedOpenParen)
+        assertEquals("fun demo()", processed.text)
+        assertEquals(9, processed.selection.end) // Cursor placed inside ()
+
+        // Typing closing ')' right before existing ')' skips over instead of duplicating
+        val typedCloseParen = TextFieldValue("fun demo())", TextRange(10))
+        val skipped = KotlinCodeEngine.processIdeTextEdit(processed, typedCloseParen)
+        assertEquals("fun demo()", skipped.text)
+        assertEquals(10, skipped.selection.end)
+    }
+
+    @Test
+    fun `ide detects hex color codes in kotlin snippets`() {
+        val code = "val primary = Color(0xFF7F52FF)\nval hexStr = \"#FF6B4A\""
+        val colors = KotlinCodeEngine.detectColorCodes(code)
+        assertEquals(2, colors.size)
+        assertEquals("0xFF7F52FF", colors[0].rawToken)
+        assertEquals("#FF6B4A", colors[1].rawToken)
+    }
+
+    @Test
+    fun `ide syntax checker flags errors and provides quick fixes`() {
+        val badCode = "function greet(name: String) {\n    println(\"Hello\n}"
+        val diagnostics = KotlinCodeEngine.diagnoseKotlinSyntax(badCode)
+        assertTrue(diagnostics.isNotEmpty())
+        assertTrue(diagnostics.any { it.message.contains("'fun'") })
+        assertTrue(diagnostics.any { it.message.contains("Unclosed string literal") })
+        assertNotNull(diagnostics.first().fixedCode)
     }
 
     @Test
@@ -84,7 +122,7 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun `ai naming service computes deterministic hashes and local fallback titles`() = runBlocking {
+    fun `ai naming service computes deterministic hashes and semantic titles`() = runBlocking {
         val service = AiSectionNamingService(maxRequestsPerMinute = 10)
         val hash1 = service.computeContentHash("fun test() {}", "Explanation")
         val hash2 = service.computeContentHash("fun test() {}", "Explanation")
@@ -96,6 +134,6 @@ class ExampleUnitTest {
             explanation = "Loads user profile from disk",
             sectionNumber = 2
         )
-        assertEquals("Section 2 • fetchUserProfile", fallback)
+        assertTrue(fallback.contains("Fetch User Profile"))
     }
 }

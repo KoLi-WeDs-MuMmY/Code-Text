@@ -105,6 +105,7 @@ class EditorViewModel(
     private val undoStack = ArrayDeque<DocumentDetailUiModel>()
     private val redoStack = ArrayDeque<DocumentDetailUiModel>()
     private var autoSaveTickerJob: Job? = null
+    private val debouncedAiNamingJobs = mutableMapOf<Long, Job>()
 
     init {
         viewModelScope.launch {
@@ -166,7 +167,6 @@ class EditorViewModel(
 
     fun openDocument(documentId: Long) {
         viewModelScope.launch {
-            // Flush any previous open document first
             if (_uiState.value.activeDocument != null && _uiState.value.hasUnsavedChanges) {
                 persistActiveDocumentInternal("Auto-saved before switching document")
             }
@@ -174,7 +174,8 @@ class EditorViewModel(
             undoStack.clear()
             redoStack.clear()
             val initialTarget = if (detail.sections.isNotEmpty()) {
-                ActiveEditorTarget.SectionCode(detail.sections.first().id, 0)
+                val lastSec = detail.sections.last()
+                ActiveEditorTarget.SectionCode(lastSec.id, lastSec.orderIndex)
             } else {
                 ActiveEditorTarget.Intro
             }
@@ -217,12 +218,10 @@ class EditorViewModel(
         }
     }
 
-    /**
-     * Called when leaving the editor screen back to the file list.
-     * Immediately auto-saves any ongoing edits.
-     */
     fun closeActiveDocument() {
         viewModelScope.launch {
+            debouncedAiNamingJobs.values.forEach { it.cancel() }
+            debouncedAiNamingJobs.clear()
             if (_uiState.value.activeDocument != null && _uiState.value.hasUnsavedChanges) {
                 persistActiveDocumentInternal("Auto-saved on leaving document")
             }
@@ -240,9 +239,6 @@ class EditorViewModel(
         }
     }
 
-    /**
-     * Called from MainActivity Lifecycle observer on ON_PAUSE / ON_STOP (minimizing or closing app).
-     */
     fun onAppMinimizedOrClosed() {
         viewModelScope.launch {
             if (_uiState.value.activeDocument != null && _uiState.value.hasUnsavedChanges) {
@@ -289,6 +285,7 @@ class EditorViewModel(
                 }
             )
         }
+        scheduleDebouncedAiNamingIfComplete(sectionId)
     }
 
     fun updateSectionExplanation(sectionId: Long, newExplanation: String) {
@@ -298,6 +295,25 @@ class EditorViewModel(
                     if (sec.id == sectionId) sec.copy(explanationText = newExplanation) else sec
                 }
             )
+        }
+        scheduleDebouncedAiNamingIfComplete(sectionId)
+    }
+
+    /**
+     * Automatically triggers AI section naming after a 4-second pause when a section has both
+     * Kotlin code and an explanation written, in addition to naming when the next code block is added.
+     */
+    private fun scheduleDebouncedAiNamingIfComplete(sectionId: Long) {
+        debouncedAiNamingJobs[sectionId]?.cancel()
+        debouncedAiNamingJobs[sectionId] = viewModelScope.launch {
+            delay(4_000L)
+            val sec = _uiState.value.activeDocument?.sections?.find { it.id == sectionId } ?: return@launch
+            if (sec.codeContent.isNotBlank() && sec.explanationText.length >= 12) {
+                val hash = aiNamingService.computeContentHash(sec.codeContent, sec.explanationText)
+                if (hash != sec.lastNamedHash) {
+                    triggerAiNamingForSectionInternal(sectionId, forceOverwriteTitle = true)
+                }
+            }
         }
     }
 
@@ -346,6 +362,7 @@ class EditorViewModel(
     }
 
     fun deleteSection(sectionId: Long) {
+        debouncedAiNamingJobs.remove(sectionId)?.cancel()
         mutateActiveDocument(recordUndo = true) { doc ->
             val remaining = doc.sections.filterNot { it.id == sectionId }
                 .mapIndexed { index, sec -> sec.copy(orderIndex = index) }
@@ -355,11 +372,8 @@ class EditorViewModel(
 
     /**
      * Inserts a new 4-line auto-expanding Kotlin code block + explanation section right after
-     * the currently active section (or at the end of the document).
-     *
-     * CRITICAL REQUIREMENT:
-     * "After a code block and its explanation is completed and the next code block is placed,
-     * then the previous one should be named and section it."
+     * the currently active section (or at the end of the document), and immediately names the
+     * just-completed previous section using AI.
      */
     fun insertCodeBlockAtActivePosition() {
         val currentDoc = _uiState.value.activeDocument ?: return
@@ -368,7 +382,7 @@ class EditorViewModel(
 
             val currentSections = currentDoc.sections
             val insertAfterIndex = when (val target = _uiState.value.activeTarget) {
-                is ActiveEditorTarget.Intro -> -1
+                is ActiveEditorTarget.Intro -> currentSections.size - 1
                 is ActiveEditorTarget.SectionCode -> {
                     currentSections.indexOfFirst { it.id == target.sectionId }
                         .takeIf { it >= 0 } ?: (currentSections.size - 1)
@@ -389,7 +403,6 @@ class EditorViewModel(
             val newOrderIndex = (insertAfterIndex + 1).coerceIn(0, currentSections.size)
             val inheritedStyle = _uiState.value.activeFormattingStyle
 
-            // Allocate a real DB ID for the new section so UI keys and auto-save are stable
             val newSectionId = repository.insertEmptySectionInDb(
                 documentId = currentDoc.id,
                 orderIndex = newOrderIndex,
@@ -428,10 +441,9 @@ class EditorViewModel(
                 )
             }
 
-            // Persist structural change immediately
             persistActiveDocumentInternal("Saved new code block section")
 
-            // Trigger AI section naming on the completed previous section if it has content
+            // Trigger AI section naming on the completed previous section
             if (completedPreviousSection != null &&
                 (completedPreviousSection.codeContent.isNotBlank() || completedPreviousSection.explanationText.isNotBlank())
             ) {
@@ -439,28 +451,33 @@ class EditorViewModel(
                     completedPreviousSection.codeContent,
                     completedPreviousSection.explanationText
                 )
-                if (currentHash != completedPreviousSection.lastNamedHash || completedPreviousSection.sectionTitle.isBlank()) {
-                    triggerAiNamingForSectionInternal(completedPreviousSection.id)
+                if (currentHash != completedPreviousSection.lastNamedHash ||
+                    completedPreviousSection.sectionTitle.isBlank() ||
+                    completedPreviousSection.sectionTitle.startsWith("Section ")
+                ) {
+                    triggerAiNamingForSectionInternal(
+                        sectionId = completedPreviousSection.id,
+                        forceOverwriteTitle = true
+                    )
                 }
             }
         }
     }
 
-    /**
-     * Manually or automatically names a section using Firebase AI Logic based on its Kotlin code
-     * and explanation text, respecting the free-tier RPM rate limiter.
-     */
     fun requestAiTitleForSection(sectionId: Long) {
+        debouncedAiNamingJobs.remove(sectionId)?.cancel()
         viewModelScope.launch {
-            triggerAiNamingForSectionInternal(sectionId)
+            triggerAiNamingForSectionInternal(sectionId, forceOverwriteTitle = true)
         }
     }
 
-    private suspend fun triggerAiNamingForSectionInternal(sectionId: Long) {
+    private suspend fun triggerAiNamingForSectionInternal(
+        sectionId: Long,
+        forceOverwriteTitle: Boolean
+    ) {
         val docBefore = _uiState.value.activeDocument ?: return
         val targetSection = docBefore.sections.find { it.id == sectionId } ?: return
 
-        // Mark section as naming-in-progress
         _uiState.update { state ->
             val doc = state.activeDocument ?: return@update state
             state.copy(
@@ -470,7 +487,7 @@ class EditorViewModel(
                     }
                 ),
                 aiErrorBanner = null,
-                aiStatusMessage = "AI naming Section ${targetSection.orderIndex + 1} from code + explanation…"
+                aiStatusMessage = "Naming Section #${targetSection.orderIndex + 1} from Kotlin code & explanation…"
             )
         }
 
@@ -500,7 +517,7 @@ class EditorViewModel(
                             }
                         ),
                         remainingAiRpmQuota = result.remainingRpmQuota,
-                        aiStatusMessage = "AI named section: \"${result.sectionTitle}\" (${result.remainingRpmQuota} RPM left)",
+                        aiStatusMessage = "Section #${targetSection.orderIndex + 1} named: \"${result.sectionTitle}\" (${result.remainingRpmQuota} RPM left)",
                         aiErrorBanner = null,
                         hasUnsavedChanges = true
                     )
@@ -516,9 +533,16 @@ class EditorViewModel(
                         activeDocument = doc.copy(
                             sections = doc.sections.map { sec ->
                                 if (sec.id == sectionId) {
+                                    val updatedTitle = if (forceOverwriteTitle || sec.sectionTitle.isBlank()) {
+                                        result.fallbackTitle
+                                    } else {
+                                        sec.sectionTitle
+                                    }
                                     sec.copy(
-                                        sectionTitle = sec.sectionTitle.ifBlank { result.fallbackTitle },
-                                        isNamingInProgress = false
+                                        sectionTitle = updatedTitle,
+                                        isAiNamed = true,
+                                        isNamingInProgress = false,
+                                        lastNamedHash = result.contentHash
                                     )
                                 } else {
                                     sec
@@ -526,10 +550,12 @@ class EditorViewModel(
                             }
                         ),
                         remainingAiRpmQuota = quota,
-                        aiStatusMessage = null,
-                        aiErrorBanner = "Free-tier RPM limit reached (max 10/min). Applied smart local title; retry AI in ${result.retryAfterSeconds}s."
+                        aiStatusMessage = "Free-tier RPM limit (10/min) reached • Named: \"${result.fallbackTitle}\"",
+                        aiErrorBanner = null,
+                        hasUnsavedChanges = true
                     )
                 }
+                persistActiveDocumentInternal("Saved smart fallback section name")
             }
 
             is SectionNamingResult.Error -> {
@@ -540,9 +566,16 @@ class EditorViewModel(
                         activeDocument = doc.copy(
                             sections = doc.sections.map { sec ->
                                 if (sec.id == sectionId) {
+                                    val updatedTitle = if (forceOverwriteTitle || sec.sectionTitle.isBlank()) {
+                                        result.fallbackTitle
+                                    } else {
+                                        sec.sectionTitle
+                                    }
                                     sec.copy(
-                                        sectionTitle = sec.sectionTitle.ifBlank { result.fallbackTitle },
-                                        isNamingInProgress = false
+                                        sectionTitle = updatedTitle,
+                                        isAiNamed = true,
+                                        isNamingInProgress = false,
+                                        lastNamedHash = result.contentHash
                                     )
                                 } else {
                                     sec
@@ -550,15 +583,16 @@ class EditorViewModel(
                             }
                         ),
                         remainingAiRpmQuota = quota,
-                        aiStatusMessage = null,
-                        aiErrorBanner = result.message
+                        aiStatusMessage = result.message,
+                        aiErrorBanner = null,
+                        hasUnsavedChanges = true
                     )
                 }
+                persistActiveDocumentInternal("Saved section name")
             }
         }
     }
 
-    // Rich Text Formatting Actions (Font family, Font size, Bold, Italic, Underline, Strikethrough, Alignment)
     fun setFontChoice(fontChoice: EditorFontChoice) {
         updateActiveFormattingStyle { it.copy(fontChoice = fontChoice) }
     }

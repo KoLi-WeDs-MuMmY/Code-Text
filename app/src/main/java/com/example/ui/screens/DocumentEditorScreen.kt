@@ -3,7 +3,6 @@ package com.example.ui.screens
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,14 +16,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -49,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -110,13 +110,30 @@ fun DocumentEditorScreen(
     onDismissBanner: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Ensure back press auto-saves immediately before returning to the document list
     BackHandler(onBack = onCloseDocument)
 
     val expectedAndroidKeyCode = AndroidKeyEvent.KEYCODE_A + (uiState.shortcutLetter - 'A')
+    val listState = rememberLazyListState()
 
+    // Smoothly scroll to newly inserted code block so it is centered in front of the user
+    LaunchedEffect(uiState.newlyInsertedSectionId) {
+        val newId = uiState.newlyInsertedSectionId ?: return@LaunchedEffect
+        val idx = document.sections.indexOfFirst { it.id == newId }
+        if (idx >= 0) {
+            // Item index in LazyColumn: 0 = Title, 1 = Intro, 2 + idx = Section
+            try {
+                listState.animateScrollToItem(index = idx + 2)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    // IMPORTANT FIX FOR SOFT KEYBOARD:
+    // Because MainActivity uses `android:windowSoftInputMode="adjustResize"`, the window already
+    // resizes above the soft keyboard. Using `WindowInsets.systemBars` (without `safeDrawing` or
+    // duplicate `.imePadding()`) prevents double/triple IME padding from pushing the editor off-screen!
     Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
+        contentWindowInsets = WindowInsets.systemBars,
         topBar = {
             Column {
                 TopAppBar(
@@ -132,7 +149,6 @@ fun DocumentEditorScreen(
                         }
                     },
                     title = {
-                        // Live Auto-Save Status Pill (30s countdown + immediate exit save)
                         Surface(
                             color = if (uiState.hasUnsavedChanges) {
                                 MaterialTheme.colorScheme.secondaryContainer
@@ -178,7 +194,6 @@ fun DocumentEditorScreen(
                         }
                     },
                     actions = {
-                        // Save Now button
                         IconButton(
                             onClick = onSaveNow,
                             modifier = Modifier.testTag("save_now_button")
@@ -189,7 +204,6 @@ fun DocumentEditorScreen(
                             )
                         }
 
-                        // Ctrl+<Letter> Shortcut Setting Chip
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = RoundedCornerShape(8.dp),
@@ -216,7 +230,6 @@ fun DocumentEditorScreen(
                             }
                         }
 
-                        // Dark / Light Mode Toggle
                         IconButton(
                             onClick = onCycleThemeMode,
                             modifier = Modifier.testTag("editor_theme_toggle_button")
@@ -236,7 +249,6 @@ fun DocumentEditorScreen(
                     )
                 )
 
-                // Rich Text & Code Block Formatting Toolbar
                 RichTextToolbar(
                     style = uiState.activeFormattingStyle,
                     shortcutLetter = uiState.shortcutLetter,
@@ -254,7 +266,6 @@ fun DocumentEditorScreen(
                     onRedo = onRedo
                 )
 
-                // AI Section Naming Status / Error Banner
                 AnimatedVisibility(
                     visible = uiState.aiStatusMessage != null || uiState.aiErrorBanner != null
                 ) {
@@ -275,7 +286,7 @@ fun DocumentEditorScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                                .padding(horizontal = 14.dp, vertical = 5.dp)
                         ) {
                             Text(
                                 text = bannerText,
@@ -289,12 +300,12 @@ fun DocumentEditorScreen(
                             )
                             IconButton(
                                 onClick = onDismissBanner,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(22.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Dismiss Banner",
-                                    modifier = Modifier.size(15.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
                         }
@@ -319,29 +330,29 @@ fun DocumentEditorScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .imePadding(),
+                .padding(innerPadding),
             contentAlignment = Alignment.TopCenter
         ) {
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 760.dp),
                 contentPadding = PaddingValues(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = 12.dp,
-                    bottom = 88.dp
+                    start = 14.dp,
+                    end = 14.dp,
+                    top = 10.dp,
+                    bottom = 64.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // 1. Document Title & Metadata Summary Header
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                item(key = "doc_header") {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         BasicTextField(
                             value = document.title,
                             onValueChange = onTitleChange,
-                            textStyle = MaterialTheme.typography.headlineMedium.copy(
+                            textStyle = MaterialTheme.typography.headlineSmall.copy(
                                 color = MaterialTheme.colorScheme.onBackground,
                                 fontWeight = FontWeight.Bold
                             ),
@@ -350,7 +361,7 @@ fun DocumentEditorScreen(
                                 if (document.title.isEmpty()) {
                                     Text(
                                         text = "Document Title…",
-                                        style = MaterialTheme.typography.headlineMedium,
+                                        style = MaterialTheme.typography.headlineSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                     )
                                 }
@@ -363,7 +374,7 @@ fun DocumentEditorScreen(
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
                                 text = "${document.sections.size} Kotlin Sections",
@@ -385,8 +396,8 @@ fun DocumentEditorScreen(
                     }
                 }
 
-                // 2. Introductory Rich Text Area (above the first code block)
-                item {
+                // 2. Introductory Rich Text Area
+                item(key = "doc_intro") {
                     val introStyle = document.introStyle
                     val decorations = buildList {
                         if (introStyle.isUnderline) add(TextDecoration.Underline)
@@ -418,7 +429,7 @@ fun DocumentEditorScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(14.dp)
+                                .padding(12.dp)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -457,7 +468,7 @@ fun DocumentEditorScreen(
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .heightIn(min = 56.dp)
+                                            .heightIn(min = 48.dp)
                                     ) {
                                         if (document.introText.isEmpty()) {
                                             Text(
@@ -523,8 +534,8 @@ fun DocumentEditorScreen(
                     )
                 }
 
-                // 4. Bottom Action Button to Append Next Code Block (and trigger AI naming on the previous one)
-                item {
+                // 4. Bottom Action Button to Append Next Code Block
+                item(key = "bottom_add_btn") {
                     OutlinedButton(
                         onClick = onInsertCodeBlock,
                         shape = RoundedCornerShape(12.dp),
