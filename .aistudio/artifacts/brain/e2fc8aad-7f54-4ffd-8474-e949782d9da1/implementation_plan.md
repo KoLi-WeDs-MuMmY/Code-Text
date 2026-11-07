@@ -1,81 +1,88 @@
-# KtScribe — macOS Dynamic Island & Full-Screen Apple `cmd` Kotlin IDE
+# KtScribe — Matte Darcula IDE, Tactile Window Depth & Dual Floating Window Studio
 
-KtScribe transforms into a professional, folder-driven Kotlin IDE and technical note studio featuring a full-screen Apple macOS Terminal (`cmd`) code editor, a top-center **Floating Dynamic Island** with resizable drop-down macOS windows, a **Draggable & Resizable Explanation Window** with a **Split-Screen Two-Window Mode**, inline IDE abbreviation expansions (`sout` → `println()`), first-launch **Hidden Vault Recovery**, and conflict-free **APK Updates**.
+KtScribe refines its workspace to match your hand-drawn layout sketches and IDE reference screenshots: replacing all neon colors with a warm, professional **Matte Darcula / Espresso IDE** palette, adding **multi-layered physical window depth (beveled rims, deep ambient drop shadows, and active/inactive z-index elevation)** so every window layer feels distinct, introducing a **cursor-anchored vertical autocomplete dropdown with side documentation card**, locking the bottom shortcut bar to a **constant (`val`) 8-key strip**, and supporting **up to 2 simultaneous free-draggable & resizable floating windows** with fluid macOS spring transitions.
 
 ---
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> The following architectural and UX decisions incorporate all of your answers and visual references:
+> All product, visual depth, and layout decisions below incorporate your feedback and 5 reference images:
 
-- **Confirmed Decision 1 — Automatic Hidden Vault & First-Launch Recovery (`xyz` / `.ktscribe_vault`)**: On first launch, KtScribe prompts for local vault storage permission and checks if a previous backup vault exists on the device. If detected, a recovery modal lets you **Recover Previous Folders** or **Initialize a Fresh Vault**. All vault snapshots are stored in an obfuscated, Base64+XOR encoded binary structure inside a hidden directory so they are inaccessible to casual browsing.
-- **Confirmed Decision 2 — Keep Data on Uninstall + Conflict-Free APK Updates**:
-  - **Uninstall Prompt**: Declares `android:hasFragileUserData="true"` on the application manifest so Android presents the system checkbox asking whether to keep or delete your local app data when uninstalling.
-  - **Zero Update Conflicts**: Commits the deterministic `debug.keystore.base64` signature and increments `versionCode` so every GitHub Actions build and local build is signed with the exact same certificate—eliminating the *"package conflicts with an existing package"* error on update.
-- **Confirmed Decision 3 — Folders-Only Workspace Switched via Dynamic Island**: Flat files are replaced by **Folders** (projects/modules). Each Folder holds multiple ordered Kotlin code sections and concept tags that you switch between or search from the top Floating Dynamic Island.
-- **Confirmed Decision 4 — Full-Screen Apple `cmd` Code Editor + Resizable Floating & Split-Screen Explanation Window**:
-  - The Kotlin Code Editor now occupies the **full screen** with an authentic Apple macOS Terminal (`cmd`) aesthetic and automatically resizes above the on-screen keyboard so your active cursor line is always visible.
-  - The paired **Explanation Block** operates in two user-toggleable modes:
-    1. **Floating macOS Window Overlay**: A draggable, resizable macOS window (`● ● ●` traffic lights + drag-to-resize corner/bottom handle) floating over the full-screen code editor.
-    2. **Split-Screen Two-Window Mode ("Set Aside")**: Divides the workspace into two side-by-side or stacked resizable macOS windows (Code Window + Explanation Window) with a draggable split divider so you can resize both panes freely.
-- **Confirmed Decision 5 — Streamlined Live IDE Abbreviations (No Snippet Overload)**: Replaces the cluttered snippet bar with intelligent live postfix/abbreviation popups (`sout` → `println()`, `main` → `fun main()`, `fori` → `for (i in 0 until n)`, `ifn` → `if (x == null)`, `inn` → `if (x != null)`, `tryc` → `try / catch`) alongside real-time syntax error detection.
+- **Confirmed Decision 1 — Zero Neon + 4-Tier Tactile Window Depth Hierarchy**:
+  - All neon colors are removed in favor of a warm Matte Darcula & Espresso palette where each layer is separated by physical depth, drop shadows, and dual-bevel borders:
+    1. **Tier 0 — Recessed Outer Frame (`#11100F`)**: Deepest matte chassis holding the left 5-icon IDE rail and top-right window launcher pills.
+    2. **Tier 1 — Code Editor Canvas (`#1B1A19`, `6.dp` elevation)**: Framed by a recessed dark outer trench (`#090808`) and a subtle top-edge light catch (`#3A3632`), with a slightly recessed line-number gutter (`#161514`).
+    3. **Tier 2 — Cursor-Anchored Completion & Doc Popup (`#252320`, `18.dp` shadow)**: Floats above the code lines with a crisp `1.dp` warm bevel (`#4C463F`) and deep drop shadow.
+    4. **Tier 3 — Floating macOS Windows (`28.dp` ambient + key drop shadow, Top Bevel Highlight & Z-Index Focus Depth)**:
+       - Floating windows use a distinct **Warm Mocha Slate (`#2B2724`)** surface, a `1.5.dp` top specular bevel (`#5E554C`) simulating overhead studio lighting, and a deep multi-layer ambient shadow (`#000000CC`) so they clearly detach from the code canvas below.
+       - **Active vs. Secondary Window Depth**: When 2 floating windows are open at the same time, tapping or dragging either window promotes it to the foreground (`zIndex = 2f`, `28.dp` shadow, `#2C2825` surface, bright top rim) while the other floating window recedes slightly (`zIndex = 1f`, `14.dp` shadow, `#23201E` surface) so both windows feel three-dimensional and distinct.
+- **Confirmed Decision 2 — Exact Sketch Layout (Left 5-Icon IDE Rail + Top-Right 4 Window Pills)**:
+  - **Top-Left Back Button (`←`)**: Returns to the Folder overview.
+  - **Left Vertical Rail (5 Circular IDE Tool Buttons)**: Quick access to **Format (`{ }`)**, **Syntax Quick-Fix (`✓/⚠`)**, **Structure & Find (`🔍`)**, **Line Refactoring (`⌘/`)**, and **New Code Section (`+`)**.
+  - **Top-Right Bar (4 Horizontal Oval Pills)**: Launches and toggles the floating windows (**`Explanation`**, **`Folders & Sections`**, **`AI Studio`**, and **`Run Output`**), plus a Command Palette trigger.
+- **Confirmed Decision 3 — Constant (`val`) Bottom Shortcut Bar & Cursor-Anchored IDE Completion Box**:
+  - The bottom bar inside the code block is strictly a **constant (`val`) 8-key shortcut strip**: `Tab`, `( )`, `{ }`, `" "`, `->`, `.`, `=`, `:`.
+  - Autocomplete suggestions (`sout` → `println()`, `soutv`, `fun`, classes, interfaces, and newly declared user symbols badged with `NEW`) appear in a **Vertical IDE Completion Popup + Side Documentation Tooltip** directly beneath the active cursor line.
+- **Confirmed Decision 4 — Max 2 Simultaneous Floating Windows with Shake-and-Notify Guard**:
+  - Up to **2 floating windows** (excluding the Command Palette) can be open at the same time.
+  - If 2 floating windows are already open and you tap a 3rd window pill, the existing 2 windows stay open, perform a tactile **horizontal shake animation**, and show a subtle banner (*"Max 2 floating windows open — cancel (`✕`) one first"*).
+  - Every floating window can be **dragged anywhere on screen**, **resized from its left edge or bottom-right corner** (matching Sketch 2 and Sketch 5), and **canceled/closed** via its `✕` button or red traffic light dot with a fluid macOS spring scale+fade transition.
 
 ---
 
 ## 1. Overview & Core Concept
 
-- **What It Does**: KtScribe provides a distraction-free, full-screen Apple `cmd` Kotlin code editor controlled from a macOS-inspired **Floating Dynamic Island** at the top of the display. Every option clicked in the Dynamic Island—Folder Explorer, Command Palette, Section Navigator, AI Concept Studio, or Terminal Runner—drops down as a smooth, resizable macOS floating window.
-- **Target Audience / Persona**: Kotlin developers, students, and software engineers who want a desktop-class macOS floating-window workflow on Android with instant keyboard adaptation, live abbreviation completions, and safe local data recovery across app updates or reinstalls.
-- **Key Value**: Delivers maximum screen real estate for writing code while keeping explanations, AI deep-dives, command search, and folder navigation one tap away inside resizable floating or split-screen windows.
+- **What It Does**: KtScribe delivers a full-screen Apple `cmd` / JetBrains Darcula Kotlin editor framed by a 5-button left IDE tool rail and a 4-pill top-right floating window bar. Every UI plane—outer frame, code canvas, inline completion popup, and floating windows—has distinct surface shading, overhead bevel lighting, and drop-shadow depth.
+- **Target Audience / Persona**: Android and Kotlin developers who want an authentic, non-neon desktop IDE experience with tactile spatial depth and fluid macOS window management.
+- **Key Value**: Eliminates flat "AI slop" styling by combining true spatial elevation, high-signal IDE diagnostics, and smooth multi-window multitasking.
 
 ---
 
 ## 2. User Experience & Visual Design
 
 ### Key User Flows
-1. **First-Launch Storage Permission & Hidden Vault Recovery**:
-   - On first launch, KtScribe displays a sleek macOS-styled **Vault Storage & Recovery Gate** requesting permission to initialize and scan the local hidden vault (`.ktscribe_vault_xyz`).
-   - If encoded vault data from a previous installation or session is found, the user can choose **Recover Previous Folders & Code** (restoring all folders, sections, explanations, and AI concept tags) or **Create Fresh Vault**.
-2. **Top-Center Floating Dynamic Island & Resizable Drop-Down Windows**:
-   - Anchored at the top center of the screen is the **Floating Dynamic Island** pill showing:
-     - Active Folder icon & name (`📁 Coroutines Lab`)
-     - Active Section & AI Concept Tag (`#1 • Structured Concurrency`)
-     - Live Syntax Health indicator (`✓ 0 Errors` or `⚠ 2 Syntax Issues`)
-     - Quick triggers for **Command Palette (`⌘P`)**, **Explanation Window**, **Run (`▶`)**, and **AI Studio (`✨`)**.
-   - Tapping any item in the Dynamic Island drops down a translucent **macOS Floating Window** with a bottom-right and bottom-edge **Resize Handle** so the user can adjust its width and height interactively:
-     - **Command Palette Dropdown** (modeled after your reference image): Search bar (`"Run a command, jump to a folder, section, or symbol..."`) with filter pills (`All`, `Commands`, `Folders`, `Symbols`, `Sections`) and instant keyboard/tap execution.
-     - **Folders & Sections Explorer Dropdown**: Switch folders, create new folders, reorder or add code sections (`Ctrl + K`), or jump to any learned AI concept tag.
-     - **AI Deep-Dive & Concept Tag Dropdown**: Generates thorough step-by-step explanations, time/space complexity, best practices, and automatically names the section's **Learned Concept Tag** while staying within free-tier RPM limits.
-3. **Full-Screen Apple `cmd` Code Editor & Live IDE Assistance**:
-   - The Kotlin editor fills the workspace with an authentic macOS Terminal aesthetic (`● ● ●` window controls, shell path header `ktscribe — -zsh — kotlin`, line numbers, active-line spotlight, and indent guides).
-   - **Keyboard-Aware Viewport Resizing**: When the on-screen keyboard opens, the full-screen editor dynamically shrinks its bottom bounds (`imePadding` + automatic cursor `BringIntoViewRequester`) so the cursor and surrounding lines remain centered in the visible area.
-   - **Live Postfix & Abbreviation Suggestions**: Typing shorthand abbreviations like `sout`, `serr`, `main`, `psvm`, `fori`, `ifn`, `inn`, `lazy`, or ` tryc` surfaces a sleek inline completion popup right near the cursor—expanding `sout` into `println("")` with the cursor placed inside the quotes.
-   - **Real-Time Syntax Diagnostics**: As you type, the syntax analyzer checks for unbalanced parentheses/braces/brackets, unclosed string literals, invalid token sequences, and common Kotlin typos (e.g., `func` instead of `fun`, `Sting` instead of `String`, `println` without parens), highlighting the exact line in red and offering a one-tap Quick Fix.
-4. **Explanation Block — Floating Window vs. Split-Screen Two-Window Mode**:
-   - Tapping the **Explanation (`📝`)** pill in the Dynamic Island opens the section's Explanation Editor.
-   - **Mode A — Floating Resizable Window**: Floats over the code editor like the macOS Notes window in your reference image. You can drag its title bar anywhere on screen and drag its resize handle to make it larger or smaller.
-   - **Mode B — Set Aside / Split-Screen Two-Window Mode**: Tapping the **Split View (`◫`)** button on the Explanation title bar docks the Code Editor and Explanation Editor into two side-by-side (or top/bottom) macOS windows separated by a draggable split divider so you can read/write code and prose simultaneously.
+1. **Workspace Frame (Matching Your Blue/White/Pink/Green Sketch)**:
+   - **Top-Left (`←`)**: Navigates back to the Folders library while auto-saving to the hidden vault.
+   - **Left Vertical Rail (5 Circular Buttons)**:
+     1. **`{ }` Format**: Auto-indents and normalizes Kotlin code.
+     2. **`⚠/✓` Diagnostics & Quick-Fix**: Applies instant syntax fixes or jumps to the next error line.
+     3. **`🔍` Find, Replace & Structure**: Opens the inline symbol structure tree (`m main()`, classes, properties) and find/replace bar.
+     4. **`⌘/` Line & Block Actions**: Comment/uncomment line, duplicate line (`⌘D`), move line up/down, or surround with `try/catch` / `if`.
+     5. **`+` Add Section (`Ctrl+K`)**: Creates the next Kotlin section in the active folder.
+   - **Top-Right Oval Pills (4 Floating Window Launchers)**:
+     - `[ Explain ]` • `[ Folders ]` • `[ AI Guide ]` • `[ Run ▶ ]` (plus `⌘P` Command Block).
+2. **Real IDE Inline Diagnostics & Cursor-Anchored Completion Popup (Matching Screenshots 3 & 4)**:
+   - **Inline Line Error Pill**: When a line has a syntax issue or unexpanded shorthand (e.g., line 3 has `sout` or line 1 has incomplete `fun`), an inline pill appears right after the code on that exact line: `⊗ Unresolved reference: sout` or `⊗ Syntax error  2`. Tapping the pill applies the quick fix immediately.
+   - **Vertical Completion Box + Companion Doc Tooltip**:
+     - Floats at **Tier 2 Depth (`18.dp` shadow)** directly below the active typing line when typing identifiers or abbreviations.
+     - Displays category badges (`{}` green for templates like `sout` / `soutv`, `K` for keywords like `fun` / `fun interface`, `C` for classes, `I` for interfaces, `@` for annotations, `m` for functions, and a `NEW` badge for newly declared symbols in your script).
+     - The top selected row is highlighted in warm amber-brown (`#75420E`), and a **Companion Documentation Box** sits to the right showing the expansion signature and description (e.g., `sout   println()` / `Print to standard output`).
+   - **Constant `val` Bottom Shortcut Strip**:
+     - Anchored at the bottom of the code block with a fixed set of 8 essential typing keys: `Tab`, `( )`, `{ }`, `" "`, `->`, `.`, `=`, `:`.
+3. **Dual Floating Windows with Tactile 3D Depth (Max 2 Open, Free Drag, Left/Corner Resize, Cancel, Fluid Transition)**:
+   - Tapping a top-right oval pill smoothly animates a floating window into view using a macOS-style spring scale + fade + slide transition originating from the top-right.
+   - Each floating window renders at **Tier 3 Depth**: a custom multi-layer ambient shadow halo (`drawBehind` radial/drop shadow + `28.dp` elevation), a recessed dark outer ring (`#0D0C0B`), a warm mocha surface (`#2B2724`), and a brighter top-edge bevel (`#63594F`) so the window visually pops off the dark code editor behind it.
+   - Tapping anywhere on a floating window brings it to the top of the z-order (`zIndex = 2f`) with deeper shadow contrast, while the secondary floating window steps back (`zIndex = 1f`).
 
 ### Visual Identity & Theme
-- **Aesthetic Direction**: *macOS Sequoia Dynamic Island & Apple Terminal (`cmd`) Studio* — ultra-clean translucent glass surfaces (`#16181FCC`), crisp `1dp` specular borders (`#FFFFFF1F`), macOS traffic-light window controls (`#FF5F56`, `#FFBD2E`, `#27C93F`), and high-contrast JetBrains Mono typography.
-- **Color Palette & Mood (Dark & Light Mode)**:
-  - **Apple `cmd` Dark Surface**: Deep Charcoal Terminal (`#0B0D12`), Floating Island Pill (`#050608F2`), Translucent Glass Dropdown Window (`#181A22F0`), Electric Amber/Blue selection accents (`#0A84FF` / `#FF9F0A`), and vivid syntax tokens.
-  - **macOS Daylight Mode**: Frosted Silver desktop backdrop (`#ECEFF4`), Crisp White floating windows (`#FFFFFFF2`) with subtle drop shadows, and classic dark or light terminal themes.
+- **Aesthetic Direction**: *JetBrains Darcula & macOS Tactile Graphite* — zero neon, multi-tiered depth, subtle overhead specular bevels, and rich drop shadows.
+- **4-Tier Depth & Surface Palette**:
+  - **Tier 0 — Outer Workspace Trench**: `#11100F`
+  - **Tier 1 — Code Editor Canvas**: `#1B1A19` (Gutter `#151413`, Top Bevel `#383430`, Outer Rim `#090808`)
+  - **Tier 2 — Cursor Autocomplete & Doc Cards**: `#252320` (`18.dp` shadow, Highlight `#75420E`, Border `#4C463F`)
+  - **Tier 3 — Floating Windows**: Foreground `#2C2825` (`28.dp` shadow + ambient halo, Header `#36312D`, Top Bevel `#63594F`) / Background `#23201E` (`14.dp` shadow, Header `#2B2724`, Top Bevel `#47413B`)
 
 ---
 
 ## 3. Key Product Decisions & Trade-Offs
 
-- **Decision 1: Deterministic APK Signing for Seamless Updates**
-  - *Chosen Approach*: Generate and track `debug.keystore.base64` from the project's `debug.keystore` and increment `versionCode` in Gradle so GitHub Actions decodes the identical signing certificate on every push rather than running `keytool -genkeypair` to create a random key.
-  - *Why*: Android rejects APK updates (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) whenever two APKs with the same `applicationId` are signed with different certificates. Sharing the exact encoded debug certificate ensures every new build installs cleanly as an update over the existing app.
-- **Decision 2: Dual-Layer Persistence (Room SQLite + Obfuscated Hidden Vault `.ktscribe_vault_xyz`)**
-  - *Chosen Approach*: Every 30 seconds and on lifecycle pause/stop, persist all folders and sections to Room SQLite **and** mirror an obfuscated, Base64+XOR encoded vault snapshot into the hidden vault folder, paired with `android:hasFragileUserData="true"` in `AndroidManifest.xml`.
-  - *Why*: Satisfies Android Play Policy while giving users both the native Android "Keep app data on uninstall" checkbox and a first-launch Vault Recovery prompt that restores previous folders without exposing plain-text files.
-- **Decision 3: Floating Resizable Windows + Split-Screen Toggle Instead of Cluttered Toolbars**
-  - *Chosen Approach*: Consolidate navigation, search, AI tools, and folder management into the top **Floating Dynamic Island** and render active tools (Command Palette, Folder Switcher, Explanation Editor, AI Studio) as resizable macOS windows or a 2-window split view.
-  - *Why*: Eliminates visual clutter and snippet overload while keeping the Kotlin code editor full-screen and responsive when the keyboard is up.
+- **Decision 1: Multi-Layer Shadow + Dual-Bevel Rim Rendering for True Window Depth**
+  - *Chosen Approach*: Combine Compose `shadow(...)` with a custom `drawBehind` ambient shadow pass and a 2-layer border (a `1.dp` dark outer contour `#0A0908` paired with a vertical gradient inner bevel that is lighter at the top `#63594F` and darker at the bottom `#2E2A27`), plus dynamic `zIndex` focus promotion when 2 windows are open.
+  - *Why*: On dark themes, standard flat cards blend into the background. A dark outer trench + top-lit inner bevel + soft dark drop shadow is how macOS and JetBrains IDEs create unmistakable physical depth without using garish bright colors.
+- **Decision 2: Strict Separation of Constant (`val`) Bottom Keys vs. Cursor-Anchored Autocomplete**
+  - *Chosen Approach*: Keep `VAL_SHORTCUT_KEYS` immutable (`Tab`, `( )`, `{ }`, `" "`, `->`, `.`, `=`, `:`) at the bottom of the code block, and render all live completions (`sout`, `soutv`, `fun`, classes, interfaces, `NEW` user symbols) in a floating IDE popup directly below the active cursor line with a side documentation card.
+  - *Why*: Muscle memory requires shortcut keys to stay in fixed positions (`val`), while code completions belong at eye-level right under the cursor.
 
 ---
 
@@ -84,63 +91,40 @@ KtScribe transforms into a professional, folder-driven Kotlin IDE and technical 
 ### Architecture & Component Diagram
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                                 MainActivity                                 │
-│  • Firebase App Check Init            • Hardware Key Intercept (Ctrl+Letter) │
-│  • First-Launch Vault Recovery Gate   • Lifecycle Auto-Save & Vault Sync     │
-└──────────────────────────────────────┬───────────────────────────────────────┘
-                                       │
-                                       ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                          EditorViewModel (StateFlow)                         │
-│  • Active Folder & Code Sections      • Floating Window & Split-View State   │
-│  • Command Palette Filter & Search    • 30s Auto-Save & Hidden Vault Mirror  │
-└──────────┬───────────────────────────┴────────────────────────┬──────────────┘
-           │                                                    │
-           ▼                                                    ▼
-┌────────────────────────────────────────┐    ┌────────────────────────────────┐
-│   EditorRepository & VaultManager      │    │     AiSectionNamingService     │
-│  • Room SQLite (Folders & Sections)    │    │  • Firebase.ai (Gemini 3.x)    │
-│  • Hidden Vault (.ktscribe_vault_xyz)  │    │  • 10 RPM Free-Tier Limiter    │
-│  • Obfuscated Snapshot Encode/Decode   │    │  • Thorough Guide & Concept Tag│
-└────────────────────────────────────────┘    └────────────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                    Jetpack Compose macOS Island Workspace                    │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │              Top Floating Dynamic Island (Notch Menu Pill)             │  │
-│  │   [📁 Folder]  [🏷️ Concept Tag]  [⌘P Palette]  [📝 Explain]  [✨ AI]   │  │
-│  └───────────────┬────────────────────────────────────────┬───────────────┘  │
-│                  │ Drops down resizable macOS windows     │                  │
-│                  ▼                                        ▼                  │
-│  ┌────────────────────────────────────┐  ┌────────────────────────────────┐  │
-│  │ Full-Screen Apple `cmd` Code Window│  │ Resizable Explanation Window   │  │
-│  │ • macOS Traffic Lights & zsh Header│  │ • Mode A: Draggable & Resizable│  │
-│  │ • Live Syntax Error Underlines     │  │   Floating macOS Notes Window  │  │
-│  │ • Inline Postfix Popup (sout, fori)│  │ • Mode B: Set-Aside Resizable  │  │
-│  │ • Keyboard-Aware Viewport Resize   │  │   Split-Screen Two-Window View │  │
-│  └────────────────────────────────────┘  └────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────────┘
+│              Tier 0: Outer Workspace Trench (#11100F)                        │
+│  [← Back]                                  [Explain] [Folders] [AI] [Run ▶]  │
+├────────┬─────────────────────────────────────────────────────────────────────┤
+│  Left  │  Tier 1: Beveled Code Block Canvas (#1B1A19, 6.dp Depth)            │
+│  Rail  │  • • •   §1 • Section Title                            [⌘P Palette] │
+│        │  ─────────────────────────────────────────────────────────────────  │
+│  ({ }) │  1 │ fun main() {                                                   │
+│        │  2 │     sout|   [⊗ Unresolved reference: sout]                     │
+│  (✓/⚠) │    │     ╔══════════════════════════════════╗ ╔══════════════════╗  │
+│        │    │     ║ {} sout               println()  ║ ║ sout  println()  ║  │
+│  (🔍)  │    │     ║ {} soutv   println("v = ${v}")   ║ ║ Print to stdout  ║  │
+│        │    │     ║ K  fun          fun name() { }   ║ ╚══════════════════╝  │
+│  (⌘/)  │    │     ╚══ Tier 2: 18.dp Drop Shadow ═════╝                       │
+│        │    │                                  ╔══════════════════════════╗  │
+│  ( + ) │    │                                  ║ • • •  Floating Win #1   ║  │
+│        │    │                                  ║ ▐ Left & Corner Resize   ║  │
+│        │    │                                  ║ Tier 3: 28.dp + Bevel Rim║  │
+│        │    │                                  ╚══════════════════════════╝  │
+│        │  ─────────────────────────────────────────────────────────────────  │
+│        │  [ Tab ]  [ ( ) ]  [ { } ]  [ " " ]  [ -> ]  [ . ]  [ = ]  [ : ]    │
+└────────┴─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Data Model & State
-- **`Folder` (Workspace Folder Entity)**:
-  - `id: Long`, `folderName: String`, `description: String`, `sections: List<CodeSection>`, `updatedAt: Long`, `createdAt: Long`.
-- **`CodeSection` (Inside Folder)**:
-  - `id: Long`, `folderId: Long`, `orderIndex: Int`, `sectionTitle: String`, `learnedConceptTag: String`, `codeContent: String`, `explanationText: String`, `aiDeepExplanation: String`.
-- **`FloatingWindowState`**:
-  - Tracks active dropdown window (`NONE`, `COMMAND_PALETTE`, `FOLDER_EXPLORER`, `AI_STUDIO`, `TERMINAL_OUTPUT`), window dimensions (`widthDp`, `heightDp` adjusted via drag resize handle), and Explanation Window layout mode (`HIDDEN`, `FLOATING_WINDOW`, `SPLIT_SCREEN` with adjustable split ratio `0.25f..0.75f`).
-- **`VaultSnapshot` (`.ktscribe_vault_xyz`)**:
-  - Obfuscated binary backup file containing serialized folders, code sections, and concept tags, checked on first launch to offer one-tap recovery or fresh initialization.
+- **`FloatingWindowType` (`EXPLANATION`, `FOLDERS`, `AI_STUDIO`, `RUN_OUTPUT`)**:
+  - Managed via `openFloatingWindows: List<FloatingWindowType>` (max size 2, ordered from background `index 0` to foreground `lastIndex` so tapping any window moves it to `lastIndex` with highest `zIndex` and deepest shadow).
+- **`KotlinSuggestion` (Extended IDE Metadata)**:
+  - `label: String` (e.g., `"sout"`), `tailSignature: String` (e.g., `"println()"`), `insertText: String`, `badgeChar: String` (`"{}"`, `"K"`, `"C"`, `"I"`, `"@"`, `"m"`), `docSummary: String` (for the side documentation card), and `isNewSymbol: Boolean` (true for newly declared identifiers in the current code).
+- **`VAL_SHORTCUT_KEYS`**:
+  - Compile-time constant list of the 8 essential typing shortcuts (`Tab`, `( )`, `{ }`, `" "`, `->`, `.`, `=`, `:`).
 
 ### Interactive Component & State Mapping
-- **First-Launch Storage Permission & Vault Recovery Flow**:
-  - On first launch, `VaultStorageManager` requests user confirmation to access/initialize the local `.ktscribe_vault_xyz` directory. If an existing vault snapshot is detected, a modal asks whether to **Recover Previous Data** (importing folders into Room) or **Start Fresh in New Vault**.
-- **Top Floating Dynamic Island & Resizable Drop-Down Windows**:
-  - Tapping the Island expands the selected tool into a macOS window anchored beneath the Island (or centered for the Command Palette). Dragging the bottom/corner resize handle updates `windowWidthDp` and `windowHeightDp` in real time.
-- **Explanation Floating & Split-Screen Window**:
-  - In `FLOATING_WINDOW` mode, `pointerInput` drag gestures on the window header move `(offsetX, offsetY)` and drag gestures on the bottom-right resize grip resize `(widthDp, heightDp)`.
-  - In `SPLIT_SCREEN` mode, the workspace divides into two macOS windows (Code Editor + Explanation Editor) with a draggable divider bar between them, automatically adapting to portrait (top/bottom split) or landscape/tablet (left/right split) and resizing cleanly when the soft keyboard opens.
-- **Live Postfix Abbreviation & Syntax Error Engine (`KotlinCodeEngine`)**:
-  - Detects abbreviations immediately before the cursor (`sout` → `println("")`, `serr` → `System.err.println("")`, `main` → `fun main() {\n    \n}`, `fori` → `for (i in 0 until n) {\n    \n}`, `ifn` → `if (value == null) {\n    \n}`, `inn` → `if (value != null) {\n    \n}`, `tryc` → `try {\n    \n} catch (e: Exception) {\n    \n}`) and shows a compact inline popup (no cluttered snippet bar).
-  - Performs real-time lexical and structural validation on every edit, surfacing exact line numbers, error messages, and one-tap Quick Fixes in both the code gutter and the Dynamic Island status badge.
+- **3D Window Depth Modifier (`Modifier.macWindowDepth`)**: Renders a soft ambient drop shadow behind the window, a `1.dp` pitch-black outer separation border, and a `1.dp` top-lit specular bevel border that brightens when the window is the focused top floating window.
+- **macOS Fluid Window Transition**: Each floating window is wrapped in `AnimatedVisibility` with `scaleIn(initialScale = 0.86f, transformOrigin = TransformOrigin(0.9f, 0.05f), animationSpec = spring(dampingRatio = 0.78f, stiffness = 380f)) + fadeIn()` and matching `scaleOut + fadeOut`.
+- **Inline Line Error Pill & Cursor-Anchored Completion Overlay**:
+  - If `diagnostics` contains an error on a line, an inline `⊗` error pill is drawn right next to that line's text.
+  - When `currentPrefix` is non-empty, the Tier-2 floating IDE completion box + side documentation card renders directly below the active cursor line.

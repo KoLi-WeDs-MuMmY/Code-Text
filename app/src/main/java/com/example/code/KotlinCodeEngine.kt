@@ -18,7 +18,10 @@ data class KotlinSuggestion(
     val label: String,
     val insertText: String,
     val category: String,
-    val description: String
+    val description: String,
+    val tailSignature: String = "",
+    val badgeChar: String = "K",
+    val isNewSymbol: Boolean = false
 )
 
 enum class DiagnosticSeverity {
@@ -33,7 +36,21 @@ data class KotlinDiagnostic(
     val message: String,
     val severity: DiagnosticSeverity,
     val quickFixLabel: String? = null,
-    val fixedCode: String? = null
+    val fixedCode: String? = null,
+    val inlinePillLabel: String = message
+)
+
+data class KotlinStructureSymbol(
+    val name: String,
+    val kindBadge: String, // "m", "C", "I", "v"
+    val line: Int,
+    val signature: String
+)
+
+data class ConstantShortcutKey(
+    val label: String,
+    val insertText: String,
+    val cursorOffsetBack: Int = 0
 )
 
 data class DetectedColorCode(
@@ -70,6 +87,21 @@ data class KotlinLiveTemplate(
 
 object KotlinCodeEngine {
 
+    /**
+     * Constant (`val`) bottom shortcut strip confirmed by user:
+     * n(snippets) = val (strictly 8 constant typing keys; autocomplete suggestions never appear here).
+     */
+    val VAL_CONSTANT_SHORTCUT_KEYS: List<ConstantShortcutKey> = listOf(
+        ConstantShortcutKey("Tab", "    ", 0),
+        ConstantShortcutKey("( )", "()", 1),
+        ConstantShortcutKey("{ }", "{}", 1),
+        ConstantShortcutKey("\" \"", "\"\"", 1),
+        ConstantShortcutKey("->", " -> ", 0),
+        ConstantShortcutKey(".", ".", 0),
+        ConstantShortcutKey("=", " = ", 0),
+        ConstantShortcutKey(":", ": ", 0)
+    )
+
     val KOTLIN_KEYWORDS = setOf(
         "package", "import", "class", "interface", "object", "fun", "val", "var",
         "typealias", "constructor", "by", "companion", "init", "this", "super",
@@ -98,54 +130,136 @@ object KotlinCodeEngine {
     )
 
     private val POSTFIX_SUGGESTIONS = listOf(
-        KotlinSuggestion("sout ⇥ println()", "println(\"\")", "Postfix", "Expand sout to println(\"\")"),
-        KotlinSuggestion("soutv ⇥ println(val)", "println(\"value = \$value\")", "Postfix", "Print variable name and value"),
-        KotlinSuggestion("serr ⇥ stderr", "System.err.println(\"\")", "Postfix", "Print to standard error"),
-        KotlinSuggestion("main ⇥ fun main()", "fun main() {\n    \n}", "Postfix", "Kotlin main entry point"),
-        KotlinSuggestion("psvm ⇥ fun main()", "fun main() {\n    \n}", "Postfix", "Public static void main equivalent"),
-        KotlinSuggestion("fori ⇥ for (i in 0 until n)", "for (i in 0 until n) {\n    \n}", "Postfix", "Indexed range loop"),
-        KotlinSuggestion("iter ⇥ for (item in items)", "for (item in items) {\n    \n}", "Postfix", "For-each loop over collection"),
-        KotlinSuggestion("ifn ⇥ if (x == null)", "if (value == null) {\n    \n}", "Postfix", "Check if reference is null"),
-        KotlinSuggestion("inn ⇥ if (x != null)", "if (value != null) {\n    \n}", "Postfix", "Check if reference is not null"),
-        KotlinSuggestion("tryc ⇥ try / catch", "try {\n    \n} catch (e: Exception) {\n    println(e.message)\n}", "Postfix", "Surround with try-catch"),
-        KotlinSuggestion("todo ⇥ // TODO", "// TODO: ", "Postfix", "Insert TODO comment")
+        KotlinSuggestion(
+            label = "sout",
+            insertText = "println(\"\")",
+            category = "Postfix",
+            description = "Print to standard output",
+            tailSignature = "println()",
+            badgeChar = "{}"
+        ),
+        KotlinSuggestion(
+            label = "soutv",
+            insertText = "println(\"value = \${value}\")",
+            category = "Postfix",
+            description = "Prints a value to System.out",
+            tailSignature = "println(\"value = \${value}\")",
+            badgeChar = "{}"
+        ),
+        KotlinSuggestion(
+            label = "serr",
+            insertText = "System.err.println(\"\")",
+            category = "Postfix",
+            description = "Print to standard error",
+            tailSignature = "System.err.println()",
+            badgeChar = "{}"
+        ),
+        KotlinSuggestion(
+            label = "main",
+            insertText = "fun main() {\n    \n}",
+            category = "Postfix",
+            description = "Kotlin main entry point function",
+            tailSignature = "fun main(args: Array<String>)",
+            badgeChar = "{}"
+        ),
+        KotlinSuggestion(
+            label = "psvm",
+            insertText = "fun main() {\n    \n}",
+            category = "Postfix",
+            description = "Public static void main equivalent",
+            tailSignature = "fun main()",
+            badgeChar = "{}"
+        ),
+        KotlinSuggestion(
+            label = "fori",
+            insertText = "for (i in 0 until n) {\n    \n}",
+            category = "Postfix",
+            description = "Create indexed loop over range",
+            tailSignature = "for (i in 0 until n)",
+            badgeChar = "{}"
+        ),
+        KotlinSuggestion(
+            label = "iter",
+            insertText = "for (item in items) {\n    \n}",
+            category = "Postfix",
+            description = "Iterate elements of iterable",
+            tailSignature = "for (item in items)",
+            badgeChar = "{}"
+        ),
+        KotlinSuggestion(
+            label = "ifn",
+            insertText = "if (value == null) {\n    \n}",
+            category = "Postfix",
+            description = "Inserts 'if null' statement",
+            tailSignature = "if (x == null)",
+            badgeChar = "{}"
+        ),
+        KotlinSuggestion(
+            label = "inn",
+            insertText = "if (value != null) {\n    \n}",
+            category = "Postfix",
+            description = "Inserts 'if not null' statement",
+            tailSignature = "if (x != null)",
+            badgeChar = "{}"
+        ),
+        KotlinSuggestion(
+            label = "tryc",
+            insertText = "try {\n    \n} catch (e: Exception) {\n    println(e.message)\n}",
+            category = "Postfix",
+            description = "Surround with try / catch block",
+            tailSignature = "try { } catch (e: Exception)",
+            badgeChar = "{}"
+        ),
+        KotlinSuggestion(
+            label = "todo",
+            insertText = "// TODO: ",
+            category = "Postfix",
+            description = "Insert TODO comment marker",
+            tailSignature = "// TODO",
+            badgeChar = "{}"
+        )
     )
 
     private val BUILTIN_SUGGESTIONS = listOf(
-        KotlinSuggestion("fun", "fun ", "Keyword", "Declare a function"),
-        KotlinSuggestion("fun main()", "fun main() {\n    \n}", "Template", "Main entry point"),
-        KotlinSuggestion("val", "val ", "Keyword", "Immutable reference"),
-        KotlinSuggestion("var", "var ", "Keyword", "Mutable reference"),
-        KotlinSuggestion("data class", "data class Item(\n    val id: Int,\n    val name: String\n)", "Template", "Kotlin data class"),
-        KotlinSuggestion("sealed interface", "sealed interface UiState {\n    data object Loading : UiState\n}", "Template", "Sealed state hierarchy"),
-        KotlinSuggestion("suspend fun", "suspend fun ", "Coroutine", "Suspendable function"),
-        KotlinSuggestion("when", "when (value) {\n    else -> {}\n}", "Control", "Pattern matching expression"),
-        KotlinSuggestion("if / else", "if (condition) {\n    \n} else {\n    \n}", "Control", "Conditional branch"),
-        KotlinSuggestion("forEach", "forEach { item ->\n    \n}", "Stdlib", "Iterate over collection"),
-        KotlinSuggestion("map", "map { it }", "Stdlib", "Transform collection elements"),
-        KotlinSuggestion("filter", "filter { it }", "Stdlib", "Filter collection elements"),
-        KotlinSuggestion("println", "println(\"\")", "Stdlib", "Print line to standard output"),
-        KotlinSuggestion("listOf", "listOf()", "Stdlib", "Immutable list builder"),
-        KotlinSuggestion("mutableListOf", "mutableListOf()", "Stdlib", "Mutable list builder"),
-        KotlinSuggestion("mapOf", "mapOf()", "Stdlib", "Immutable map builder"),
-        KotlinSuggestion("Color(0xFF...)", "Color(0xFF7F52FF)", "Color", "ARGB hex color literal"),
-        KotlinSuggestion("coroutineScope", "coroutineScope {\n    \n}", "Coroutine", "Scoped coroutine block"),
-        KotlinSuggestion("withContext", "withContext(Dispatchers.IO) {\n    \n}", "Coroutine", "Switch coroutine dispatcher"),
-        KotlinSuggestion("try / catch", "try {\n    \n} catch (e: Exception) {\n    \n}", "Control", "Exception handling block"),
-        KotlinSuggestion("class", "class ", "Keyword", "Declare a class"),
-        KotlinSuggestion("interface", "interface ", "Keyword", "Declare an interface"),
-        KotlinSuggestion("object", "object ", "Keyword", "Singleton object declaration"),
-        KotlinSuggestion("override fun", "override fun ", "Keyword", "Override member function"),
-        KotlinSuggestion("private val", "private val ", "Keyword", "Private immutable property"),
-        KotlinSuggestion("return", "return ", "Keyword", "Return from function"),
-        KotlinSuggestion("null", "null", "Keyword", "Null reference"),
-        KotlinSuggestion("true", "true", "Keyword", "Boolean true"),
-        KotlinSuggestion("false", "false", "Keyword", "Boolean false"),
-        KotlinSuggestion("String", "String", "Type", "Kotlin String type"),
-        KotlinSuggestion("Int", "Int", "Type", "32-bit signed integer"),
-        KotlinSuggestion("Boolean", "Boolean", "Type", "Boolean type"),
-        KotlinSuggestion("Flow", "Flow<>", "Type", "Asynchronous data stream"),
-        KotlinSuggestion("StateFlow", "StateFlow<>", "Type", "Observable state holder")
+        KotlinSuggestion("fun", "fun ", "Keyword", "Declare a Kotlin function", "", "K"),
+        KotlinSuggestion("fun interface", "fun interface ", "Keyword", "Declare a SAM functional interface", "", "K"),
+        KotlinSuggestion("fun", "fun name() {\n    \n}", "Template", "New function declaration block", "fun name() { }", "{}"),
+        KotlinSuggestion("FunctionalInterface", "@FunctionalInterface", "Annotation", "Indicates an interface is a SAM functional interface", "(java.lang)", "@"),
+        KotlinSuggestion("Function", "Function<Any>", "Interface", "Represents a function value", "<out R> (kotlin)", "C"),
+        KotlinSuggestion("Function0", "Function0<Unit>", "Interface", "A function that takes 0 arguments", "<out R> (kotlin.jvm.functions)", "I"),
+        KotlinSuggestion("Function1", "Function1<Any, Unit>", "Interface", "A function that takes 1 argument", "<in P1, out R> (kotlin.jvm.functions)", "I"),
+        KotlinSuggestion("Function2", "Function2<Any, Any, Unit>", "Interface", "A function that takes 2 arguments", "<in P1, in P2, out R> (kotlin.jvm.functions)", "I"),
+        KotlinSuggestion("SourceDebugExtension", "@SourceDebugExtension", "Annotation", "Kotlin compiler debug metadata annotation", "(kotlin.jvm.internal)", "@"),
+        KotlinSuggestion("SocketTimeoutException", "SocketTimeoutException()", "Class", "Signals that a timeout has occurred on a socket read or accept", "(java.net)", "C"),
+        KotlinSuggestion("SocketOptions", "SocketOptions", "Interface", "Interface of methods to get/set socket options", "(java.net)", "I"),
+        KotlinSuggestion("val", "val ", "Keyword", "Declare an immutable read-only property", "", "K"),
+        KotlinSuggestion("var", "var ", "Keyword", "Declare a mutable property", "", "K"),
+        KotlinSuggestion("data class", "data class Item(\n    val id: Int,\n    val name: String\n)", "Template", "Immutable data holder class with equals/hashCode/copy", "data class Name(...)", "{}"),
+        KotlinSuggestion("sealed interface", "sealed interface UiState {\n    data object Loading : UiState\n}", "Template", "Restricted hierarchy for exhaustive when-expressions", "sealed interface Name", "{}"),
+        KotlinSuggestion("suspend fun", "suspend fun ", "Keyword", "Declare a coroutine suspending function", "kotlinx.coroutines", "K"),
+        KotlinSuggestion("when", "when (value) {\n    else -> {}\n}", "Keyword", "Exhaustive multi-branch pattern matching expression", "when (expr) { ... }", "K"),
+        KotlinSuggestion("if", "if (condition) {\n    \n}", "Keyword", "Conditional expression", "if (cond) { ... }", "K"),
+        KotlinSuggestion("forEach", "forEach { item ->\n    \n}", "Function", "Performs the given action on each element", "inline fun Iterable<T>.forEach", "m"),
+        KotlinSuggestion("map", "map { it }", "Function", "Returns a list containing the results of applying transform", "inline fun Iterable<T>.map", "m"),
+        KotlinSuggestion("filter", "filter { it }", "Function", "Returns a list containing only elements matching predicate", "inline fun Iterable<T>.filter", "m"),
+        KotlinSuggestion("println", "println(\"\")", "Function", "Prints the given message and newline to standard output", "(kotlin.io)", "m"),
+        KotlinSuggestion("listOf", "listOf()", "Function", "Returns a new read-only list of given elements", "(kotlin.collections)", "m"),
+        KotlinSuggestion("mutableListOf", "mutableListOf()", "Function", "Returns a new MutableList with the given elements", "(kotlin.collections)", "m"),
+        KotlinSuggestion("mapOf", "mapOf()", "Function", "Returns a new read-only map with the specified contents", "(kotlin.collections)", "m"),
+        KotlinSuggestion("coroutineScope", "coroutineScope {\n    \n}", "Function", "Creates a CoroutineScope and calls the specified suspend block", "(kotlinx.coroutines)", "m"),
+        KotlinSuggestion("withContext", "withContext(Dispatchers.IO) {\n    \n}", "Function", "Calls the specified suspending block with a given coroutine context", "(kotlinx.coroutines)", "m"),
+        KotlinSuggestion("class", "class ", "Keyword", "Declare a Kotlin class", "", "K"),
+        KotlinSuggestion("interface", "interface ", "Keyword", "Declare a Kotlin interface", "", "K"),
+        KotlinSuggestion("object", "object ", "Keyword", "Declare a singleton object", "", "K"),
+        KotlinSuggestion("override fun", "override fun ", "Keyword", "Override a superclass or interface member function", "", "K"),
+        KotlinSuggestion("private val", "private val ", "Keyword", "Declare a private immutable property", "", "K"),
+        KotlinSuggestion("return", "return ", "Keyword", "Return from the nearest enclosing function", "", "K"),
+        KotlinSuggestion("String", "String", "Class", "The String class represents character strings", "(kotlin)", "C"),
+        KotlinSuggestion("Int", "Int", "Class", "Represents a 32-bit signed integer", "(kotlin)", "C"),
+        KotlinSuggestion("Boolean", "Boolean", "Class", "Represents a value which is either true or false", "(kotlin)", "C"),
+        KotlinSuggestion("List", "List<String>", "Interface", "A generic ordered collection of elements", "<out E> (kotlin.collections)", "I"),
+        KotlinSuggestion("Flow", "Flow<String>", "Interface", "An asynchronous data stream that sequentially emits values", "<out T> (kotlinx.coroutines.flow)", "I"),
+        KotlinSuggestion("StateFlow", "StateFlow<String>", "Interface", "A SharedFlow that represents a read-only state with a single value", "<out T> (kotlinx.coroutines.flow)", "I")
     )
 
     private val IDENTIFIER_REGEX = Regex("\\b(?:val|var|fun|class|interface|object)\\s+([A-Za-z_][A-Za-z0-9_]*)")
@@ -870,13 +984,18 @@ object KotlinCodeEngine {
                             startOffset = lineStartOffset,
                             endOffset = lineEndOffset,
                             message = "Incomplete '$trimmed' declaration on line $lineNum (missing identifier)",
-                            severity = DiagnosticSeverity.ERROR
+                            severity = DiagnosticSeverity.ERROR,
+                            inlinePillLabel = "Syntax error  2"
                         )
                     )
                 }
 
-                if (trimmed == "sout" || trimmed == "serr") {
-                    val replacement = if (trimmed == "sout") "println(\"\")" else "System.err.println(\"\")"
+                if (trimmed == "sout" || trimmed == "serr" || trimmed == "soutv") {
+                    val replacement = when (trimmed) {
+                        "sout" -> "println(\"\")"
+                        "soutv" -> "println(\"value = \${value}\")"
+                        else -> "System.err.println(\"\")"
+                    }
                     val leading = rawLine.takeWhile { it == ' ' || it == '\t' }
                     val fixed = code.replaceRange(lineStartOffset, lineEndOffset, leading + replacement)
                     diagnostics.add(
@@ -887,7 +1006,8 @@ object KotlinCodeEngine {
                             message = "Unexpanded IDE shorthand '$trimmed' on line $lineNum (use '$replacement')",
                             severity = DiagnosticSeverity.ERROR,
                             quickFixLabel = "Expand to $replacement",
-                            fixedCode = fixed
+                            fixedCode = fixed,
+                            inlinePillLabel = "Unresolved reference: $trimmed"
                         )
                     )
                 }
@@ -1115,7 +1235,7 @@ object KotlinCodeEngine {
     fun getAutocompleteSuggestions(
         code: String,
         cursorPosition: Int,
-        maxResults: Int = 6
+        maxResults: Int = 8
     ): Pair<String, List<KotlinSuggestion>> {
         val safeCursor = cursorPosition.coerceIn(0, code.length)
         var prefixStart = safeCursor
@@ -1124,36 +1244,94 @@ object KotlinCodeEngine {
         }
         val prefix = code.substring(prefixStart, safeCursor)
 
-        val userDeclaredSymbols = IDENTIFIER_REGEX.findAll(code)
-            .map { it.groupValues[1] }
-            .filter { it.isNotBlank() && it != prefix }
-            .distinct()
-            .map { symbol ->
-                KotlinSuggestion(
-                    label = symbol,
-                    insertText = symbol,
-                    category = "Symbol",
-                    description = "Identifier in block"
-                )
+        val declRegex = Regex("""\b(val|var|fun|class|interface|object)\s+([A-Za-z_][A-Za-z0-9_]*)""")
+        val userDeclaredSymbols = declRegex.findAll(code)
+            .mapNotNull { match ->
+                val kind = match.groupValues[1]
+                val symbol = match.groupValues[2]
+                if (symbol.isBlank() || symbol == prefix) null
+                else {
+                    val badge = when (kind) {
+                        "fun" -> "m"
+                        "class", "object" -> "C"
+                        "interface" -> "I"
+                        else -> "v"
+                    }
+                    KotlinSuggestion(
+                        label = symbol,
+                        insertText = if (kind == "fun") "$symbol()" else symbol,
+                        category = "Local Symbol",
+                        description = "Newly declared $kind '$symbol' in current Kotlin block",
+                        tailSignature = "($kind in block)",
+                        badgeChar = badge,
+                        isNewSymbol = true
+                    )
+                }
             }
+            .distinctBy { it.label }
             .toList()
 
         val combinedPool = POSTFIX_SUGGESTIONS + userDeclaredSymbols + BUILTIN_SUGGESTIONS
 
         if (prefix.isBlank()) {
-            return "" to (POSTFIX_SUGGESTIONS.take(3) + BUILTIN_SUGGESTIONS.take(maxResults - 3))
+            return "" to (POSTFIX_SUGGESTIONS.take(3) + userDeclaredSymbols.take(2) + BUILTIN_SUGGESTIONS.take(maxResults - 3))
         }
 
-        val matches = combinedPool.filter { suggestion ->
-            val triggerToken = suggestion.label.substringBefore(" ").trim()
-            (triggerToken.startsWith(prefix, ignoreCase = true) ||
-                suggestion.label.startsWith(prefix, ignoreCase = true) ||
-                (suggestion.category == "Postfix" && suggestion.insertText.startsWith(prefix, ignoreCase = true))) &&
+        // Exact prefix matches first (like `sout`, `soutv`, `fun`, `fun interface`), followed by fuzzy/contains matches (like `SourceDebugExtension`, `SocketTimeoutException` when typing `so`)
+        val prefixFirst = prefix.take(2)
+        val exactStarts = combinedPool.filter { suggestion ->
+            (suggestion.label.startsWith(prefix, ignoreCase = true) ||
+                suggestion.insertText.startsWith(prefix, ignoreCase = true)) &&
                 suggestion.insertText != prefix
-        }.distinctBy { it.label }
+        }
+        val secondaryMatches = if (prefixFirst.isNotEmpty()) {
+            combinedPool.filter { suggestion ->
+                suggestion !in exactStarts &&
+                    (suggestion.label.startsWith(prefixFirst, ignoreCase = true) ||
+                        suggestion.label.contains(prefix, ignoreCase = true)) &&
+                    suggestion.insertText != prefix
+            }
+        } else {
+            emptyList()
+        }
+
+        val matches = (exactStarts + secondaryMatches)
+            .distinctBy { "${it.label}_${it.tailSignature}" }
             .take(maxResults)
 
         return prefix to matches
+    }
+
+    /**
+     * Extracts structure outline symbols (functions, classes, interfaces, properties) with 1-indexed line numbers
+     * for the Left Rail Structure & Find tool.
+     */
+    fun extractStructureSymbols(code: String): List<KotlinStructureSymbol> {
+        if (code.isBlank()) return emptyList()
+        val results = mutableListOf<KotlinStructureSymbol>()
+        val declRegex = Regex("""\b(fun|class|interface|object|val|var)\s+([A-Za-z_][A-Za-z0-9_]*)""")
+        code.lines().forEachIndexed { idx, line ->
+            val match = declRegex.find(line)
+            if (match != null) {
+                val kind = match.groupValues[1]
+                val name = match.groupValues[2]
+                val badge = when (kind) {
+                    "fun" -> "m"
+                    "class", "object" -> "C"
+                    "interface" -> "I"
+                    else -> "v"
+                }
+                results.add(
+                    KotlinStructureSymbol(
+                        name = if (kind == "fun") "$name()" else name,
+                        kindBadge = badge,
+                        line = idx + 1,
+                        signature = line.trim().removeSuffix("{").trim()
+                    )
+                )
+            }
+        }
+        return results
     }
 
     fun applySuggestion(

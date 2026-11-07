@@ -1,6 +1,6 @@
 {
-  "summary":  "Updated implementation plan for KtScribe's macOS Dynamic Island & Floating Window makeover, including deterministic APK update signing, keep-data-on-uninstall support, first-launch hidden vault recovery, folders-only organization, full-screen Apple cmd code editor, resizable floating/split-screen explanation windows, and live IDE postfix suggestions (sout -> println()).",
-  "updatedAt":  "2026-11-07T12:14:34.478579481Z",
+  "summary":  "Updated implementation plan adding multi-tier physical window depth, dual-bevel specular top edges, ambient drop shadows, and active-vs-background z-index depth differentiation for the floating windows, IDE completion popups, and code editor canvas.",
+  "updatedAt":  "2026-11-07T14:35:36.161664735Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

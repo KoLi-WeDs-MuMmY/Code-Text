@@ -37,7 +37,7 @@ enum class TextAlignmentChoice(val displayName: String) {
  * Controls how the paired Explanation Block is displayed relative to the full-screen Apple `cmd` Code Editor:
  * - FLOATING_WINDOW: Draggable & resizable macOS floating window overlay (like macOS Notes).
  * - SPLIT_SCREEN: Set aside into a two-window resizable split-screen workspace (Code Window + Explanation Window).
- * - HIDDEN: Minimized into the top Floating Dynamic Island so the code block has 100% unobstructed screen space.
+ * - HIDDEN: Minimized so the code block has 100% unobstructed screen space.
  */
 enum class ExplanationWindowMode(val label: String) {
     FLOATING_WINDOW("Floating Window"),
@@ -46,7 +46,39 @@ enum class ExplanationWindowMode(val label: String) {
 }
 
 /**
- * Controls which macOS resizable drop-down window is currently open beneath the Top Floating Dynamic Island.
+ * The 4 top-right oval pill floating windows from the user's sketch.
+ * Up to 2 floating windows can be open at the same time (excluding Command Palette),
+ * dragged anywhere on screen, resized from their left edge or corner, and canceled (`✕`).
+ */
+enum class FloatingWindowType(
+    val pillLabel: String,
+    val windowTitle: String,
+    val windowSubtitle: String
+) {
+    EXPLANATION(
+        pillLabel = "Explain",
+        windowTitle = "Explanation & Concept Notes",
+        windowSubtitle = "Draggable & Resizable • Paired with Active Section"
+    ),
+    FOLDERS(
+        pillLabel = "Folders",
+        windowTitle = "Folders & Kotlin Sections",
+        windowSubtitle = "Switch folders, manage sections, or create folder"
+    ),
+    AI_STUDIO(
+        pillLabel = "AI Guide",
+        windowTitle = "AI Concept & Kotlin Studio",
+        windowSubtitle = "Deep-dive explanation, syntax fix & KDoc"
+    ),
+    RUN_OUTPUT(
+        pillLabel = "Run ▶",
+        windowTitle = "kotlinc — Apple cmd Output",
+        windowSubtitle = "Live script evaluation & compiler diagnostics"
+    )
+}
+
+/**
+ * Controls which modal overlay is open (such as Command Palette).
  */
 enum class IslandDropdownMenu {
     NONE,

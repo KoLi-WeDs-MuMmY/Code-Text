@@ -103,7 +103,7 @@ fun DocumentListScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
-                            color = Color(0xFF0A84FF).copy(alpha = 0.2f),
+                            color = Color(0xFFDF9E55).copy(alpha = 0.16f),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Row(
@@ -113,7 +113,7 @@ fun DocumentListScreen(
                                 Icon(
                                     imageVector = Icons.Default.FolderSpecial,
                                     contentDescription = null,
-                                    tint = Color(0xFF38BDF8),
+                                    tint = Color(0xFFDF9E55),
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
@@ -122,7 +122,7 @@ fun DocumentListScreen(
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = Color(0xFF38BDF8)
+                                    color = Color(0xFFDF9E55)
                                 )
                             }
                         }
@@ -144,7 +144,7 @@ fun DocumentListScreen(
                 actions = {
                     // Hidden Vault ("xyz") Recovery & Status Button
                     Surface(
-                        color = Color(0xFF10B981).copy(alpha = 0.16f),
+                        color = Color(0xFF6A8759).copy(alpha = 0.18f),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .clip(RoundedCornerShape(10.dp))
@@ -158,7 +158,7 @@ fun DocumentListScreen(
                             Icon(
                                 imageVector = Icons.Default.Lock,
                                 contentDescription = "Hidden Vault Recovery",
-                                tint = Color(0xFF10B981),
+                                tint = Color(0xFF8FB975),
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
@@ -167,7 +167,7 @@ fun DocumentListScreen(
                                 fontFamily = JetBrainsMonoFontFamily,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF10B981)
+                                color = Color(0xFF8FB975)
                             )
                         }
                     }
@@ -377,27 +377,27 @@ private fun HeroWorkspaceBanner(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Surface(
-                            color = Color(0xFF10B981),
+                            color = Color(0xFF75420E),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
-                                text = "● ● ●  MACOS DYNAMIC ISLAND & APPLE CMD",
+                                text = "● ● ●  MATTE DARCULA IDE & DUAL 3D WINDOWS",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.sp,
-                                color = Color(0xFF022C22),
+                                color = Color(0xFFFFD8A8),
                                 fontWeight = FontWeight.ExtraBold,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
                         Surface(
-                            color = Color(0xFF38BDF8).copy(alpha = 0.22f),
+                            color = Color(0xFF6A8759).copy(alpha = 0.25f),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
                                 text = "sout ⇥ println()",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.sp,
-                                color = Color(0xFF38BDF8),
+                                color = Color(0xFF8FB975),
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
@@ -462,13 +462,13 @@ private fun FolderSummaryCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Surface(
-                        color = Color(0xFF0A84FF).copy(alpha = 0.16f),
+                        color = Color(0xFFDF9E55).copy(alpha = 0.16f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Folder,
                             contentDescription = null,
-                            tint = Color(0xFF38BDF8),
+                            tint = Color(0xFFDF9E55),
                             modifier = Modifier
                                 .padding(8.dp)
                                 .size(22.dp)

@@ -4,49 +4,73 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-// Light Mode: Nordic Alabaster & Executive Emerald-Sapphire Studio Palette
-val LightBackground = Color(0xFFF3F6FA)
+// Light Mode: Warm Parchment & Espresso Darcula Studio Palette (Zero Neon)
+val LightBackground = Color(0xFFF5F3EF)
 val LightSurface = Color(0xFFFFFFFF)
-val LightSurfaceVariant = Color(0xFFE8EEF5)
-val LightPrimary = Color(0xFF059669) // Executive Emerald Teal
+val LightSurfaceVariant = Color(0xFFEBE7E0)
+val LightPrimary = Color(0xFF9A5B25) // Warm Amber Bronze
 val LightOnPrimary = Color(0xFFFFFFFF)
-val LightPrimaryContainer = Color(0xFFD1FAE5)
-val LightOnPrimaryContainer = Color(0xFF064E3B)
-val LightSecondary = Color(0xFF0284C7) // Precision Sapphire Cyan
+val LightPrimaryContainer = Color(0xFFF5E6D3)
+val LightOnPrimaryContainer = Color(0xFF3E2208)
+val LightSecondary = Color(0xFF4A6B82) // Muted Steel Slate
 val LightOnSecondary = Color(0xFFFFFFFF)
-val LightSecondaryContainer = Color(0xFFE0F2FE)
-val LightOnSecondaryContainer = Color(0xFF0C4A6E)
-val LightTertiary = Color(0xFF6366F1) // Indigo Concept Tag Accent
+val LightSecondaryContainer = Color(0xFFDCE7F0)
+val LightOnSecondaryContainer = Color(0xFF162B3A)
+val LightTertiary = Color(0xFF5D7052) // Muted Olive Sage
 val LightOnTertiary = Color(0xFFFFFFFF)
-val LightTertiaryContainer = Color(0xFFE0E7FF)
-val LightOnTertiaryContainer = Color(0xFF1E1B4B)
-val LightOnBackground = Color(0xFF0F172A)
-val LightOnSurface = Color(0xFF0F172A)
-val LightOnSurfaceVariant = Color(0xFF475569)
-val LightOutline = Color(0xFFCBD5E1)
-val LightOutlineVariant = Color(0xFFE2E8F0)
+val LightTertiaryContainer = Color(0xFFE1E9DC)
+val LightOnTertiaryContainer = Color(0xFF1E2918)
+val LightOnBackground = Color(0xFF1C1A17)
+val LightOnSurface = Color(0xFF1C1A17)
+val LightOnSurfaceVariant = Color(0xFF5C564E)
+val LightOutline = Color(0xFFC9C2B8)
+val LightOutlineVariant = Color(0xFFE0DBD1)
 
-// Dark Mode: Midnight Carbon & Luminous Emerald-Cyan Pro IDE Palette
-val DarkBackground = Color(0xFF090D14)
-val DarkSurface = Color(0xFF111722)
-val DarkSurfaceVariant = Color(0xFF1A2232)
-val DarkPrimary = Color(0xFF10B981) // Luminous Emerald
-val DarkOnPrimary = Color(0xFF022C22)
-val DarkPrimaryContainer = Color(0xFF064E3B)
-val DarkOnPrimaryContainer = Color(0xFFA7F3D0)
-val DarkSecondary = Color(0xFF38BDF8) // Electric Sky Cyan
-val DarkOnSecondary = Color(0xFF082F49)
-val DarkSecondaryContainer = Color(0xFF075985)
-val DarkOnSecondaryContainer = Color(0xFFE0F2FE)
-val DarkTertiary = Color(0xFFA78BFA) // Soft Violet for Learned Concept Badges
-val DarkOnTertiary = Color(0xFF2E1065)
-val DarkTertiaryContainer = Color(0xFF4C1D95)
-val DarkOnTertiaryContainer = Color(0xFFEDE9FE)
-val DarkOnBackground = Color(0xFFF1F5F9)
-val DarkOnSurface = Color(0xFFF1F5F9)
-val DarkOnSurfaceVariant = Color(0xFF94A3B8)
-val DarkOutline = Color(0xFF334155)
-val DarkOutlineVariant = Color(0xFF1E293B)
+// Dark Mode: Matte JetBrains Darcula & Warm Mocha 4-Tier Depth Palette (Zero Neon)
+val DarkBackground = Color(0xFF11100F)         // Tier 0: Recessed Outer Workspace Trench
+val DarkSurface = Color(0xFF1B1A19)            // Tier 1: Beveled Code Block Canvas
+val DarkSurfaceVariant = Color(0xFF252320)     // Tier 2: Cursor IDE Completion & Surface Card
+val DarkPrimary = Color(0xFFD4883A)            // Warm Amber Ochre (No Neon)
+val DarkOnPrimary = Color(0xFF241404)
+val DarkPrimaryContainer = Color(0xFF75420E)   // Exact IDE Completion Selection Highlight (#75420E)
+val DarkOnPrimaryContainer = Color(0xFFF5E6D3)
+val DarkSecondary = Color(0xFF8CA6B8)          // Muted Steel Blue
+val DarkOnSecondary = Color(0xFF13232E)
+val DarkSecondaryContainer = Color(0xFF2B3842)
+val DarkOnSecondaryContainer = Color(0xFFDCE7F0)
+val DarkTertiary = Color(0xFF8AA87B)           // Muted Sage Olive
+val DarkOnTertiary = Color(0xFF162410)
+val DarkTertiaryContainer = Color(0xFF2A3824)
+val DarkOnTertiaryContainer = Color(0xFFDCE8D5)
+val DarkOnBackground = Color(0xFFE6E1DC)
+val DarkOnSurface = Color(0xFFE6E1DC)
+val DarkOnSurfaceVariant = Color(0xFFA39C93)
+val DarkOutline = Color(0xFF423D38)
+val DarkOutlineVariant = Color(0xFF2E2A27)
+
+// 4-Tier Physical Window Depth Tokens
+val Tier0OuterTrenchBg = Color(0xFF11100F)
+val Tier1CodeCanvasBg = Color(0xFF1B1A19)
+val Tier1CodeGutterBg = Color(0xFF151413)
+val Tier1CodeHeaderBg = Color(0xFF22201E)
+val Tier1CodeBevelTop = Color(0xFF3A3530)
+val Tier1CodeOuterRim = Color(0xFF080707)
+
+val Tier2CompletionBg = Color(0xFF252320)
+val Tier2CompletionDocBg = Color(0xFF2C2926)
+val Tier2CompletionSelectedBg = Color(0xFF75420E) // Exact warm amber-brown from IDE screenshot
+val Tier2CompletionBorder = Color(0xFF4C463F)
+
+val Tier3FloatingWindowActiveBg = Color(0xFF2C2825)
+val Tier3FloatingWindowActiveHeader = Color(0xFF36312D)
+val Tier3FloatingWindowActiveBevel = Color(0xFF63594F)
+val Tier3FloatingWindowInactiveBg = Color(0xFF23201E)
+val Tier3FloatingWindowInactiveHeader = Color(0xFF2B2724)
+val Tier3FloatingWindowInactiveBevel = Color(0xFF47413B)
+
+val IdeInlineErrorPillBg = Color(0xFF4E2624)
+val IdeInlineErrorPillBorder = Color(0xFF823D39)
+val IdeInlineErrorPillText = Color(0xFFF2B8B5)
 
 @Immutable
 data class KotlinSyntaxColors(
@@ -67,37 +91,38 @@ data class KotlinSyntaxColors(
 )
 
 val LightKotlinSyntaxColors = KotlinSyntaxColors(
-    codeBackground = Color(0xFFF1F5F9),
-    codeHeaderBackground = Color(0xFFE2E8F0),
-    codeBorder = Color(0xFFCBD5E1),
-    lineNumber = Color(0xFF64748B),
-    plainText = Color(0xFF0F172A),
-    keyword = Color(0xFF7C3AED),       // Crisp Violet for fun, val, var, class, etc.
-    stringLiteral = Color(0xFF059669), // Emerald for strings
-    comment = Color(0xFF64748B),       // Muted Slate for comments
-    numberLiteral = Color(0xFFD97706), // Amber for numbers & booleans
-    typeName = Color(0xFF0284C7),      // Sapphire for types/classes
-    functionName = Color(0xFFDB2777),  // Rose for function declarations/calls
-    annotation = Color(0xFFB45309),    // Bronze for @Annotations
-    explanationBackground = Color(0xFFF8FAFC),
-    explanationAccentBorder = Color(0xFF059669)
+    codeBackground = Color(0xFFF5F3EF),
+    codeHeaderBackground = Color(0xFFEBE7E0),
+    codeBorder = Color(0xFFC9C2B8),
+    lineNumber = Color(0xFF7D756B),
+    plainText = Color(0xFF1C1A17),
+    keyword = Color(0xFFB35012),       // Classic JetBrains Warm Terracotta for keywords
+    stringLiteral = Color(0xFF4B7332), // Muted Olive Green for strings
+    comment = Color(0xFF7D756B),       // Warm Grey for comments
+    numberLiteral = Color(0xFF2E6B8E), // Muted Steel Blue for numbers
+    typeName = Color(0xFF6B4C8C),      // Muted Plum for types/classes
+    functionName = Color(0xFF8C5A1C),  // Warm Ochre for function declarations
+    annotation = Color(0xFF946B1E),    // Muted Gold for @Annotations
+    explanationBackground = Color(0xFFFAF8F5),
+    explanationAccentBorder = Color(0xFF9A5B25)
 )
 
+// Authentic JetBrains Darcula Syntax Colors (matching Screenshots 3 & 4)
 val DarkKotlinSyntaxColors = KotlinSyntaxColors(
-    codeBackground = Color(0xFF0D1117),
-    codeHeaderBackground = Color(0xFF161B22),
-    codeBorder = Color(0xFF30363D),
-    lineNumber = Color(0xFF6E7681),
-    plainText = Color(0xFFE6EDF3),
-    keyword = Color(0xFFFF7B72),       // Apple Xcode / GitHub Dark Coral-Pink for keywords
-    stringLiteral = Color(0xFF7EE787), // Apple Terminal Bright Green for strings
-    comment = Color(0xFF8B949E),       // Muted Grey-Blue for comments
-    numberLiteral = Color(0xFF79C0FF), // Crisp Sky Blue for numbers & booleans
-    typeName = Color(0xFFFFA657),      // Warm Orange for types/classes
-    functionName = Color(0xFFD2A8FF),  // Soft Lavender for functions
-    annotation = Color(0xFFE3B341),    // Gold for @Annotations
-    explanationBackground = Color(0xFF111722),
-    explanationAccentBorder = Color(0xFF10B981)
+    codeBackground = Tier1CodeCanvasBg,
+    codeHeaderBackground = Tier1CodeHeaderBg,
+    codeBorder = Color(0xFF332F2B),
+    lineNumber = Color(0xFF6E6862),
+    plainText = Color(0xFFA9B7C6),
+    keyword = Color(0xFFCC7832),       // Authentic Darcula Warm Terracotta Orange (`fun`, `val`, `var`)
+    stringLiteral = Color(0xFF6A8759), // Authentic Darcula Sage Green (`"..."`)
+    comment = Color(0xFF808080),       // Authentic Darcula Muted Grey (`// ...`)
+    numberLiteral = Color(0xFF6897BB), // Authentic Darcula Steel Blue (`42`, `true`)
+    typeName = Color(0xFFB5B6E3),      // Soft Periwinkle Slate (`String`, `Function0`)
+    functionName = Color(0xFFFFC66D),  // Authentic Darcula Warm Gold (`main()`, `println()`)
+    annotation = Color(0xFFBBB529),    // Authentic Darcula Olive Gold (`@FunctionalInterface`)
+    explanationBackground = Tier3FloatingWindowActiveBg,
+    explanationAccentBorder = Color(0xFFD4883A)
 )
 
-val LocalKotlinSyntaxColors = staticCompositionLocalOf { LightKotlinSyntaxColors }
+val LocalKotlinSyntaxColors = staticCompositionLocalOf { DarkKotlinSyntaxColors }

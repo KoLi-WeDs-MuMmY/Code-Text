@@ -146,7 +146,10 @@ fun KtScribeApp(
                     onSetExplanationWindowMode = editorViewModel::setExplanationWindowMode,
                     onUpdateSplitRatio = editorViewModel::updateSplitScreenRatio,
                     onRunActiveSectionInTerminal = editorViewModel::runActiveSectionInTerminal,
-                    onOpenVaultModal = editorViewModel::openVaultRecoveryDialog
+                    onOpenVaultModal = editorViewModel::openVaultRecoveryDialog,
+                    onToggleFloatingWindow = editorViewModel::toggleFloatingWindow,
+                    onCloseFloatingWindow = editorViewModel::closeFloatingWindow,
+                    onFocusFloatingWindow = editorViewModel::focusFloatingWindow
                 )
             }
 

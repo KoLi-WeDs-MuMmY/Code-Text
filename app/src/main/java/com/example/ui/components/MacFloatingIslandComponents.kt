@@ -1,20 +1,26 @@
 package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoFixHigh
@@ -39,32 +46,24 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.CreateNewFolder
-import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.FolderSpecial
-import androidx.compose.material.icons.filled.FormatAlignCenter
-import androidx.compose.material.icons.filled.FormatAlignLeft
-import androidx.compose.material.icons.filled.FormatAlignRight
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Restore
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Splitscreen
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.VerticalSplit
 import androidx.compose.material3.AlertDialog
@@ -81,6 +80,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -89,11 +89,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -106,8 +110,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.code.DiagnosticSeverity
-import com.example.code.KotlinCodeEngine
+import androidx.compose.ui.zIndex
 import com.example.data.local.VaultInspectionResult
 import com.example.model.CodeSectionUiModel
 import com.example.model.CommandPaletteFilter
@@ -115,289 +118,781 @@ import com.example.model.DocumentDetailUiModel
 import com.example.model.DocumentSummaryUiModel
 import com.example.model.EditorFontChoice
 import com.example.model.ExplanationWindowMode
+import com.example.model.FloatingWindowType
 import com.example.model.IslandDropdownMenu
 import com.example.model.TextAlignmentChoice
 import com.example.model.TextFormattingStyle
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.Tier0OuterTrenchBg
+import com.example.ui.theme.Tier2CompletionSelectedBg
+import com.example.ui.theme.Tier3FloatingWindowActiveBevel
+import com.example.ui.theme.Tier3FloatingWindowActiveBg
+import com.example.ui.theme.Tier3FloatingWindowActiveHeader
+import com.example.ui.theme.Tier3FloatingWindowInactiveBevel
+import com.example.ui.theme.Tier3FloatingWindowInactiveBg
+import com.example.ui.theme.Tier3FloatingWindowInactiveHeader
 import kotlin.math.roundToInt
 
-// macOS Dynamic Island & Floating Glass Aesthetics
-private val IslandPillBg = Color(0xF507090E)
-private val IslandPillBorder = Color(0xFF283142)
-private val IslandActiveChipBg = Color(0xFF1B2436)
-private val IslandGlassWindowBg = Color(0xF7161922)
-private val IslandGlassHeaderBg = Color(0xFF1F2430)
-private val IslandAccentBlue = Color(0xFF0A84FF)
-private val IslandAccentEmerald = Color(0xFF10B981)
-private val IslandAccentViolet = Color(0xFFA78BFA)
-private val IslandAccentAmber = Color(0xFFFFBD2E)
-private val MacRedDot = Color(0xFFFF5F56)
-private val MacYellowDot = Color(0xFFFFBD2E)
-private val MacGreenDot = Color(0xFF27C93F)
+// Warm Mocha & Matte Darcula Window Palette (Zero Neon)
+private val OuterTrenchBg = Tier0OuterTrenchBg
+private val PillSurfaceBg = Color(0xFF211F1D)
+private val PillSelectedBg = Color(0xFF423222)
+private val PillBorderColor = Color(0xFF3E3832)
+private val WarmAmberAccent = Color(0xFFD4883A)
+private val MutedSageAccent = Color(0xFF8AA87B)
+private val MutedSteelAccent = Color(0xFF8CA6B8)
+private val WarmCreamText = Color(0xFFE6E1DC)
+private val MutedTaupeText = Color(0xFFA39C93)
+private val MacRedDot = Color(0xFFD9534F)
+private val MacYellowDot = Color(0xFFD49B35)
+private val MacGreenDot = Color(0xFF6A9955)
 
 /**
- * Top-center macOS Dynamic Island / Notch Pill.
- * Clicking any option drops down a resizable macOS floating window directly below the Island.
+ * Custom 3D Window Depth Modifier:
+ * Draws a multi-layer ambient drop-shadow halo behind the floating window so it visually detaches
+ * from the dark code block beneath it.
+ */
+fun Modifier.tactileWindowDepth(
+    isForeground: Boolean,
+    cornerRadiusDp: Float = 18f
+): Modifier = this.drawBehind {
+    val cornerPx = cornerRadiusDp.dp.toPx()
+    val spreadPx = (if (isForeground) 12.dp else 6.dp).toPx()
+    val offsetY = (if (isForeground) 10.dp else 5.dp).toPx()
+    drawRoundRect(
+        color = Color.Black.copy(alpha = if (isForeground) 0.62f else 0.38f),
+        topLeft = Offset(-spreadPx * 0.5f, offsetY - spreadPx * 0.25f),
+        size = Size(size.width + spreadPx, size.height + spreadPx),
+        cornerRadius = CornerRadius(cornerPx + 4f, cornerPx + 4f)
+    )
+}
+
+/**
+ * Top Bar matching Sketch 1 & Sketch 2:
+ * - Left: Top-left back arrow (`←`) + Active Folder/Vault status
+ * - Right: 4 Horizontal Oval Pills (`Explain`, `Folders`, `AI Guide`, `Run ▶`) + `⌘P` Command Block
  */
 @Composable
-fun MacFloatingDynamicIsland(
+fun SketchTopBarWithFourPills(
     activeFolder: DocumentDetailUiModel,
     activeSection: CodeSectionUiModel?,
+    openFloatingWindows: List<FloatingWindowType>,
     activeDropdown: IslandDropdownMenu,
-    explanationWindowMode: ExplanationWindowMode,
     syntaxErrorCount: Int,
     hasUnsavedChanges: Boolean,
     secondsUntilAutoSave: Int,
-    shortcutLetter: Char,
-    onToggleDropdown: (IslandDropdownMenu) -> Unit,
-    onCycleExplanationMode: () -> Unit,
-    onSetExplanationMode: (ExplanationWindowMode) -> Unit,
-    onRunKotlinCode: () -> Unit,
-    onOpenAllFoldersOverview: () -> Unit,
-    onInsertNewSection: () -> Unit,
+    onBackToFolders: () -> Unit,
+    onToggleFloatingWindow: (FloatingWindowType) -> Unit,
+    onToggleCommandPalette: () -> Unit,
     onOpenVaultModal: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(OuterTrenchBg)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .testTag("mac_floating_dynamic_island"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Outer Notch / Floating Island Pill
-        Surface(
-            color = IslandPillBg,
-            shape = RoundedCornerShape(26.dp),
-            shadowElevation = 14.dp,
-            modifier = Modifier
-                .padding(horizontal = 10.dp, vertical = 6.dp)
-                .border(
-                    width = 1.dp,
-                    brush = Brush.horizontalGradient(
-                        listOf(
-                            Color(0xFF38BDF8).copy(alpha = 0.45f),
-                            IslandPillBorder,
-                            Color(0xFFA78BFA).copy(alpha = 0.45f)
-                        )
-                    ),
-                    shape = RoundedCornerShape(26.dp)
-                )
-                .testTag("mac_floating_dynamic_island")
+        // Top-Left Back Arrow (`←` from Sketch 1) + Folder badge
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(
+            Surface(
+                color = PillSurfaceBg,
+                shape = RoundedCornerShape(14.dp),
+                shadowElevation = 4.dp,
                 modifier = Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(1.dp, PillBorderColor, RoundedCornerShape(14.dp))
+                    .clickable(onClick = onBackToFolders)
+                    .testTag("back_to_documents_button")
             ) {
-                // macOS Traffic Light Dots on the left of the Island (Red = All Folders Grid, Yellow = Minimize Overlays, Green = Split View)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    modifier = Modifier.padding(end = 2.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(11.dp)
-                            .clip(CircleShape)
-                            .background(MacRedDot)
-                            .clickable(onClick = onOpenAllFoldersOverview)
-                            .testTag("back_to_documents_button")
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(11.dp)
-                            .clip(CircleShape)
-                            .background(MacYellowDot)
-                            .clickable { onSetExplanationMode(ExplanationWindowMode.HIDDEN) }
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(11.dp)
-                            .clip(CircleShape)
-                            .background(MacGreenDot)
-                            .clickable { onCycleExplanationMode() }
-                    )
-                }
-
-                // 1. Folder & Sections Dropdown Trigger
-                IslandActionPill(
-                    icon = Icons.Default.FolderOpen,
-                    label = activeFolder.title.take(18),
-                    badge = if (activeSection != null) "§${activeSection.orderIndex + 1}/${activeFolder.sections.size}" else "${activeFolder.sections.size}",
-                    isSelected = activeDropdown == IslandDropdownMenu.FOLDER_AND_SECTIONS,
-                    accentColor = IslandAccentBlue,
-                    onClick = { onToggleDropdown(IslandDropdownMenu.FOLDER_AND_SECTIONS) },
-                    testTag = "island_folder_dropdown_button"
-                )
-
-                // 2. Command Palette Trigger (⌘P)
-                IslandActionPill(
-                    icon = Icons.Default.Search,
-                    label = "⌘P Palette",
-                    badge = null,
-                    isSelected = activeDropdown == IslandDropdownMenu.COMMAND_PALETTE,
-                    accentColor = IslandAccentViolet,
-                    onClick = { onToggleDropdown(IslandDropdownMenu.COMMAND_PALETTE) },
-                    testTag = "island_command_palette_button"
-                )
-
-                // 3. Explanation Floating / 2-Window Split Trigger
-                IslandActionPill(
-                    icon = when (explanationWindowMode) {
-                        ExplanationWindowMode.FLOATING_WINDOW -> Icons.Default.Description
-                        ExplanationWindowMode.SPLIT_SCREEN -> Icons.Default.VerticalSplit
-                        ExplanationWindowMode.HIDDEN -> Icons.Default.Description
-                    },
-                    label = when (explanationWindowMode) {
-                        ExplanationWindowMode.FLOATING_WINDOW -> "Explain: Float"
-                        ExplanationWindowMode.SPLIT_SCREEN -> "Explain: 2-Win"
-                        ExplanationWindowMode.HIDDEN -> "Explain: Off"
-                    },
-                    badge = activeSection?.effectiveLearnedConceptTag?.take(10),
-                    isSelected = explanationWindowMode != ExplanationWindowMode.HIDDEN,
-                    accentColor = IslandAccentEmerald,
-                    onClick = onCycleExplanationMode,
-                    testTag = "island_explanation_window_toggle"
-                )
-
-                // 4. Add New Code Section (+ Ctrl+K)
-                IslandActionPill(
-                    icon = Icons.Default.Add,
-                    label = "+Section",
-                    badge = "^$shortcutLetter",
-                    isSelected = false,
-                    accentColor = Color(0xFF38BDF8),
-                    onClick = onInsertNewSection,
-                    testTag = "toolbar_insert_code_block_button"
-                )
-
-                // 5. Run in Apple Terminal Console
-                IslandActionPill(
-                    icon = Icons.Default.PlayArrow,
-                    label = "Run",
-                    badge = if (syntaxErrorCount > 0) "⚠$syntaxErrorCount" else "✓",
-                    isSelected = activeDropdown == IslandDropdownMenu.TERMINAL_OUTPUT,
-                    accentColor = if (syntaxErrorCount > 0) MacRedDot else IslandAccentEmerald,
-                    onClick = onRunKotlinCode,
-                    testTag = "island_run_code_button"
-                )
-
-                // 6. AI Studio Dropdown
-                IslandActionPill(
-                    icon = Icons.Default.AutoAwesome,
-                    label = "AI Studio",
-                    badge = null,
-                    isSelected = activeDropdown == IslandDropdownMenu.AI_STUDIO,
-                    accentColor = IslandAccentAmber,
-                    onClick = { onToggleDropdown(IslandDropdownMenu.AI_STUDIO) },
-                    testTag = "island_ai_studio_button"
-                )
-
-                // 7. Hidden Vault ("xyz") Status & Auto-Save Pill
-                Surface(
-                    color = Color.White.copy(alpha = 0.07f),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable(onClick = onOpenVaultModal)
-                        .testTag("autosave_status_pill")
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = "Hidden Vault Status",
-                            tint = if (hasUnsavedChanges) IslandAccentAmber else IslandAccentEmerald,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (hasUnsavedChanges) "${secondsUntilAutoSave}s" else "Vault✓",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFE6EDF3)
-                        )
-                    }
-                }
-
-                // 8. Shortcut & Theme Settings
-                IconButton(
-                    onClick = onOpenSettings,
-                    modifier = Modifier
-                        .size(26.dp)
-                        .testTag("editor_shortcut_settings_button")
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "IDE Settings",
-                        tint = Color(0xFF94A3B8),
-                        modifier = Modifier.size(15.dp)
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back to Folders",
+                        tint = WarmAmberAccent,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = activeFolder.title.take(14),
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = WarmCreamText,
+                        maxLines = 1
                     )
                 }
+            }
+
+            // Hidden Vault Sync Pill
+            Surface(
+                color = PillSurfaceBg,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(1.dp, PillBorderColor, RoundedCornerShape(12.dp))
+                    .clickable(onClick = onOpenVaultModal)
+                    .testTag("autosave_status_pill")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "Hidden Vault Status",
+                        tint = if (hasUnsavedChanges) WarmAmberAccent else MutedSageAccent,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (hasUnsavedChanges) "${secondsUntilAutoSave}s" else "Vault",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MutedTaupeText
+                    )
+                }
+            }
+        }
+
+        // Top-Right: 4 Horizontal Oval Pills (matching the 4 green ovals at the top-right of Sketch 1 & 2)
+        // + Command Block (`⌘P`) and Settings
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // Oval Pill 1: Explain Floating Window
+            TopRightOvalWindowPill(
+                label = FloatingWindowType.EXPLANATION.pillLabel,
+                badge = activeSection?.let { "§${it.orderIndex + 1}" },
+                isOpen = FloatingWindowType.EXPLANATION in openFloatingWindows,
+                isTopWindow = openFloatingWindows.lastOrNull() == FloatingWindowType.EXPLANATION,
+                onClick = { onToggleFloatingWindow(FloatingWindowType.EXPLANATION) },
+                testTag = "island_explanation_window_toggle"
+            )
+
+            // Oval Pill 2: Folders & Sections Floating Window
+            TopRightOvalWindowPill(
+                label = FloatingWindowType.FOLDERS.pillLabel,
+                badge = "${activeFolder.sections.size}",
+                isOpen = FloatingWindowType.FOLDERS in openFloatingWindows,
+                isTopWindow = openFloatingWindows.lastOrNull() == FloatingWindowType.FOLDERS,
+                onClick = { onToggleFloatingWindow(FloatingWindowType.FOLDERS) },
+                testTag = "island_folder_dropdown_button"
+            )
+
+            // Oval Pill 3: AI Guide Floating Window
+            TopRightOvalWindowPill(
+                label = FloatingWindowType.AI_STUDIO.pillLabel,
+                badge = null,
+                isOpen = FloatingWindowType.AI_STUDIO in openFloatingWindows,
+                isTopWindow = openFloatingWindows.lastOrNull() == FloatingWindowType.AI_STUDIO,
+                onClick = { onToggleFloatingWindow(FloatingWindowType.AI_STUDIO) },
+                testTag = "island_ai_studio_button"
+            )
+
+            // Oval Pill 4: Run Output Floating Window
+            TopRightOvalWindowPill(
+                label = FloatingWindowType.RUN_OUTPUT.pillLabel,
+                badge = if (syntaxErrorCount > 0) "!$syntaxErrorCount" else null,
+                isOpen = FloatingWindowType.RUN_OUTPUT in openFloatingWindows,
+                isTopWindow = openFloatingWindows.lastOrNull() == FloatingWindowType.RUN_OUTPUT,
+                onClick = { onToggleFloatingWindow(FloatingWindowType.RUN_OUTPUT) },
+                testTag = "island_run_code_button"
+            )
+
+            // Command Block Trigger (`⌘P`, exempt from the 2-window limit)
+            Surface(
+                color = if (activeDropdown == IslandDropdownMenu.COMMAND_PALETTE) PillSelectedBg else PillSurfaceBg,
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(18.dp))
+                    .border(
+                        width = 1.dp,
+                        color = if (activeDropdown == IslandDropdownMenu.COMMAND_PALETTE) WarmAmberAccent else PillBorderColor,
+                        shape = RoundedCornerShape(18.dp)
+                    )
+                    .clickable(onClick = onToggleCommandPalette)
+                    .testTag("island_command_palette_button")
+            ) {
+                Text(
+                    text = "⌘P",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = WarmCreamText,
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                )
+            }
+
+            IconButton(
+                onClick = onOpenSettings,
+                modifier = Modifier
+                    .size(28.dp)
+                    .testTag("editor_shortcut_settings_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "IDE Settings",
+                    tint = MutedTaupeText,
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }
 }
 
 @Composable
-private fun IslandActionPill(
-    icon: ImageVector,
+private fun TopRightOvalWindowPill(
     label: String,
     badge: String?,
-    isSelected: Boolean,
-    accentColor: Color,
+    isOpen: Boolean,
+    isTopWindow: Boolean,
     onClick: () -> Unit,
     testTag: String
 ) {
     Surface(
-        color = if (isSelected) accentColor.copy(alpha = 0.22f) else IslandActiveChipBg,
-        shape = RoundedCornerShape(16.dp),
+        color = when {
+            isTopWindow -> PillSelectedBg
+            isOpen -> Color(0xFF332920)
+            else -> PillSurfaceBg
+        },
+        shape = RoundedCornerShape(20.dp),
+        shadowElevation = if (isOpen) 6.dp else 2.dp,
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .border(
-                width = 1.dp,
-                color = if (isSelected) accentColor else Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(16.dp)
+                width = if (isOpen) 1.5.dp else 1.dp,
+                color = when {
+                    isTopWindow -> WarmAmberAccent
+                    isOpen -> MutedSageAccent
+                    else -> PillBorderColor
+                },
+                shape = RoundedCornerShape(20.dp)
             )
             .clickable(onClick = onClick)
             .testTag(testTag)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp),
             horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = if (isSelected) accentColor else Color(0xFFE2E8F0),
-                modifier = Modifier.size(13.dp)
-            )
+            if (isOpen) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(if (isTopWindow) WarmAmberAccent else MutedSageAccent)
+                )
+            }
             Text(
                 text = label,
                 fontFamily = JetBrainsMonoFontFamily,
                 fontSize = 11.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = Color(0xFFF8FAFC),
+                fontWeight = if (isOpen) FontWeight.Bold else FontWeight.Medium,
+                color = WarmCreamText,
                 maxLines = 1
             )
             if (!badge.isNullOrBlank()) {
-                Surface(
-                    color = accentColor.copy(alpha = 0.24f),
-                    shape = RoundedCornerShape(6.dp)
+                Text(
+                    text = badge,
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = WarmAmberAccent
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Left Vertical Rail with 5 Circular IDE Tool Buttons (matching the 5 pink circles on the left edge of Sketch 1 & 2):
+ * 1. `{ }` Format Code
+ * 2. `✓/!` Syntax Quick-Fix & Diagnostics
+ * 3. `🔍` Structure Outline & Find/Replace
+ * 4. `⌘/` Line Comment, Duplicate & Surround Refactoring
+ * 5. `+` Insert New Kotlin Code Section (`Ctrl+K`)
+ */
+@Composable
+fun SketchLeftCircularIdeRail(
+    activeTool: LeftRailIdeTool,
+    syntaxErrorCount: Int,
+    onFormatCode: () -> Unit,
+    onSelectTool: (LeftRailIdeTool) -> Unit,
+    onApplyQuickFixOrDiagnostics: () -> Unit,
+    onInsertNewSection: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .padding(start = 6.dp, end = 4.dp, top = 12.dp, bottom = 12.dp)
+            .testTag("left_circular_ide_rail"),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Circle 1: Format Kotlin Code (`{ }`)
+        LeftRailCircleButton(
+            textSymbol = "{ }",
+            icon = null,
+            tooltip = "Format Code",
+            isSelected = false,
+            accentColor = WarmAmberAccent,
+            onClick = onFormatCode,
+            testTag = "left_rail_format_button"
+        )
+
+        // Circle 2: Quick-Fix / Syntax Diagnostics (`✓` or `!`)
+        LeftRailCircleButton(
+            textSymbol = if (syntaxErrorCount > 0) "!$syntaxErrorCount" else "✓",
+            icon = null,
+            tooltip = "Diagnostics & Quick-Fix",
+            isSelected = activeTool == LeftRailIdeTool.DIAGNOSTICS,
+            accentColor = if (syntaxErrorCount > 0) MacRedDot else MutedSageAccent,
+            onClick = onApplyQuickFixOrDiagnostics,
+            testTag = "left_rail_diagnostics_button"
+        )
+
+        // Circle 3: Structure Outline & Find (`🔍`)
+        LeftRailCircleButton(
+            textSymbol = null,
+            icon = Icons.Default.Search,
+            tooltip = "Structure & Find",
+            isSelected = activeTool == LeftRailIdeTool.STRUCTURE_AND_FIND,
+            accentColor = MutedSteelAccent,
+            onClick = {
+                onSelectTool(
+                    if (activeTool == LeftRailIdeTool.STRUCTURE_AND_FIND) LeftRailIdeTool.NONE
+                    else LeftRailIdeTool.STRUCTURE_AND_FIND
+                )
+            },
+            testTag = "left_rail_structure_find_button"
+        )
+
+        // Circle 4: Line Comment, Duplicate & Surround (`⌘/`)
+        LeftRailCircleButton(
+            textSymbol = "⌘/",
+            icon = null,
+            tooltip = "Line & Surround Actions",
+            isSelected = activeTool == LeftRailIdeTool.LINE_ACTIONS,
+            accentColor = WarmAmberAccent,
+            onClick = {
+                onSelectTool(
+                    if (activeTool == LeftRailIdeTool.LINE_ACTIONS) LeftRailIdeTool.NONE
+                    else LeftRailIdeTool.LINE_ACTIONS
+                )
+            },
+            testTag = "left_rail_line_actions_button"
+        )
+
+        // Circle 5: Add New Code Section (`+`)
+        LeftRailCircleButton(
+            textSymbol = null,
+            icon = Icons.Default.Add,
+            tooltip = "New Code Section",
+            isSelected = false,
+            accentColor = MutedSageAccent,
+            onClick = onInsertNewSection,
+            testTag = "toolbar_insert_code_block_button"
+        )
+    }
+}
+
+@Composable
+private fun LeftRailCircleButton(
+    textSymbol: String?,
+    icon: ImageVector?,
+    tooltip: String,
+    isSelected: Boolean,
+    accentColor: Color,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    Surface(
+        color = if (isSelected) PillSelectedBg else Color(0xFF23201E),
+        shape = CircleShape,
+        shadowElevation = if (isSelected) 8.dp else 4.dp,
+        modifier = Modifier
+            .size(38.dp)
+            .border(
+                width = 1.dp,
+                color = Color(0xFF0A0908),
+                shape = CircleShape
+            )
+            .padding(1.dp)
+            .border(
+                width = if (isSelected) 1.5.dp else 1.dp,
+                color = if (isSelected) accentColor else Color(0xFF47403A),
+                shape = CircleShape
+            )
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+            .testTag(testTag)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = tooltip,
+                    tint = if (isSelected) accentColor else WarmCreamText,
+                    modifier = Modifier.size(16.dp)
+                )
+            } else if (textSymbol != null) {
+                Text(
+                    text = textSymbol,
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = if (isSelected) accentColor else WarmCreamText
+                )
+            }
+        }
+    }
+}
+
+/**
+ * TIER 3 TACTILE 3D FLOATING MACOS WINDOW:
+ * - Distinct Warm Mocha Slate color (`#2C2825` foreground / `#23201E` secondary) — not bright or neon, clearly distinct from the `#1B1A19` code canvas.
+ * - Multi-layered 3D depth: custom ambient shadow halo + `28.dp` active / `14.dp` secondary shadow + `1.dp` pitch-black outer separation rim + `1.5.dp` top-lit specular bevel (`#63594F`).
+ * - Can be dragged freely to any part of the screen.
+ * - Interactive Left-Edge Resize Grip (`▐`, matching Sketch 2) + Bottom-Right Corner Resize Grip (`⤡`).
+ * - Clear Cancel / Close button (`✕` + red traffic light dot).
+ * - Smooth macOS spring scale + fade transition (`scaleIn` / `scaleOut` + `fadeIn` / `fadeOut`).
+ * - Performs a horizontal shake animation when `shakeTriggerCount` increments (when 2 windows are open and the user taps a 3rd pill).
+ */
+@Composable
+fun MacDraggableFloatingWindow(
+    windowType: FloatingWindowType,
+    isOpen: Boolean,
+    isForegroundWindow: Boolean,
+    windowSlotIndex: Int, // 0 or 1 so 2 open windows cascade with distinct initial offsets
+    shakeTriggerCount: Int,
+    initialWidthDp: Float = 365f,
+    initialHeightDp: Float = 320f,
+    onFocusWindow: () -> Unit,
+    onCancelWindow: () -> Unit,
+    headerExtraActions: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    val density = LocalDensity.current
+    var offsetX by remember(windowType) {
+        mutableFloatStateOf(if (windowSlotIndex == 0) 0f else -46f)
+    }
+    var offsetY by remember(windowType) {
+        mutableFloatStateOf(if (windowSlotIndex == 0) 8f else 48f)
+    }
+    var widthDp by remember(windowType) { mutableFloatStateOf(initialWidthDp) }
+    var heightDp by remember(windowType) { mutableFloatStateOf(initialHeightDp) }
+
+    val shakeOffsetX = remember { Animatable(0f) }
+    LaunchedEffect(shakeTriggerCount) {
+        if (shakeTriggerCount > 0 && isOpen) {
+            val keyframes = listOf(-18f, 18f, -14f, 14f, -8f, 8f, 0f)
+            for (target in keyframes) {
+                shakeOffsetX.animateTo(target, animationSpec = tween(durationMillis = 42))
+            }
+        }
+    }
+
+    val surfaceBg = if (isForegroundWindow) Tier3FloatingWindowActiveBg else Tier3FloatingWindowInactiveBg
+    val headerBg = if (isForegroundWindow) Tier3FloatingWindowActiveHeader else Tier3FloatingWindowInactiveHeader
+    val topBevelColor = if (isForegroundWindow) Tier3FloatingWindowActiveBevel else Tier3FloatingWindowInactiveBevel
+    val elevationDp = if (isForegroundWindow) 28.dp else 14.dp
+
+    AnimatedVisibility(
+        visible = isOpen,
+        enter = scaleIn(
+            initialScale = 0.84f,
+            transformOrigin = TransformOrigin(0.92f, 0.04f),
+            animationSpec = spring(
+                dampingRatio = 0.78f,
+                stiffness = 380f
+            )
+        ) + fadeIn(animationSpec = tween(durationMillis = 190)),
+        exit = scaleOut(
+            targetScale = 0.86f,
+            transformOrigin = TransformOrigin(0.92f, 0.04f),
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMedium
+            )
+        ) + fadeOut(animationSpec = tween(durationMillis = 150)),
+        modifier = Modifier
+            .zIndex(if (isForegroundWindow) 20f else 10f)
+            .offset {
+                IntOffset(
+                    x = (offsetX + shakeOffsetX.value).roundToInt(),
+                    y = offsetY.roundToInt()
+                )
+            }
+    ) {
+        Surface(
+            color = surfaceBg,
+            shape = RoundedCornerShape(18.dp),
+            shadowElevation = elevationDp,
+            modifier = Modifier
+                .padding(8.dp)
+                .widthIn(min = 250.dp, max = widthDp.dp)
+                .fillMaxWidth(0.88f)
+                .height(heightDp.dp)
+                .tactileWindowDepth(isForeground = isForegroundWindow, cornerRadiusDp = 18f)
+                .shadow(
+                    elevation = elevationDp,
+                    shape = RoundedCornerShape(18.dp),
+                    ambientColor = Color.Black,
+                    spotColor = Color.Black
+                )
+                // Pitch-black 1.5dp outer separation trench so the floating window never blends into background windows
+                .border(
+                    width = 1.5.dp,
+                    color = Color(0xFF090808),
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .padding(1.5.dp)
+                // Top-lit overhead specular bevel border
+                .border(
+                    width = if (isForegroundWindow) 1.5.dp else 1.dp,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            topBevelColor,
+                            Color(0xFF2D2824)
+                        )
+                    ),
+                    shape = RoundedCornerShape(17.dp)
+                )
+                .pointerInput(windowType) {
+                    detectTapGestures(onPress = {
+                        onFocusWindow()
+                    })
+                }
+                .testTag(
+                    if (windowType == FloatingWindowType.EXPLANATION) {
+                        "mac_explanation_floating_window"
+                    } else {
+                        "floating_window_${windowType.name.lowercase()}"
+                    }
+                )
+        ) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                // LEFT-EDGE INTERACTIVE RESIZE HANDLE (`▐` matching the blue handle on the left edge in Sketch 2!)
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(12.dp)
+                        .background(Color(0xFF1F1C1A))
+                        .pointerInput(windowType) {
+                            detectDragGestures(
+                                onDragStart = { onFocusWindow() }
+                            ) { change, dragAmount ->
+                                change.consume()
+                                val dxDp = with(density) { dragAmount.x.toDp().value }
+                                widthDp = (widthDp - dxDp).coerceIn(250f, 680f)
+                            }
+                        }
+                        .testTag("left_edge_resize_handle_${windowType.name.lowercase()}"),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = badge,
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = accentColor,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                    Box(
+                        modifier = Modifier
+                            .width(3.5.dp)
+                            .height(42.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (isForegroundWindow) MutedSteelAccent else Color(0xFF575049))
                     )
+                }
+
+                // MAIN FLOATING WINDOW COLUMN
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                ) {
+                    // 1. Draggable macOS Window Header Bar (`• • •` + Title + Cancel `✕`)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(headerBg)
+                            .pointerInput(windowType) {
+                                detectDragGestures(
+                                    onDragStart = { onFocusWindow() }
+                                ) { change, dragAmount ->
+                                    change.consume()
+                                    offsetX = (offsetX + dragAmount.x).coerceIn(-420f, 420f)
+                                    offsetY = (offsetY + dragAmount.y).coerceIn(-380f, 420f)
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            // Traffic Light Dots (`• • •` matching Sketch 5)
+                            Box(
+                                modifier = Modifier
+                                    .size(11.dp)
+                                    .clip(CircleShape)
+                                    .background(MacRedDot)
+                                    .clickable(onClick = onCancelWindow)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(11.dp)
+                                    .clip(CircleShape)
+                                    .background(MacYellowDot)
+                                    .clickable { heightDp = 210f }
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(11.dp)
+                                    .clip(CircleShape)
+                                    .background(MacGreenDot)
+                                    .clickable {
+                                        widthDp = 520f
+                                        heightDp = 420f
+                                    }
+                            )
+
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Column {
+                                Text(
+                                    text = windowType.windowTitle,
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = WarmCreamText,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = if (isForegroundWindow) {
+                                        "Active Window • Drag header to move"
+                                    } else {
+                                        "Background Window • Tap to focus"
+                                    },
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 9.sp,
+                                    color = MutedTaupeText,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            if (headerExtraActions != null) {
+                                headerExtraActions()
+                            }
+
+                            // Explicit Cancel / Close Window Button (`✕`)
+                            Surface(
+                                color = Color(0xFF422927),
+                                shape = RoundedCornerShape(7.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(7.dp))
+                                    .border(1.dp, Color(0xFF6B3E3B), RoundedCornerShape(7.dp))
+                                    .clickable(onClick = onCancelWindow)
+                                    .testTag("cancel_floating_window_${windowType.name.lowercase()}")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Cancel Floating Window",
+                                        tint = Color(0xFFF2B8B5),
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Text(
+                                        text = "Cancel",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFF2B8B5)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = Color(0xFF1A1816), thickness = 1.dp)
+
+                    // 2. Window Body Content
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(10.dp)
+                    ) {
+                        content()
+                    }
+
+                    // 3. Bottom-Right Corner & Bottom Resize Bar (`⤡`)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF1D1A18))
+                            .pointerInput(windowType) {
+                                detectDragGestures(
+                                    onDragStart = { onFocusWindow() }
+                                ) { change, dragAmount ->
+                                    change.consume()
+                                    val dxDp = with(density) { dragAmount.x.toDp().value }
+                                    val dyDp = with(density) { dragAmount.y.toDp().value }
+                                    widthDp = (widthDp + dxDp).coerceIn(250f, 680f)
+                                    heightDp = (heightDp + dyDp).coerceIn(180f, 540f)
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "▐ Left edge or corner ⤡ to resize (${widthDp.roundToInt()}×${heightDp.roundToInt()} dp)",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.sp,
+                            color = MutedTaupeText
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "Center",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = WarmAmberAccent,
+                                modifier = Modifier.clickable {
+                                    offsetX = 0f
+                                    offsetY = 8f
+                                }
+                            )
+                            Icon(
+                                imageVector = Icons.Default.OpenInFull,
+                                contentDescription = "Resize Window Handle",
+                                tint = MutedTaupeText,
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -405,15 +900,14 @@ private fun IslandActionPill(
 }
 
 /**
- * Resizable macOS Drop-Down Window container that drops down from the Top Floating Dynamic Island.
- * Supports interactive drag-to-resize on both width and height plus quick S / M / L size presets!
+ * Resizable Command Block Window (`⌘P` Command Palette, exempt from the 2-window limit).
  */
 @Composable
 fun ResizableIslandDropdownWindow(
     title: String,
     subtitle: String,
     initialWidthDp: Float = 520f,
-    initialHeightDp: Float = 360f,
+    initialHeightDp: Float = 370f,
     onClose: () -> Unit,
     content: @Composable () -> Unit
 ) {
@@ -422,27 +916,25 @@ fun ResizableIslandDropdownWindow(
     var heightDp by remember { mutableFloatStateOf(initialHeightDp) }
 
     Surface(
-        color = IslandGlassWindowBg,
+        color = Tier3FloatingWindowActiveBg,
         shape = RoundedCornerShape(18.dp),
-        shadowElevation = 22.dp,
+        shadowElevation = 28.dp,
         modifier = Modifier
-            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
             .widthIn(min = 280.dp, max = widthDp.dp)
             .fillMaxWidth()
             .heightIn(min = 200.dp, max = heightDp.dp)
-            .border(
-                width = 1.dp,
-                color = Color(0xFF334155),
-                shape = RoundedCornerShape(18.dp)
-            )
+            .tactileWindowDepth(isForeground = true, cornerRadiusDp = 18f)
+            .border(1.5.dp, Color(0xFF080707), RoundedCornerShape(18.dp))
+            .padding(1.dp)
+            .border(1.dp, Tier3FloatingWindowActiveBevel, RoundedCornerShape(17.dp))
             .testTag("resizable_island_dropdown_window")
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // macOS Floating Window Header Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(IslandGlassHeaderBg)
+                    .background(Tier3FloatingWindowActiveHeader)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -482,56 +974,27 @@ fun ResizableIslandDropdownWindow(
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF8FAFC)
+                            color = WarmCreamText
                         )
                         Text(
                             text = subtitle,
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 10.sp,
-                            color = Color(0xFF94A3B8)
+                            color = MutedTaupeText
                         )
                     }
                 }
 
-                // Quick Window Size Presets (S / M / L) + Close
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    listOf("S" to 260f, "M" to 370f, "L" to 500f).forEach { (label, targetH) ->
-                        Surface(
-                            color = if (kotlin.math.abs(heightDp - targetH) < 40f) {
-                                IslandAccentBlue.copy(alpha = 0.28f)
-                            } else {
-                                Color.White.copy(alpha = 0.06f)
-                            },
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .clickable { heightDp = targetH }
-                        ) {
-                            Text(
-                                text = label,
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFE2E8F0),
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                    IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close Window",
-                            tint = Color(0xFF94A3B8),
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
+                IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close Command Block",
+                        tint = MutedTaupeText,
+                        modifier = Modifier.size(14.dp)
+                    )
                 }
             }
 
-            // Main Dropdown Body
             Box(
                 modifier = Modifier
                     .weight(1f, fill = false)
@@ -541,11 +1004,10 @@ fun ResizableIslandDropdownWindow(
                 content()
             }
 
-            // Interactive Drag-to-Resize Bottom Grip Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF11151E))
+                    .background(Color(0xFF1D1A18))
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
@@ -560,15 +1022,15 @@ fun ResizableIslandDropdownWindow(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "⇥ Drag bar or corner to resize window (${widthDp.roundToInt()}×${heightDp.roundToInt()} dp)",
+                    text = "⇥ Drag to resize Command Block (${widthDp.roundToInt()}×${heightDp.roundToInt()} dp)",
                     fontFamily = JetBrainsMonoFontFamily,
                     fontSize = 9.5.sp,
-                    color = Color(0xFF64748B)
+                    color = MutedTaupeText
                 )
                 Icon(
                     imageVector = Icons.Default.OpenInFull,
                     contentDescription = "Resize Window Handle",
-                    tint = Color(0xFF64748B),
+                    tint = MutedTaupeText,
                     modifier = Modifier.size(12.dp)
                 )
             }
@@ -577,8 +1039,7 @@ fun ResizableIslandDropdownWindow(
 }
 
 /**
- * Floating Command Palette Window (Modeled directly after the user's attached screenshot:
- * "Run a command, jump to a file or symbol..." with filter pills All, Commands, Folders, Symbols, Concepts).
+ * Floating Command Palette Content (`⌘P`).
  */
 @Composable
 fun CommandPaletteDropdownContent(
@@ -604,7 +1065,6 @@ fun CommandPaletteDropdownContent(
 
     val entries = remember(activeFolder, allFolders, activeSection) {
         buildList {
-            // Commands
             add(
                 PaletteEntry(
                     id = "cmd_ask_ai",
@@ -649,8 +1109,8 @@ fun CommandPaletteDropdownContent(
                 PaletteEntry(
                     id = "cmd_float",
                     category = CommandPaletteFilter.COMMANDS,
-                    title = "Show Explanation as Draggable Floating Window",
-                    subtitle = "macOS Notes-style resizable overlay window",
+                    title = "Open Explanation Floating Window",
+                    subtitle = "Draggable & resizable Warm Mocha floating window",
                     icon = Icons.Default.Description,
                     action = { onExecuteCommand("float_explain") }
                 )
@@ -659,7 +1119,7 @@ fun CommandPaletteDropdownContent(
                 PaletteEntry(
                     id = "cmd_run",
                     category = CommandPaletteFilter.COMMANDS,
-                    title = "Run Build & Execute in Apple Terminal",
+                    title = "Run Build & Execute in Apple cmd",
                     subtitle = "Evaluates println() output and checks syntax",
                     icon = Icons.Default.PlayArrow,
                     action = { onExecuteCommand("run_code") }
@@ -686,13 +1146,12 @@ fun CommandPaletteDropdownContent(
                 )
             )
 
-            // Folders
             allFolders.forEach { folder ->
                 add(
                     PaletteEntry(
                         id = "folder_${folder.id}",
                         category = CommandPaletteFilter.FOLDERS,
-                        title = "📁 ${folder.title}",
+                        title = "Folder: ${folder.title}",
                         subtitle = "${folder.sectionCount} Kotlin sections • ${folder.wordCount} words",
                         icon = Icons.Default.Folder,
                         action = { onSelectFolder(folder.id) }
@@ -700,7 +1159,6 @@ fun CommandPaletteDropdownContent(
                 )
             }
 
-            // Concepts / Sections
             activeFolder.sections.forEach { sec ->
                 add(
                     PaletteEntry(
@@ -714,7 +1172,6 @@ fun CommandPaletteDropdownContent(
                 )
             }
 
-            // Symbols extracted from active code
             val symbolRegex = Regex("""\b(?:fun|class|interface|object|val|var)\s+([A-Za-z_][A-Za-z0-9_]*)""")
             activeFolder.sections.forEach { sec ->
                 symbolRegex.findAll(sec.codeContent).forEach { match ->
@@ -751,33 +1208,32 @@ fun CommandPaletteDropdownContent(
                     text = "Run a command, jump to a folder, section, or symbol...",
                     fontFamily = JetBrainsMonoFontFamily,
                     fontSize = 12.sp,
-                    color = Color(0xFF94A3B8)
+                    color = MutedTaupeText
                 )
             },
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = null,
-                    tint = Color(0xFF94A3B8),
+                    tint = MutedTaupeText,
                     modifier = Modifier.size(18.dp)
                 )
             },
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color(0xFF0F131A),
-                unfocusedContainerColor = Color(0xFF0F131A),
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                focusedBorderColor = IslandAccentBlue,
-                unfocusedBorderColor = Color(0xFF2D3748)
+                focusedContainerColor = Color(0xFF191716),
+                unfocusedContainerColor = Color(0xFF191716),
+                focusedTextColor = WarmCreamText,
+                unfocusedTextColor = WarmCreamText,
+                focusedBorderColor = WarmAmberAccent,
+                unfocusedBorderColor = Color(0xFF3E3832)
             ),
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("command_palette_search_input")
         )
 
-        // Filter Chips (All, Commands, Folders, Symbols, Concepts)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -787,13 +1243,13 @@ fun CommandPaletteDropdownContent(
             CommandPaletteFilter.entries.forEach { filter ->
                 val selected = selectedFilter == filter
                 Surface(
-                    color = if (selected) Color(0xFF5C4033) else Color(0xFF1E2430),
+                    color = if (selected) Tier2CompletionSelectedBg else Color(0xFF211E1C),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .clip(RoundedCornerShape(16.dp))
                         .border(
                             width = 1.dp,
-                            color = if (selected) Color(0xFFD97706) else Color(0xFF334155),
+                            color = if (selected) WarmAmberAccent else Color(0xFF3E3832),
                             shape = RoundedCornerShape(16.dp)
                         )
                         .clickable { selectedFilter = filter }
@@ -803,28 +1259,29 @@ fun CommandPaletteDropdownContent(
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 11.sp,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = Color(0xFFF8FAFC),
+                        color = WarmCreamText,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                     )
                 }
             }
         }
 
-        HorizontalDivider(color = Color(0xFF283142))
+        HorizontalDivider(color = Color(0xFF3A342E))
 
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 260.dp),
+                .heightIn(max = 250.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             items(filtered, key = { it.id }) { item ->
                 Surface(
-                    color = Color.White.copy(alpha = 0.04f),
+                    color = Color(0xFF23201E),
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
+                        .border(1.dp, Color(0xFF36312C), RoundedCornerShape(10.dp))
                         .clickable {
                             item.action()
                             onClose()
@@ -840,7 +1297,7 @@ fun CommandPaletteDropdownContent(
                         Icon(
                             imageVector = item.icon,
                             contentDescription = null,
-                            tint = IslandAccentBlue,
+                            tint = WarmAmberAccent,
                             modifier = Modifier.size(16.dp)
                         )
                         Column(modifier = Modifier.weight(1f)) {
@@ -849,13 +1306,13 @@ fun CommandPaletteDropdownContent(
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFF1F5F9)
+                                color = WarmCreamText
                             )
                             Text(
                                 text = item.subtitle,
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.sp,
-                                color = Color(0xFF94A3B8),
+                                color = MutedTaupeText,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -868,9 +1325,7 @@ fun CommandPaletteDropdownContent(
 }
 
 /**
- * Folder & Sections Explorer Drop-Down Window inside the Floating Island.
- * Lets the user rename the active Folder, switch between Folders, create a new Folder,
- * or switch between Kotlin code sections inside the active Folder.
+ * Folder & Sections Explorer Content inside the `Folders` Floating Window.
  */
 @Composable
 fun FolderAndSectionsDropdownContent(
@@ -894,7 +1349,6 @@ fun FolderAndSectionsDropdownContent(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Active Folder Title Editor + All Folders Grid Button
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -903,7 +1357,7 @@ fun FolderAndSectionsDropdownContent(
             Icon(
                 imageVector = Icons.Default.FolderSpecial,
                 contentDescription = null,
-                tint = IslandAccentBlue,
+                tint = WarmAmberAccent,
                 modifier = Modifier.size(20.dp)
             )
             OutlinedTextField(
@@ -913,10 +1367,11 @@ fun FolderAndSectionsDropdownContent(
                 singleLine = true,
                 shape = RoundedCornerShape(10.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF0F131A),
-                    unfocusedContainerColor = Color(0xFF0F131A),
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    focusedContainerColor = Color(0xFF191716),
+                    unfocusedContainerColor = Color(0xFF191716),
+                    focusedTextColor = WarmCreamText,
+                    unfocusedTextColor = WarmCreamText,
+                    focusedBorderColor = WarmAmberAccent
                 ),
                 modifier = Modifier
                     .weight(1f)
@@ -932,22 +1387,21 @@ fun FolderAndSectionsDropdownContent(
                     modifier = Modifier.size(15.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Folders", fontSize = 11.sp)
+                Text("All", fontSize = 11.sp)
             }
         }
 
-        // Sections inside Active Folder
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "KOTLIN SECTIONS IN THIS FOLDER (${activeFolder.sections.size})",
+                text = "KOTLIN SECTIONS (${activeFolder.sections.size})",
                 fontFamily = JetBrainsMonoFontFamily,
                 fontSize = 10.5.sp,
                 fontWeight = FontWeight.Bold,
-                color = IslandAccentEmerald
+                color = MutedSageAccent
             )
             TextButton(onClick = onInsertNewSection) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
@@ -959,14 +1413,14 @@ fun FolderAndSectionsDropdownContent(
         activeFolder.sections.forEach { sec ->
             val isCurrent = sec.id == activeSectionId
             Surface(
-                color = if (isCurrent) IslandAccentBlue.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f),
+                color = if (isCurrent) Tier2CompletionSelectedBg.copy(alpha = 0.65f) else Color(0xFF211E1C),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
                     .border(
                         width = 1.dp,
-                        color = if (isCurrent) IslandAccentBlue else Color.White.copy(alpha = 0.08f),
+                        color = if (isCurrent) WarmAmberAccent else Color(0xFF3A342E),
                         shape = RoundedCornerShape(10.dp)
                     )
                     .clickable { onSelectSection(sec.id) }
@@ -980,25 +1434,20 @@ fun FolderAndSectionsDropdownContent(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = "§${sec.orderIndex + 1} • ${sec.displayTitle}",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        Text(
+                            text = "§${sec.orderIndex + 1} • ${sec.displayTitle}",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = WarmCreamText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                         Text(
                             text = "Concept: [${sec.effectiveLearnedConceptTag}] • ${sec.lineCount} lines",
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 10.sp,
-                            color = IslandAccentEmerald
+                            color = MutedSageAccent
                         )
                     }
                     if (activeFolder.sections.size > 1) {
@@ -1009,7 +1458,7 @@ fun FolderAndSectionsDropdownContent(
                             Icon(
                                 imageVector = Icons.Default.DeleteOutline,
                                 contentDescription = "Delete Section",
-                                tint = Color(0xFF94A3B8),
+                                tint = MutedTaupeText,
                                 modifier = Modifier.size(15.dp)
                             )
                         }
@@ -1018,20 +1467,19 @@ fun FolderAndSectionsDropdownContent(
             }
         }
 
-        HorizontalDivider(color = Color(0xFF283142))
+        HorizontalDivider(color = Color(0xFF3A342E))
 
-        // Switch or Create Another Folder
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "ALL WORKSPACE FOLDERS (${allFolders.size})",
+                text = "WORKSPACE FOLDERS (${allFolders.size})",
                 fontFamily = JetBrainsMonoFontFamily,
                 fontSize = 10.5.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF94A3B8)
+                color = MutedTaupeText
             )
             TextButton(onClick = { showCreateFolderRow = !showCreateFolderRow }) {
                 Icon(Icons.Default.CreateNewFolder, contentDescription = null, modifier = Modifier.size(14.dp))
@@ -1049,7 +1497,7 @@ fun FolderAndSectionsDropdownContent(
                 OutlinedTextField(
                     value = newFolderTitle,
                     onValueChange = { newFolderTitle = it },
-                    placeholder = { Text("Folder name (e.g. Compose UI Lab)", fontSize = 11.sp) },
+                    placeholder = { Text("Folder name", fontSize = 11.sp) },
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
@@ -1074,13 +1522,13 @@ fun FolderAndSectionsDropdownContent(
             allFolders.forEach { folder ->
                 val isCurrentFolder = folder.id == activeFolder.id
                 Surface(
-                    color = if (isCurrentFolder) IslandAccentViolet.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.05f),
+                    color = if (isCurrentFolder) PillSelectedBg else Color(0xFF211E1C),
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
                         .border(
                             width = 1.dp,
-                            color = if (isCurrentFolder) IslandAccentViolet else Color.White.copy(alpha = 0.08f),
+                            color = if (isCurrentFolder) WarmAmberAccent else Color(0xFF3A342E),
                             shape = RoundedCornerShape(10.dp)
                         )
                         .clickable { onSelectFolder(folder.id) }
@@ -1093,7 +1541,7 @@ fun FolderAndSectionsDropdownContent(
                         Icon(
                             imageVector = Icons.Default.Folder,
                             contentDescription = null,
-                            tint = if (isCurrentFolder) IslandAccentViolet else IslandAccentAmber,
+                            tint = WarmAmberAccent,
                             modifier = Modifier.size(15.dp)
                         )
                         Column {
@@ -1102,13 +1550,13 @@ fun FolderAndSectionsDropdownContent(
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = WarmCreamText
                             )
                             Text(
                                 text = "${folder.sectionCount} sections",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 9.5.sp,
-                                color = Color(0xFF94A3B8)
+                                color = MutedTaupeText
                             )
                         }
                     }
@@ -1119,13 +1567,177 @@ fun FolderAndSectionsDropdownContent(
 }
 
 /**
- * Draggable & Resizable macOS Floating Explanation Window (or Docked Split-Screen Pane).
- * Modeled after the user's attached macOS Notes window screenshot!
- * Includes:
- * - macOS Traffic Lights (`● ● ●`)
- * - Drag-to-move title bar (when floating)
- * - Drag-to-resize bottom-right corner & bottom grip (when floating)
- * - 1-Tap `◫ Split Screen (Set Aside)` toggle button to divide the screen into 2 resizable windows!
+ * Rich Explanation & Notes Content used inside both:
+ * 1. The `Explain` Draggable Floating Window (Tier 3 Depth)
+ * 2. The 2-Window Resizable Split-Screen Mode ("Set Aside")
+ */
+@Composable
+fun ExplanationWindowBodyContent(
+    section: CodeSectionUiModel,
+    formattingStyle: TextFormattingStyle,
+    onExplanationChange: (String) -> Unit,
+    onConceptTagChange: (String) -> Unit,
+    onFontChoiceChange: (EditorFontChoice) -> Unit,
+    onToggleBold: () -> Unit,
+    onToggleItalic: () -> Unit,
+    onToggleUnderline: () -> Unit
+) {
+    var isEditingTag by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Formatting & Learned Concept Tag Bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF1F1C1A))
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                color = Color(0xFF2D2722),
+                shape = RoundedCornerShape(6.dp),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .border(1.dp, Color(0xFF4A4037), RoundedCornerShape(6.dp))
+                    .clickable { isEditingTag = !isEditingTag }
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.School,
+                        contentDescription = null,
+                        tint = WarmAmberAccent,
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    if (isEditingTag) {
+                        BasicTextField(
+                            value = section.explanationStyle.learnedConceptTag.ifBlank { section.effectiveLearnedConceptTag },
+                            onValueChange = onConceptTagChange,
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.5.sp,
+                                color = WarmCreamText
+                            ),
+                            cursorBrush = SolidColor(WarmAmberAccent),
+                            modifier = Modifier.width(120.dp)
+                        )
+                    } else {
+                        Text(
+                            text = "Tag: ${section.effectiveLearnedConceptTag}",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = WarmAmberAccent
+                        )
+                    }
+                }
+            }
+
+            EditorFontChoice.entries.forEach { font ->
+                val selected = formattingStyle.fontChoice == font
+                Surface(
+                    color = if (selected) Tier2CompletionSelectedBg else Color(0xFF292522),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { onFontChoiceChange(font) }
+                ) {
+                    Text(
+                        text = font.badge,
+                        fontSize = 10.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        color = WarmCreamText,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            IconButton(onClick = onToggleBold, modifier = Modifier.size(22.dp)) {
+                Icon(
+                    imageVector = Icons.Default.FormatBold,
+                    contentDescription = "Bold",
+                    tint = if (formattingStyle.isBold) WarmAmberAccent else MutedTaupeText,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            IconButton(onClick = onToggleItalic, modifier = Modifier.size(22.dp)) {
+                Icon(
+                    imageVector = Icons.Default.FormatItalic,
+                    contentDescription = "Italic",
+                    tint = if (formattingStyle.isItalic) WarmAmberAccent else MutedTaupeText,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            IconButton(onClick = onToggleUnderline, modifier = Modifier.size(22.dp)) {
+                Icon(
+                    imageVector = Icons.Default.FormatUnderlined,
+                    contentDescription = "Underline",
+                    tint = if (formattingStyle.isUnderline) WarmAmberAccent else MutedTaupeText,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        val textDecoration = when {
+            formattingStyle.isUnderline && formattingStyle.isStrikethrough ->
+                TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
+            formattingStyle.isUnderline -> TextDecoration.Underline
+            formattingStyle.isStrikethrough -> TextDecoration.LineThrough
+            else -> TextDecoration.None
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 6.dp, vertical = 4.dp)
+        ) {
+            BasicTextField(
+                value = section.explanationText,
+                onValueChange = onExplanationChange,
+                textStyle = TextStyle(
+                    fontFamily = formattingStyle.fontChoice.toComposeFontFamily(),
+                    fontSize = formattingStyle.fontSizeSp.sp,
+                    fontWeight = if (formattingStyle.isBold) FontWeight.Bold else FontWeight.Normal,
+                    fontStyle = if (formattingStyle.isItalic) FontStyle.Italic else FontStyle.Normal,
+                    textDecoration = textDecoration,
+                    textAlign = formattingStyle.alignment.toComposeTextAlign(),
+                    color = WarmCreamText,
+                    lineHeight = (formattingStyle.fontSizeSp + 6).sp
+                ),
+                cursorBrush = SolidColor(WarmAmberAccent),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("section_explanation_input_${section.orderIndex}"),
+                decorationBox = { innerTextField ->
+                    if (section.explanationText.isEmpty()) {
+                        Text(
+                            text = "Write your explanation & notes for §${section.orderIndex + 1} here, or tap 'AI Explain' above to generate a thorough step-by-step guide…",
+                            style = TextStyle(
+                                fontFamily = formattingStyle.fontChoice.toComposeFontFamily(),
+                                fontSize = formattingStyle.fontSizeSp.sp,
+                                color = MutedTaupeText
+                            )
+                        )
+                    }
+                    innerTextField()
+                }
+            )
+        }
+    }
+}
+
+/**
+ * Split-Screen Two-Window Explanation Pane (when user clicks "Set Aside / 2-Win").
  */
 @Composable
 fun MacFloatingOrSplitExplanationWindow(
@@ -1145,56 +1757,23 @@ fun MacFloatingOrSplitExplanationWindow(
     onAlignmentChange: (TextAlignmentChoice) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val density = LocalDensity.current
-    var offsetX by remember { mutableFloatStateOf(0f) }
-    var offsetY by remember { mutableFloatStateOf(0f) }
-    var floatWidthDp by remember { mutableFloatStateOf(390f) }
-    var floatHeightDp by remember { mutableFloatStateOf(255f) }
-    var isEditingTag by remember { mutableStateOf(false) }
-
-    val isFloating = windowMode == ExplanationWindowMode.FLOATING_WINDOW
-
-    val containerModifier = if (isFloating) {
-        modifier
-            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-            .widthIn(min = 260.dp, max = floatWidthDp.dp)
-            .fillMaxWidth(0.92f)
-            .height(floatHeightDp.dp)
-            .shadow(20.dp, RoundedCornerShape(16.dp))
-    } else {
-        modifier.fillMaxSize()
-    }
-
     Surface(
-        color = Color(0xF7161B24),
-        shape = RoundedCornerShape(16.dp),
-        modifier = containerModifier
-            .border(
-                width = 1.dp,
-                color = Color(0xFF334155),
-                shape = RoundedCornerShape(16.dp)
-            )
+        color = Tier3FloatingWindowActiveBg,
+        shape = RoundedCornerShape(18.dp),
+        shadowElevation = 18.dp,
+        modifier = modifier
+            .fillMaxSize()
+            .tactileWindowDepth(isForeground = true, cornerRadiusDp = 18f)
+            .border(1.5.dp, Color(0xFF090808), RoundedCornerShape(18.dp))
+            .padding(1.dp)
+            .border(1.dp, Tier3FloatingWindowActiveBevel, RoundedCornerShape(17.dp))
             .testTag("mac_explanation_floating_window")
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // 1. macOS Window Title Bar (Draggable in Floating Mode!)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF1F2633))
-                    .then(
-                        if (isFloating) {
-                            Modifier.pointerInput(Unit) {
-                                detectDragGestures { change, dragAmount ->
-                                    change.consume()
-                                    offsetX = (offsetX + dragAmount.x).coerceIn(-280f, 280f)
-                                    offsetY = (offsetY + dragAmount.y).coerceIn(-360f, 360f)
-                                }
-                            }
-                        } else {
-                            Modifier
-                        }
-                    )
+                    .background(Tier3FloatingWindowActiveHeader)
                     .padding(horizontal = 10.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -1204,7 +1783,6 @@ fun MacFloatingOrSplitExplanationWindow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    // macOS Traffic Light Buttons
                     Box(
                         modifier = Modifier
                             .size(11.dp)
@@ -1217,9 +1795,7 @@ fun MacFloatingOrSplitExplanationWindow(
                             .size(11.dp)
                             .clip(CircleShape)
                             .background(MacYellowDot)
-                            .clickable {
-                                if (isFloating) floatHeightDp = 175f else onCloseWindow()
-                            }
+                            .clickable(onClick = onCloseWindow)
                     )
                     Box(
                         modifier = Modifier
@@ -1228,26 +1804,24 @@ fun MacFloatingOrSplitExplanationWindow(
                             .background(MacGreenDot)
                             .clickable(onClick = onToggleSplitMode)
                     )
-
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (isFloating) "📝 Floating Explanation (Drag to Move)" else "📝 Split Window • Explanation",
+                        text = "Split Window • Explanation",
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFFF8FAFC),
+                        color = WarmCreamText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                // Set Aside / Split-Screen Two-Window Mode Toggle + AI Explain Button
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Surface(
-                        color = IslandAccentEmerald.copy(alpha = 0.2f),
+                        color = Tier2CompletionSelectedBg,
                         shape = RoundedCornerShape(7.dp),
                         modifier = Modifier
                             .clip(RoundedCornerShape(7.dp))
@@ -1261,245 +1835,56 @@ fun MacFloatingOrSplitExplanationWindow(
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
                                 contentDescription = "AI Thorough Explain",
-                                tint = IslandAccentEmerald,
-                                modifier = Modifier.size(12.dp)
+                                tint = WarmCreamText,
+                                modifier = Modifier.size(11.dp)
                             )
                             Spacer(modifier = Modifier.width(3.dp))
                             Text(
                                 text = "AI Explain",
                                 fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 10.sp,
+                                fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = IslandAccentEmerald
+                                color = WarmCreamText
                             )
                         }
                     }
 
                     Surface(
-                        color = IslandAccentBlue.copy(alpha = 0.22f),
+                        color = Color(0xFF29323B),
                         shape = RoundedCornerShape(7.dp),
                         modifier = Modifier
                             .clip(RoundedCornerShape(7.dp))
                             .clickable(onClick = onToggleSplitMode)
                             .testTag("toggle_split_screen_explanation_button")
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isFloating) Icons.Default.VerticalSplit else Icons.Default.OpenInFull,
-                                contentDescription = "Toggle 2-Window Split Screen",
-                                tint = IslandAccentBlue,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = if (isFloating) "◫ Set Aside (2-Win)" else "Float Overlay",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = IslandAccentBlue
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 2. Compact Rich-Text & Concept Tag Strip
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF121721))
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                // Learned Concept Tag Chip
-                Surface(
-                    color = IslandAccentViolet.copy(alpha = 0.18f),
-                    shape = RoundedCornerShape(6.dp),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable { isEditingTag = !isEditingTag }
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.School,
-                            contentDescription = null,
-                            tint = IslandAccentViolet,
-                            modifier = Modifier.size(11.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        if (isEditingTag) {
-                            BasicTextField(
-                                value = section.explanationStyle.learnedConceptTag.ifBlank { section.effectiveLearnedConceptTag },
-                                onValueChange = onConceptTagChange,
-                                singleLine = true,
-                                textStyle = TextStyle(
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 10.5.sp,
-                                    color = Color.White
-                                ),
-                                cursorBrush = SolidColor(IslandAccentViolet),
-                                modifier = Modifier.width(120.dp)
-                            )
-                        } else {
-                            Text(
-                                text = "Tag: ${section.effectiveLearnedConceptTag}",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = IslandAccentViolet
-                            )
-                        }
-                    }
-                }
-
-                // Font Selector Pills
-                EditorFontChoice.entries.forEach { font ->
-                    val selected = formattingStyle.fontChoice == font
-                    Surface(
-                        color = if (selected) IslandAccentBlue.copy(alpha = 0.24f) else Color.White.copy(alpha = 0.05f),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable { onFontChoiceChange(font) }
-                    ) {
                         Text(
-                            text = font.badge,
-                            fontSize = 10.sp,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (selected) IslandAccentBlue else Color(0xFFCBD5E1),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            text = "Float Window",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MutedSteelAccent,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                         )
                     }
                 }
-
-                // Bold / Italic / Underline
-                IconButton(onClick = onToggleBold, modifier = Modifier.size(22.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.FormatBold,
-                        contentDescription = "Bold",
-                        tint = if (formattingStyle.isBold) IslandAccentBlue else Color(0xFF94A3B8),
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-                IconButton(onClick = onToggleItalic, modifier = Modifier.size(22.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.FormatItalic,
-                        contentDescription = "Italic",
-                        tint = if (formattingStyle.isItalic) IslandAccentBlue else Color(0xFF94A3B8),
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-                IconButton(onClick = onToggleUnderline, modifier = Modifier.size(22.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.FormatUnderlined,
-                        contentDescription = "Underline",
-                        tint = if (formattingStyle.isUnderline) IslandAccentBlue else Color(0xFF94A3B8),
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-            }
-
-            // 3. Scrollable Explanation Rich Text Body
-            val textDecoration = when {
-                formattingStyle.isUnderline && formattingStyle.isStrikethrough ->
-                    TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
-                formattingStyle.isUnderline -> TextDecoration.Underline
-                formattingStyle.isStrikethrough -> TextDecoration.LineThrough
-                else -> TextDecoration.None
             }
 
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(12.dp)
+                    .padding(10.dp)
             ) {
-                BasicTextField(
-                    value = section.explanationText,
-                    onValueChange = onExplanationChange,
-                    textStyle = TextStyle(
-                        fontFamily = formattingStyle.fontChoice.toComposeFontFamily(),
-                        fontSize = formattingStyle.fontSizeSp.sp,
-                        fontWeight = if (formattingStyle.isBold) FontWeight.Bold else FontWeight.Normal,
-                        fontStyle = if (formattingStyle.isItalic) FontStyle.Italic else FontStyle.Normal,
-                        textDecoration = textDecoration,
-                        textAlign = formattingStyle.alignment.toComposeTextAlign(),
-                        color = Color(0xFFE2E8F0),
-                        lineHeight = (formattingStyle.fontSizeSp + 6).sp
-                    ),
-                    cursorBrush = SolidColor(IslandAccentEmerald),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("section_explanation_input_${section.orderIndex}"),
-                    decorationBox = { innerTextField ->
-                        if (section.explanationText.isEmpty()) {
-                            Text(
-                                text = "Write your explanation & notes for §${section.orderIndex + 1} here, or tap 'AI Explain' above to generate a thorough step-by-step guide…",
-                                style = TextStyle(
-                                    fontFamily = formattingStyle.fontChoice.toComposeFontFamily(),
-                                    fontSize = formattingStyle.fontSizeSp.sp,
-                                    color = Color(0xFF64748B)
-                                )
-                            )
-                        }
-                        innerTextField()
-                    }
+                ExplanationWindowBodyContent(
+                    section = section,
+                    formattingStyle = formattingStyle,
+                    onExplanationChange = onExplanationChange,
+                    onConceptTagChange = onConceptTagChange,
+                    onFontChoiceChange = onFontChoiceChange,
+                    onToggleBold = onToggleBold,
+                    onToggleItalic = onToggleItalic,
+                    onToggleUnderline = onToggleUnderline
                 )
-            }
-
-            // 4. Interactive Resize Handle (when in Floating Mode)
-            if (isFloating) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF0E131B))
-                        .pointerInput(Unit) {
-                            detectDragGestures { change, dragAmount ->
-                                change.consume()
-                                val dxDp = with(density) { dragAmount.x.toDp().value }
-                                val dyDp = with(density) { dragAmount.y.toDp().value }
-                                floatWidthDp = (floatWidthDp + dxDp).coerceIn(260f, 680f)
-                                floatHeightDp = (floatHeightDp + dyDp).coerceIn(160f, 520f)
-                            }
-                        }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "⤡ Drag to resize (${floatWidthDp.roundToInt()}×${floatHeightDp.roundToInt()} dp)",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 9.5.sp,
-                        color = Color(0xFF64748B)
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "Reset Pos",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 9.5.sp,
-                            color = IslandAccentBlue,
-                            modifier = Modifier.clickable {
-                                offsetX = 0f
-                                offsetY = 0f
-                            }
-                        )
-                        Icon(
-                            imageVector = Icons.Default.OpenInFull,
-                            contentDescription = "Resize Floating Explanation Window",
-                            tint = Color(0xFF94A3B8),
-                            modifier = Modifier.size(12.dp)
-                        )
-                    }
-                }
             }
         }
     }
@@ -1507,8 +1892,6 @@ fun MacFloatingOrSplitExplanationWindow(
 
 /**
  * First-Launch Storage Permission & Hidden Vault ("xyz" / ".ktscribe_vault_xyz") Recovery Dialog.
- * Also explains that `android:hasFragileUserData="true"` is enabled so uninstalling the app
- * displays the native checkbox to keep or delete local data.
  */
 @Composable
 fun FirstLaunchVaultRecoveryDialog(
@@ -1521,14 +1904,14 @@ fun FirstLaunchVaultRecoveryDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF141821),
-        titleContentColor = Color.White,
-        textContentColor = Color(0xFFCBD5E1),
+        containerColor = Tier3FloatingWindowActiveBg,
+        titleContentColor = WarmCreamText,
+        textContentColor = MutedTaupeText,
         icon = {
             Icon(
                 imageVector = Icons.Default.Security,
                 contentDescription = null,
-                tint = IslandAccentEmerald,
+                tint = WarmAmberAccent,
                 modifier = Modifier.size(30.dp)
             )
         },
@@ -1550,12 +1933,14 @@ fun FirstLaunchVaultRecoveryDialog(
                     Text(
                         text = "KtScribe stores all of your Folders, Kotlin Code Sections, and AI Explanations 100% locally on your device inside a protected, obfuscated vault folder (\"xyz\" / .ktscribe_vault_xyz) that cannot be casually opened by normal file browsers.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFE2E8F0)
+                        color = WarmCreamText
                     )
                     Surface(
-                        color = Color(0xFF1E2636),
+                        color = Color(0xFF211E1C),
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Color(0xFF3E3832), RoundedCornerShape(10.dp))
                     ) {
                         Column(
                             modifier = Modifier.padding(10.dp),
@@ -1566,22 +1951,22 @@ fun FirstLaunchVaultRecoveryDialog(
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = IslandAccentEmerald
+                                color = MutedSageAccent
                             )
                             Text(
                                 text = "When uninstalling KtScribe, Android will show a checkbox asking whether to keep or delete your app data.",
                                 fontSize = 11.sp,
-                                color = Color(0xFF94A3B8)
+                                color = MutedTaupeText
                             )
                         }
                     }
                 } else {
                     Surface(
-                        color = IslandAccentEmerald.copy(alpha = 0.14f),
+                        color = Color(0xFF211E1C),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, IslandAccentEmerald.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                            .border(1.dp, WarmAmberAccent.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
                     ) {
                         Column(
                             modifier = Modifier.padding(10.dp),
@@ -1592,26 +1977,26 @@ fun FirstLaunchVaultRecoveryDialog(
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = IslandAccentEmerald
+                                color = WarmAmberAccent
                             )
                             Text(
                                 text = "Path: ${vaultInspection.vaultPathDisplay}",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.sp,
-                                color = Color(0xFF94A3B8)
+                                color = MutedTaupeText
                             )
                             Text(
                                 text = "Recoverable Backup: ${vaultInspection.recoverableFolderCount} Folders • ${vaultInspection.recoverableSectionCount} Kotlin Sections",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.5.sp,
-                                color = Color.White
+                                color = WarmCreamText
                             )
                         }
                     }
                     Text(
                         text = "Would you like to recover your previous folders from the existing 'xyz' vault or create a new hidden vault folder?",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFE2E8F0)
+                        color = WarmCreamText
                     )
                 }
             }
@@ -1620,34 +2005,34 @@ fun FirstLaunchVaultRecoveryDialog(
             if (!storagePermissionGrantedInUi) {
                 Button(
                     onClick = { storagePermissionGrantedInUi = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = IslandAccentBlue),
+                    colors = ButtonDefaults.buttonColors(containerColor = Tier2CompletionSelectedBg),
                     modifier = Modifier.testTag("grant_vault_storage_permission_button")
                 ) {
-                    Text("Allow Vault Storage & Scan 'xyz'", fontWeight = FontWeight.Bold)
+                    Text("Allow Vault Storage & Scan 'xyz'", color = WarmCreamText, fontWeight = FontWeight.Bold)
                 }
             } else {
                 Button(
                     onClick = onRecoverPreviousData,
-                    colors = ButtonDefaults.buttonColors(containerColor = IslandAccentEmerald),
+                    colors = ButtonDefaults.buttonColors(containerColor = Tier2CompletionSelectedBg),
                     modifier = Modifier.testTag("recover_xyz_vault_button")
                 ) {
-                    Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Restore, contentDescription = null, tint = WarmCreamText, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Recover Previous Data", color = Color(0xFF042F2E), fontWeight = FontWeight.ExtraBold)
+                    Text("Recover Previous Data", color = WarmCreamText, fontWeight = FontWeight.ExtraBold)
                 }
             }
         },
         dismissButton = {
             if (!storagePermissionGrantedInUi) {
                 TextButton(onClick = onDismiss) {
-                    Text("Later", color = Color(0xFF94A3B8))
+                    Text("Later", color = MutedTaupeText)
                 }
             } else {
                 OutlinedButton(
                     onClick = onCreateNewVaultFolder,
                     modifier = Modifier.testTag("create_new_vault_folder_button")
                 ) {
-                    Text("Create New Hidden Vault", color = Color.White)
+                    Text("Create New Hidden Vault", color = WarmCreamText)
                 }
             }
         }

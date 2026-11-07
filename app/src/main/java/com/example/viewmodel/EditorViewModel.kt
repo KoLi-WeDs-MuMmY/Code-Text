@@ -17,6 +17,7 @@ import com.example.model.DocumentDetailUiModel
 import com.example.model.DocumentSummaryUiModel
 import com.example.model.EditorFontChoice
 import com.example.model.ExplanationWindowMode
+import com.example.model.FloatingWindowType
 import com.example.model.IslandDropdownMenu
 import com.example.model.TextAlignmentChoice
 import com.example.model.TextFormattingStyle
@@ -43,9 +44,12 @@ data class EditorUiState(
     val isFocusedSingleSectionMode: Boolean = true,
     val focusedSectionId: Long? = null,
     val newlyInsertedSectionId: Long? = null,
-    // macOS Dynamic Island & Resizable Floating/Split Windows state
+    // Dual Floating Windows (max 2 concurrent excluding Command Block, ordered back-to-front by zIndex)
+    val openFloatingWindows: List<FloatingWindowType> = emptyList(),
+    val windowLimitShakeCount: Int = 0,
+    // Command Block / Split Window state
     val activeIslandDropdown: IslandDropdownMenu = IslandDropdownMenu.NONE,
-    val explanationWindowMode: ExplanationWindowMode = ExplanationWindowMode.FLOATING_WINDOW,
+    val explanationWindowMode: ExplanationWindowMode = ExplanationWindowMode.HIDDEN,
     val splitScreenRatio: Float = 0.54f,
     val terminalExecutionOutput: String? = null,
     // First-Launch Storage Permission & Hidden Vault ("xyz") Recovery Gate
@@ -81,6 +85,45 @@ data class EditorUiState(
 
     companion object {
         const val AUTO_SAVE_INTERVAL_SECONDS = 30
+        const val MAX_CONCURRENT_FLOATING_WINDOWS = 2
+
+        /**
+         * Pure state transition for opening/toggling one of the 4 floating windows:
+         * - If already open, closes it.
+         * - If fewer than 2 windows are open, opens it at the top of the z-order.
+         * - If 2 windows are already open, keeps existing 2 windows and increments windowLimitShakeCount.
+         */
+        fun applyToggleFloatingWindow(
+            current: EditorUiState,
+            type: FloatingWindowType
+        ): EditorUiState {
+            return if (type in current.openFloatingWindows) {
+                val updated = current.openFloatingWindows - type
+                current.copy(
+                    openFloatingWindows = updated,
+                    explanationWindowMode = if (type == FloatingWindowType.EXPLANATION) {
+                        ExplanationWindowMode.HIDDEN
+                    } else {
+                        current.explanationWindowMode
+                    }
+                )
+            } else if (current.openFloatingWindows.size < MAX_CONCURRENT_FLOATING_WINDOWS) {
+                val updated = current.openFloatingWindows + type
+                current.copy(
+                    openFloatingWindows = updated,
+                    explanationWindowMode = if (type == FloatingWindowType.EXPLANATION) {
+                        ExplanationWindowMode.FLOATING_WINDOW
+                    } else {
+                        current.explanationWindowMode
+                    }
+                )
+            } else {
+                current.copy(
+                    windowLimitShakeCount = current.windowLimitShakeCount + 1,
+                    aiStatusMessage = "Max 2 floating windows open — cancel (✕) one to open ${type.pillLabel}"
+                )
+            }
+        }
     }
 }
 
@@ -224,6 +267,48 @@ class EditorViewModel(
         }
     }
 
+    fun toggleFloatingWindow(type: FloatingWindowType) {
+        if (type == FloatingWindowType.RUN_OUTPUT && type !in _uiState.value.openFloatingWindows) {
+            val doc = _uiState.value.activeDocument
+            val activeSec = doc?.sections?.find { it.id == _uiState.value.focusedSectionId }
+                ?: doc?.sections?.firstOrNull()
+            val output = activeSec?.let { KotlinCodeEngine.simulateKotlinExecution(it.codeContent) }
+            _uiState.update { current ->
+                val nextState = EditorUiState.applyToggleFloatingWindow(current, type)
+                nextState.copy(terminalExecutionOutput = output ?: current.terminalExecutionOutput)
+            }
+        } else {
+            _uiState.update { current ->
+                EditorUiState.applyToggleFloatingWindow(current, type)
+            }
+        }
+    }
+
+    fun closeFloatingWindow(type: FloatingWindowType) {
+        _uiState.update { current ->
+            current.copy(
+                openFloatingWindows = current.openFloatingWindows - type,
+                explanationWindowMode = if (type == FloatingWindowType.EXPLANATION &&
+                    current.explanationWindowMode == ExplanationWindowMode.FLOATING_WINDOW
+                ) {
+                    ExplanationWindowMode.HIDDEN
+                } else {
+                    current.explanationWindowMode
+                }
+            )
+        }
+    }
+
+    fun focusFloatingWindow(type: FloatingWindowType) {
+        _uiState.update { current ->
+            if (type !in current.openFloatingWindows || current.openFloatingWindows.lastOrNull() == type) {
+                current
+            } else {
+                current.copy(openFloatingWindows = (current.openFloatingWindows - type) + type)
+            }
+        }
+    }
+
     fun toggleIslandDropdown(menu: IslandDropdownMenu) {
         _uiState.update { current ->
             val next = if (current.activeIslandDropdown == menu) IslandDropdownMenu.NONE else menu
@@ -236,23 +321,37 @@ class EditorViewModel(
     }
 
     fun setExplanationWindowMode(mode: ExplanationWindowMode) {
-        _uiState.update {
-            it.copy(
+        _uiState.update { current ->
+            val updatedWindows = when (mode) {
+                ExplanationWindowMode.FLOATING_WINDOW -> {
+                    if (FloatingWindowType.EXPLANATION in current.openFloatingWindows) {
+                        current.openFloatingWindows
+                    } else if (current.openFloatingWindows.size < EditorUiState.MAX_CONCURRENT_FLOATING_WINDOWS) {
+                        current.openFloatingWindows + FloatingWindowType.EXPLANATION
+                    } else {
+                        current.openFloatingWindows.drop(1) + FloatingWindowType.EXPLANATION
+                    }
+                }
+                ExplanationWindowMode.SPLIT_SCREEN, ExplanationWindowMode.HIDDEN -> {
+                    current.openFloatingWindows - FloatingWindowType.EXPLANATION
+                }
+            }
+            current.copy(
                 explanationWindowMode = mode,
+                openFloatingWindows = updatedWindows,
                 activeIslandDropdown = IslandDropdownMenu.NONE
             )
         }
     }
 
     fun cycleExplanationWindowMode() {
-        _uiState.update { current ->
-            val next = when (current.explanationWindowMode) {
-                ExplanationWindowMode.FLOATING_WINDOW -> ExplanationWindowMode.SPLIT_SCREEN
-                ExplanationWindowMode.SPLIT_SCREEN -> ExplanationWindowMode.HIDDEN
-                ExplanationWindowMode.HIDDEN -> ExplanationWindowMode.FLOATING_WINDOW
-            }
-            current.copy(explanationWindowMode = next)
+        val current = _uiState.value
+        val next = when {
+            FloatingWindowType.EXPLANATION in current.openFloatingWindows -> ExplanationWindowMode.SPLIT_SCREEN
+            current.explanationWindowMode == ExplanationWindowMode.SPLIT_SCREEN -> ExplanationWindowMode.HIDDEN
+            else -> ExplanationWindowMode.FLOATING_WINDOW
         }
+        setExplanationWindowMode(next)
     }
 
     fun updateSplitScreenRatio(newRatio: Float) {
@@ -267,11 +366,15 @@ class EditorViewModel(
             ?: doc.sections.firstOrNull()
             ?: return
         val output = KotlinCodeEngine.simulateKotlinExecution(activeSec.codeContent)
-        _uiState.update {
-            it.copy(
-                terminalExecutionOutput = output,
-                activeIslandDropdown = IslandDropdownMenu.TERMINAL_OUTPUT
-            )
+        _uiState.update { current ->
+            val withOutput = current.copy(terminalExecutionOutput = output)
+            if (FloatingWindowType.RUN_OUTPUT in withOutput.openFloatingWindows) {
+                withOutput.copy(
+                    openFloatingWindows = (withOutput.openFloatingWindows - FloatingWindowType.RUN_OUTPUT) + FloatingWindowType.RUN_OUTPUT
+                )
+            } else {
+                EditorUiState.applyToggleFloatingWindow(withOutput, FloatingWindowType.RUN_OUTPUT)
+            }
         }
     }
 
@@ -781,10 +884,21 @@ class EditorViewModel(
                 )
             }
             _uiState.update {
+                val updatedWindows = if (FloatingWindowType.EXPLANATION !in it.openFloatingWindows &&
+                    it.openFloatingWindows.size < EditorUiState.MAX_CONCURRENT_FLOATING_WINDOWS &&
+                    it.explanationWindowMode != ExplanationWindowMode.SPLIT_SCREEN
+                ) {
+                    it.openFloatingWindows + FloatingWindowType.EXPLANATION
+                } else {
+                    it.openFloatingWindows
+                }
                 it.copy(
                     aiStatusMessage = banner,
                     remainingAiRpmQuota = quota,
-                    explanationWindowMode = if (it.explanationWindowMode == ExplanationWindowMode.HIDDEN) {
+                    openFloatingWindows = updatedWindows,
+                    explanationWindowMode = if (it.explanationWindowMode == ExplanationWindowMode.HIDDEN &&
+                        FloatingWindowType.EXPLANATION in updatedWindows
+                    ) {
                         ExplanationWindowMode.FLOATING_WINDOW
                     } else {
                         it.explanationWindowMode

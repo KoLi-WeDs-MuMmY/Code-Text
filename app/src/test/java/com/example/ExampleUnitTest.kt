@@ -249,4 +249,66 @@ class ExampleUnitTest {
         )
         assertTrue(kdocAdded.contains("/**"))
     }
+
+    @Test
+    fun `val constant bottom bar has exact 8 shortcut keys and never mixes autocomplete`() {
+        val keys = KotlinCodeEngine.VAL_CONSTANT_SHORTCUT_KEYS
+        assertEquals(8, keys.size)
+        assertEquals(
+            listOf("Tab", "( )", "{ }", "\" \"", "->", ".", "=", ":"),
+            keys.map { it.label }
+        )
+    }
+
+    @Test
+    fun `autocomplete tags newly declared symbols with NEW badge and IDE category badges`() {
+        val code = "class CustomOrderProcessor\nval orderLimit = 10\nCustom"
+        val (prefix, suggestions) = KotlinCodeEngine.getAutocompleteSuggestions(
+            code = code,
+            cursorPosition = code.length
+        )
+        assertEquals("Custom", prefix)
+        val userClass = suggestions.firstOrNull { it.label == "CustomOrderProcessor" }
+        assertNotNull(userClass)
+        assertTrue(userClass!!.isNewSymbol)
+        assertEquals("C", userClass.badgeChar)
+    }
+
+    @Test
+    fun `max 2 floating windows enforced with shake notification when 3rd requested`() {
+        val initial = com.example.viewmodel.EditorUiState()
+        assertEquals(0, initial.openFloatingWindows.size)
+
+        // Open 1st window (EXPLANATION)
+        val stateWith1 = com.example.viewmodel.EditorUiState.applyToggleFloatingWindow(
+            initial,
+            com.example.model.FloatingWindowType.EXPLANATION
+        )
+        assertEquals(1, stateWith1.openFloatingWindows.size)
+
+        // Open 2nd window (FOLDERS)
+        val stateWith2 = com.example.viewmodel.EditorUiState.applyToggleFloatingWindow(
+            stateWith1,
+            com.example.model.FloatingWindowType.FOLDERS
+        )
+        assertEquals(2, stateWith2.openFloatingWindows.size)
+        assertEquals(0, stateWith2.windowLimitShakeCount)
+
+        // Try opening 3rd window (AI_STUDIO) -> keeps existing 2 and increments shake count
+        val stateTried3 = com.example.viewmodel.EditorUiState.applyToggleFloatingWindow(
+            stateWith2,
+            com.example.model.FloatingWindowType.AI_STUDIO
+        )
+        assertEquals(2, stateTried3.openFloatingWindows.size)
+        assertFalse(stateTried3.openFloatingWindows.contains(com.example.model.FloatingWindowType.AI_STUDIO))
+        assertEquals(1, stateTried3.windowLimitShakeCount)
+        assertNotNull(stateTried3.aiStatusMessage)
+
+        // Cancel one of the open windows -> now only 1 open
+        val stateAfterClose = com.example.viewmodel.EditorUiState.applyToggleFloatingWindow(
+            stateTried3,
+            com.example.model.FloatingWindowType.EXPLANATION
+        )
+        assertEquals(1, stateAfterClose.openFloatingWindows.size)
+    }
 }
