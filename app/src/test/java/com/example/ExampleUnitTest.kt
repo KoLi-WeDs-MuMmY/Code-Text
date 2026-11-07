@@ -47,6 +47,33 @@ class ExampleUnitTest {
     }
 
     @Test
+    fun `ide line operations toggle comments duplicate and move lines`() {
+        val initial = TextFieldValue("val a = 1\nval b = 2", TextRange(3))
+        val commented = KotlinCodeEngine.toggleLineCommentAtCursor(initial)
+        assertTrue(commented.text.startsWith("// val a = 1"))
+
+        val uncommented = KotlinCodeEngine.toggleLineCommentAtCursor(commented)
+        assertTrue(uncommented.text.startsWith("val a = 1"))
+
+        val duplicated = KotlinCodeEngine.duplicateLineAtCursor(initial)
+        assertEquals(3, duplicated.text.split('\n').size)
+
+        val movedDown = KotlinCodeEngine.moveLineVertically(initial, moveUp = false)
+        assertTrue(movedDown.text.startsWith("val b = 2\nval a = 1"))
+    }
+
+    @Test
+    fun `apple terminal simulator evaluates println output and syntax diagnostics`() {
+        val code = """
+            val user = "KtScribe"
+            println("Hello, ${'$'}user!")
+        """.trimIndent()
+        val output = KotlinCodeEngine.simulateKotlinExecution(code)
+        assertTrue(output.contains("Hello, KtScribe!"))
+        assertTrue(output.contains("Process finished with exit code 0"))
+    }
+
+    @Test
     fun `ide detects hex color codes in kotlin snippets`() {
         val code = "val primary = Color(0xFF7F52FF)\nval hexStr = \"#FF6B4A\""
         val colors = KotlinCodeEngine.detectColorCodes(code)
@@ -122,7 +149,7 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun `ai naming service computes deterministic hashes and semantic titles`() = runBlocking {
+    fun `ai studio service computes titles explanations refactors and kdoc`() = runBlocking {
         val service = AiSectionNamingService(maxRequestsPerMinute = 10)
         val hash1 = service.computeContentHash("fun test() {}", "Explanation")
         val hash2 = service.computeContentHash("fun test() {}", "Explanation")
@@ -135,5 +162,22 @@ class ExampleUnitTest {
             sectionNumber = 2
         )
         assertTrue(fallback.contains("Fetch User Profile"))
+
+        val localExplain = service.synthesizeLocalCodeExplanation(
+            code = "suspend fun syncNotes(items: List<String>) {\n    println(items.size)\n}",
+            existingExplanation = ""
+        )
+        assertTrue(localExplain.contains("syncNotes"))
+
+        val localRefactored = service.applyLocalIdiomaticRefactor(
+            "function hello() {\nconsole.log(\"hi\");\n}"
+        )
+        assertTrue(localRefactored.contains("fun hello()"))
+        assertTrue(localRefactored.contains("println(\"hi\")"))
+
+        val kdocAdded = service.synthesizeLocalKDocCode(
+            code = "fun computeTotal(price: Int): Int {\n    return price * 2\n}"
+        )
+        assertTrue(kdocAdded.contains("/**"))
     }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.ai.AiAssistOutput
 import com.example.ai.AiSectionNamingService
 import com.example.ai.SectionNamingResult
 import com.example.code.KotlinCodeEngine
@@ -34,6 +35,9 @@ data class EditorUiState(
     val searchQuery: String = "",
     val activeDocument: DocumentDetailUiModel? = null,
     val activeTarget: ActiveEditorTarget = ActiveEditorTarget.Intro,
+    // When true, ONLY the focused main section (Code + Explanation) is displayed so no other blocks clutter the view
+    val isFocusedSingleSectionMode: Boolean = false,
+    val focusedSectionId: Long? = null,
     val newlyInsertedSectionId: Long? = null,
     val hasUnsavedChanges: Boolean = false,
     val secondsUntilAutoSave: Int = AUTO_SAVE_INTERVAL_SECONDS,
@@ -183,6 +187,8 @@ class EditorViewModel(
                 it.copy(
                     activeDocument = detail,
                     activeTarget = initialTarget,
+                    isFocusedSingleSectionMode = false,
+                    focusedSectionId = null,
                     newlyInsertedSectionId = null,
                     hasUnsavedChanges = false,
                     secondsUntilAutoSave = EditorUiState.AUTO_SAVE_INTERVAL_SECONDS,
@@ -230,6 +236,8 @@ class EditorViewModel(
             _uiState.update {
                 it.copy(
                     activeDocument = null,
+                    isFocusedSingleSectionMode = false,
+                    focusedSectionId = null,
                     hasUnsavedChanges = false,
                     newlyInsertedSectionId = null,
                     aiErrorBanner = null,
@@ -253,8 +261,80 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * When the user clicks a section's Code Block or Explanation Block, automatically enters
+     * Focused Single-Section Mode so ONLY that main section is visible on screen (with dedicated scroll).
+     */
     fun setActiveTarget(target: ActiveEditorTarget) {
-        _uiState.update { it.copy(activeTarget = target) }
+        when (target) {
+            is ActiveEditorTarget.Intro -> {
+                _uiState.update {
+                    it.copy(
+                        activeTarget = target,
+                        isFocusedSingleSectionMode = false,
+                        focusedSectionId = null
+                    )
+                }
+            }
+            is ActiveEditorTarget.SectionCode -> {
+                _uiState.update {
+                    it.copy(
+                        activeTarget = target,
+                        isFocusedSingleSectionMode = true,
+                        focusedSectionId = target.sectionId
+                    )
+                }
+            }
+            is ActiveEditorTarget.SectionExplanation -> {
+                _uiState.update {
+                    it.copy(
+                        activeTarget = target,
+                        isFocusedSingleSectionMode = true,
+                        focusedSectionId = target.sectionId
+                    )
+                }
+            }
+        }
+    }
+
+    fun exitFocusedSingleSectionMode() {
+        _uiState.update {
+            it.copy(
+                isFocusedSingleSectionMode = false,
+                focusedSectionId = null
+            )
+        }
+    }
+
+    fun toggleFocusedSingleSectionMode(sectionId: Long) {
+        _uiState.update { current ->
+            if (current.isFocusedSingleSectionMode && current.focusedSectionId == sectionId) {
+                current.copy(isFocusedSingleSectionMode = false, focusedSectionId = null)
+            } else {
+                val idx = current.activeDocument?.sections?.indexOfFirst { it.id == sectionId } ?: 0
+                current.copy(
+                    isFocusedSingleSectionMode = true,
+                    focusedSectionId = sectionId,
+                    activeTarget = ActiveEditorTarget.SectionCode(sectionId, idx.coerceAtLeast(0))
+                )
+            }
+        }
+    }
+
+    fun navigateFocusedSection(offset: Int) {
+        val doc = _uiState.value.activeDocument ?: return
+        if (doc.sections.isEmpty()) return
+        val currentId = _uiState.value.focusedSectionId ?: return
+        val currentIdx = doc.sections.indexOfFirst { it.id == currentId }.takeIf { it >= 0 } ?: 0
+        val nextIdx = (currentIdx + offset).coerceIn(0, doc.sections.lastIndex)
+        val nextSec = doc.sections[nextIdx]
+        _uiState.update {
+            it.copy(
+                focusedSectionId = nextSec.id,
+                isFocusedSingleSectionMode = true,
+                activeTarget = ActiveEditorTarget.SectionCode(nextSec.id, nextSec.orderIndex)
+            )
+        }
     }
 
     fun clearNewlyInsertedSectionFocusFlag() {
@@ -299,10 +379,6 @@ class EditorViewModel(
         scheduleDebouncedAiNamingIfComplete(sectionId)
     }
 
-    /**
-     * Automatically triggers AI section naming after a 4-second pause when a section has both
-     * Kotlin code and an explanation written, in addition to naming when the next code block is added.
-     */
     private fun scheduleDebouncedAiNamingIfComplete(sectionId: Long) {
         debouncedAiNamingJobs[sectionId]?.cancel()
         debouncedAiNamingJobs[sectionId] = viewModelScope.launch {
@@ -368,13 +444,17 @@ class EditorViewModel(
                 .mapIndexed { index, sec -> sec.copy(orderIndex = index) }
             doc.copy(sections = remaining)
         }
+        if (_uiState.value.focusedSectionId == sectionId) {
+            val nextFocus = _uiState.value.activeDocument?.sections?.firstOrNull()
+            _uiState.update {
+                it.copy(
+                    isFocusedSingleSectionMode = nextFocus != null,
+                    focusedSectionId = nextFocus?.id
+                )
+            }
+        }
     }
 
-    /**
-     * Inserts a new 4-line auto-expanding Kotlin code block + explanation section right after
-     * the currently active section (or at the end of the document), and immediately names the
-     * just-completed previous section using AI.
-     */
     fun insertCodeBlockAtActivePosition() {
         val currentDoc = _uiState.value.activeDocument ?: return
         viewModelScope.launch {
@@ -393,7 +473,6 @@ class EditorViewModel(
                 }
             }
 
-            // Identify the completed section right before the newly inserted code block
             val completedPreviousSection: CodeSectionUiModel? = when {
                 insertAfterIndex in currentSections.indices -> currentSections[insertAfterIndex]
                 currentSections.isNotEmpty() -> currentSections.last()
@@ -434,6 +513,8 @@ class EditorViewModel(
                 it.copy(
                     activeDocument = updatedDoc,
                     activeTarget = ActiveEditorTarget.SectionCode(newSectionId, newOrderIndex),
+                    isFocusedSingleSectionMode = true,
+                    focusedSectionId = newSectionId,
                     newlyInsertedSectionId = newSectionId,
                     hasUnsavedChanges = true,
                     secondsUntilAutoSave = EditorUiState.AUTO_SAVE_INTERVAL_SECONDS,
@@ -443,7 +524,6 @@ class EditorViewModel(
 
             persistActiveDocumentInternal("Saved new code block section")
 
-            // Trigger AI section naming on the completed previous section
             if (completedPreviousSection != null &&
                 (completedPreviousSection.codeContent.isNotBlank() || completedPreviousSection.explanationText.isNotBlank())
             ) {
@@ -468,6 +548,148 @@ class EditorViewModel(
         debouncedAiNamingJobs.remove(sectionId)?.cancel()
         viewModelScope.launch {
             triggerAiNamingForSectionInternal(sectionId, forceOverwriteTitle = true)
+        }
+    }
+
+    /**
+     * AI Studio Action: Reads the section's Kotlin code and writes a clear explanation into the explanation block.
+     */
+    fun requestAiExplainForSection(sectionId: Long) {
+        val doc = _uiState.value.activeDocument ?: return
+        val sec = doc.sections.find { it.id == sectionId } ?: return
+        viewModelScope.launch {
+            _uiState.update { state ->
+                val curDoc = state.activeDocument ?: return@update state
+                state.copy(
+                    activeDocument = curDoc.copy(
+                        sections = curDoc.sections.map {
+                            if (it.id == sectionId) it.copy(isNamingInProgress = true) else it
+                        }
+                    ),
+                    aiStatusMessage = "✨ AI analyzing Kotlin code to write explanation…"
+                )
+            }
+            val result = aiNamingService.generateCodeExplanation(
+                codeContent = sec.codeContent,
+                existingExplanation = sec.explanationText
+            )
+            val (generatedExp, banner, quota) = when (result) {
+                is AiAssistOutput.Success -> Triple(result.outputText, result.summaryBanner, result.remainingRpmQuota)
+                is AiAssistOutput.FallbackApplied -> Triple(result.outputText, result.summaryBanner, result.remainingRpmQuota)
+            }
+            mutateActiveDocument(recordUndo = true) { curDoc ->
+                curDoc.copy(
+                    sections = curDoc.sections.map {
+                        if (it.id == sectionId) {
+                            it.copy(
+                                explanationText = generatedExp,
+                                isNamingInProgress = false
+                            )
+                        } else {
+                            it
+                        }
+                    }
+                )
+            }
+            _uiState.update {
+                it.copy(
+                    aiStatusMessage = banner,
+                    remainingAiRpmQuota = quota
+                )
+            }
+            triggerAiNamingForSectionInternal(sectionId, forceOverwriteTitle = true)
+        }
+    }
+
+    /**
+     * AI Studio Action: Refactors and auto-fixes the section's Kotlin code into clean, idiomatic Kotlin.
+     */
+    fun requestAiRefactorForSection(sectionId: Long) {
+        val doc = _uiState.value.activeDocument ?: return
+        val sec = doc.sections.find { it.id == sectionId } ?: return
+        viewModelScope.launch {
+            _uiState.update { state ->
+                val curDoc = state.activeDocument ?: return@update state
+                state.copy(
+                    activeDocument = curDoc.copy(
+                        sections = curDoc.sections.map {
+                            if (it.id == sectionId) it.copy(isNamingInProgress = true) else it
+                        }
+                    ),
+                    aiStatusMessage = "✨ AI refactoring & fixing Kotlin syntax…"
+                )
+            }
+            val result = aiNamingService.refactorAndFixKotlinCode(sec.codeContent)
+            val (refactoredCode, banner, quota) = when (result) {
+                is AiAssistOutput.Success -> Triple(result.outputText, result.summaryBanner, result.remainingRpmQuota)
+                is AiAssistOutput.FallbackApplied -> Triple(result.outputText, result.summaryBanner, result.remainingRpmQuota)
+            }
+            mutateActiveDocument(recordUndo = true) { curDoc ->
+                curDoc.copy(
+                    sections = curDoc.sections.map {
+                        if (it.id == sectionId) {
+                            it.copy(
+                                codeContent = refactoredCode,
+                                isNamingInProgress = false
+                            )
+                        } else {
+                            it
+                        }
+                    }
+                )
+            }
+            _uiState.update {
+                it.copy(
+                    aiStatusMessage = banner,
+                    remainingAiRpmQuota = quota
+                )
+            }
+        }
+    }
+
+    /**
+     * AI Studio Action: Adds KDoc headers and inline comments to the section's Kotlin code.
+     */
+    fun requestAiKDocForSection(sectionId: Long) {
+        val doc = _uiState.value.activeDocument ?: return
+        val sec = doc.sections.find { it.id == sectionId } ?: return
+        viewModelScope.launch {
+            _uiState.update { state ->
+                val curDoc = state.activeDocument ?: return@update state
+                state.copy(
+                    activeDocument = curDoc.copy(
+                        sections = curDoc.sections.map {
+                            if (it.id == sectionId) it.copy(isNamingInProgress = true) else it
+                        }
+                    ),
+                    aiStatusMessage = "✨ AI adding KDoc & inline comments…"
+                )
+            }
+            val result = aiNamingService.addKDocAndCommentsToCode(sec.codeContent)
+            val (documentedCode, banner, quota) = when (result) {
+                is AiAssistOutput.Success -> Triple(result.outputText, result.summaryBanner, result.remainingRpmQuota)
+                is AiAssistOutput.FallbackApplied -> Triple(result.outputText, result.summaryBanner, result.remainingRpmQuota)
+            }
+            mutateActiveDocument(recordUndo = true) { curDoc ->
+                curDoc.copy(
+                    sections = curDoc.sections.map {
+                        if (it.id == sectionId) {
+                            it.copy(
+                                codeContent = documentedCode,
+                                isNamingInProgress = false
+                            )
+                        } else {
+                            it
+                        }
+                    }
+                )
+            }
+            _uiState.update {
+                it.copy(
+                    aiStatusMessage = banner,
+                    remainingAiRpmQuota = quota
+                )
+            }
         }
     }
 

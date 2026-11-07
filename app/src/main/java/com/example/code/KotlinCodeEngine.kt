@@ -44,6 +44,13 @@ data class DetectedColorCode(
     val line: Int
 )
 
+data class CursorPositionInfo(
+    val line: Int,
+    val column: Int,
+    val selectedChars: Int,
+    val totalLines: Int
+)
+
 object KotlinCodeEngine {
 
     val KOTLIN_KEYWORDS = setOf(
@@ -65,6 +72,12 @@ object KotlinCodeEngine {
         "StateFlow", "MutableStateFlow", "SharedFlow", "CoroutineScope",
         "Dispatchers", "Result", "Pair", "Triple", "Throwable", "Exception",
         "Color", "Modifier", "Composable"
+    )
+
+    private val GENERIC_TYPE_PREFIXES = setOf(
+        "List", "MutableList", "Map", "MutableMap", "Set", "MutableSet",
+        "Array", "Sequence", "Flow", "StateFlow", "MutableStateFlow",
+        "SharedFlow", "Result", "Pair", "Triple"
     )
 
     private val BUILTIN_SUGGESTIONS = listOf(
@@ -118,13 +131,33 @@ object KotlinCodeEngine {
         '"' to '"',
         '\'' to '\''
     )
-    private val CLOSING_CHARS = setOf(')', '}', ']', '"', '\'')
+    private val CLOSING_CHARS = setOf(')', '}', ']', '>', '"', '\'')
+
+    /**
+     * Computes 1-indexed Line and Column for the Apple Terminal status bar.
+     */
+    fun getCursorPositionInfo(fieldValue: TextFieldValue): CursorPositionInfo {
+        val text = fieldValue.text
+        val safeCursor = fieldValue.selection.end.coerceIn(0, text.length)
+        val beforeCursor = text.substring(0, safeCursor)
+        val line = beforeCursor.count { it == '\n' } + 1
+        val lastNewline = beforeCursor.lastIndexOf('\n')
+        val column = if (lastNewline < 0) safeCursor + 1 else (safeCursor - lastNewline)
+        val selectedChars = kotlin.math.abs(fieldValue.selection.end - fieldValue.selection.start)
+        val totalLines = text.count { it == '\n' } + 1
+        return CursorPositionInfo(
+            line = line,
+            column = column,
+            selectedChars = selectedChars,
+            totalLines = totalLines
+        )
+    }
 
     /**
      * Handles IDE smart typing:
-     * 1. Auto-closing parenthesis `()`, braces `{}`, brackets `[]`, and quotes `""` / `''`.
+     * 1. Auto-closing parenthesis `()`, braces `{}`, brackets `[]`, quotes `""`/`''`, and generic `<>`.
      * 2. Skipping over closing characters if already present at the cursor.
-     * 3. Deleting both characters when pressing Backspace inside an empty pair `(|)`, `{|}`, `[|]`, `"|"`.
+     * 3. Deleting both characters when pressing Backspace inside an empty pair `(|)`, `{|}`, `[|]`, `"|"`, `<|>`.
      * 4. Smart auto-indentation when pressing Enter (including expanding `{|}` into an indented block).
      */
     fun processIdeTextEdit(
@@ -135,19 +168,17 @@ object KotlinCodeEngine {
         val newText = incoming.text
         val newCursor = incoming.selection.end
 
-        // 1. Single character insertion
         if (newText.length == oldText.length + 1 && previous.selection.collapsed && incoming.selection.collapsed) {
             val insertedIndex = (newCursor - 1).coerceIn(0, newText.lastIndex)
             val insertedChar = newText[insertedIndex]
 
-            //Verify that the edit happened at insertedIndex
             val prefixMatches = newText.startsWith(oldText.substring(0, insertedIndex))
             val suffixMatches = newText.substring(insertedIndex + 1) == oldText.substring(insertedIndex)
 
             if (prefixMatches && suffixMatches) {
                 val charAfterCursorInOld = oldText.getOrNull(insertedIndex)
 
-                // A. Skip-over existing closing bracket/quote if user typed it right before it
+                // A. Skip-over existing closing bracket/quote
                 if (insertedChar in CLOSING_CHARS && charAfterCursorInOld == insertedChar) {
                     if (insertedChar != '"' && insertedChar != '\'') {
                         return TextFieldValue(
@@ -155,7 +186,6 @@ object KotlinCodeEngine {
                             selection = TextRange(insertedIndex + 1)
                         )
                     } else {
-                        // For quotes, skip over if quotes are already balanced on this line
                         val lineQuoteCount = oldText.count { it == insertedChar }
                         if (lineQuoteCount % 2 == 0) {
                             return TextFieldValue(
@@ -166,13 +196,26 @@ object KotlinCodeEngine {
                     }
                 }
 
-                // B. Auto-close opening bracket or quote
+                // B. Auto-close generic `<` -> `<>` when typed immediately after a Kotlin generic type name
+                if (insertedChar == '<') {
+                    val beforeAngle = oldText.substring(0, insertedIndex)
+                    val wordBefore = beforeAngle.takeLastWhile { it.isLetterOrDigit() || it == '_' }
+                    if (wordBefore in GENERIC_TYPE_PREFIXES || wordBefore.firstOrNull()?.isUpperCase() == true) {
+                        val withCloseAngle = newText.substring(0, newCursor) + ">" + newText.substring(newCursor)
+                        return TextFieldValue(
+                            text = withCloseAngle,
+                            selection = TextRange(newCursor)
+                        )
+                    }
+                }
+
+                // C. Auto-close opening bracket or quote
                 val matchingClose = AUTO_CLOSE_PAIRS[insertedChar]
                 if (matchingClose != null) {
                     val shouldAutoClose = when (insertedChar) {
                         '"', '\'' -> {
                             val prevChar = oldText.getOrNull(insertedIndex - 1)
-                            prevChar != '\\' && ! (charAfterCursorInOld?.isLetterOrDigit() ?: false)
+                            prevChar != '\\' && !(charAfterCursorInOld?.isLetterOrDigit() ?: false)
                         }
                         else -> !(charAfterCursorInOld?.isLetterOrDigit() ?: false)
                     }
@@ -185,7 +228,7 @@ object KotlinCodeEngine {
                     }
                 }
 
-                // C. Smart Enter Auto-Indentation
+                // D. Smart Enter Auto-Indentation
                 if (insertedChar == '\n') {
                     val textBeforeNewline = oldText.substring(0, insertedIndex)
                     val currentLineStart = textBeforeNewline.lastIndexOf('\n') + 1
@@ -193,7 +236,6 @@ object KotlinCodeEngine {
                     val baseIndent = currentLine.takeWhile { it == ' ' || it == '\t' }.replace("\t", "    ")
                     val prevNonSpaceChar = currentLine.trimEnd().lastOrNull()
 
-                    // Check if Enter was pressed right between `{` and `}` or `(` and `)`
                     if ((prevNonSpaceChar == '{' && charAfterCursorInOld == '}') ||
                         (prevNonSpaceChar == '(' && charAfterCursorInOld == ')')
                     ) {
@@ -230,15 +272,14 @@ object KotlinCodeEngine {
             }
         }
 
-        // 2. Single character Backspace deletion inside an empty pair `(|)`, `{|}`, `[|]`, `"|"`
+        // 2. Backspace deletion inside an empty pair `(|)`, `{|}`, `[|]`, `"|"`, `<|>`
         if (newText.length == oldText.length - 1 && previous.selection.collapsed && incoming.selection.collapsed) {
             val deletedIndex = newCursor
             if (deletedIndex in 0 until oldText.length - 1) {
                 val deletedChar = oldText[deletedIndex]
                 val followingChar = oldText[deletedIndex + 1]
-                if (AUTO_CLOSE_PAIRS[deletedChar] == followingChar &&
-                    newText.getOrNull(deletedIndex) == followingChar
-                ) {
+                val expectedPartner = AUTO_CLOSE_PAIRS[deletedChar] ?: if (deletedChar == '<') '>' else null
+                if (expectedPartner == followingChar && newText.getOrNull(deletedIndex) == followingChar) {
                     val withoutBoth = newText.removeRange(deletedIndex, deletedIndex + 1)
                     return TextFieldValue(
                         text = withoutBoth,
@@ -252,8 +293,177 @@ object KotlinCodeEngine {
     }
 
     /**
-     * Detects all hex color codes (`0xFF7F52FF`, `#7F52FF`, etc.) inside the Kotlin code block
-     * so the IDE can render inline color swatches and color underlines.
+     * IDE Action: Toggle `//` line comment on the current cursor line.
+     */
+    fun toggleLineCommentAtCursor(fieldValue: TextFieldValue): TextFieldValue {
+        val text = fieldValue.text
+        val cursor = fieldValue.selection.end.coerceIn(0, text.length)
+        val lineStart = text.lastIndexOf('\n', (cursor - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+        val lineEnd = text.indexOf('\n', cursor).let { if (it < 0) text.length else it }
+        val line = text.substring(lineStart, lineEnd)
+        val leadingSpaces = line.takeWhile { it == ' ' || it == '\t' }
+        val trimmed = line.substring(leadingSpaces.length)
+
+        return if (trimmed.startsWith("//")) {
+            val uncommented = leadingSpaces + trimmed.removePrefix("// ").removePrefix("//")
+            val delta = line.length - uncommented.length
+            val newText = text.replaceRange(lineStart, lineEnd, uncommented)
+            TextFieldValue(newText, TextRange((cursor - delta).coerceAtLeast(lineStart)))
+        } else {
+            val commented = "$leadingSpaces// $trimmed"
+            val newText = text.replaceRange(lineStart, lineEnd, commented)
+            TextFieldValue(newText, TextRange((cursor + 3).coerceAtMost(newText.length)))
+        }
+    }
+
+    /**
+     * IDE Action: Duplicate the current line below the cursor.
+     */
+    fun duplicateLineAtCursor(fieldValue: TextFieldValue): TextFieldValue {
+        val text = fieldValue.text
+        val cursor = fieldValue.selection.end.coerceIn(0, text.length)
+        val lineStart = text.lastIndexOf('\n', (cursor - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+        val lineEnd = text.indexOf('\n', cursor).let { if (it < 0) text.length else it }
+        val line = text.substring(lineStart, lineEnd)
+        val newText = text.substring(0, lineEnd) + "\n" + line + text.substring(lineEnd)
+        val offsetInLine = cursor - lineStart
+        val newCursor = (lineEnd + 1 + offsetInLine).coerceIn(0, newText.length)
+        return TextFieldValue(newText, TextRange(newCursor))
+    }
+
+    /**
+     * IDE Action: Move current line up or down by 1 line.
+     */
+    fun moveLineVertically(fieldValue: TextFieldValue, moveUp: Boolean): TextFieldValue {
+        val lines = fieldValue.text.split('\n').toMutableList()
+        if (lines.size <= 1) return fieldValue
+        val info = getCursorPositionInfo(fieldValue)
+        val idx = (info.line - 1).coerceIn(0, lines.lastIndex)
+        val targetIdx = if (moveUp) idx - 1 else idx + 1
+        if (targetIdx !in lines.indices) return fieldValue
+
+        val temp = lines[idx]
+        lines[idx] = lines[targetIdx]
+        lines[targetIdx] = temp
+
+        val newText = lines.joinToString("\n")
+        val newLineStart = lines.take(targetIdx).sumOf { it.length + 1 }
+        val newCursor = (newLineStart + (info.column - 1).coerceAtMost(lines[targetIdx].length))
+            .coerceIn(0, newText.length)
+        return TextFieldValue(newText, TextRange(newCursor))
+    }
+
+    /**
+     * IDE Find & Replace inside a code block.
+     */
+    fun replaceInCode(
+        code: String,
+        findQuery: String,
+        replaceWith: String,
+        replaceAll: Boolean = true
+    ): Pair<String, Int> {
+        if (findQuery.isEmpty()) return code to 0
+        val matches = Regex(Regex.escape(findQuery)).findAll(code).toList()
+        if (matches.isEmpty()) return code to 0
+        return if (replaceAll) {
+            code.replace(findQuery, replaceWith) to matches.size
+        } else {
+            val first = matches.first().range
+            code.replaceRange(first, replaceWith) to 1
+        }
+    }
+
+    /**
+     * Simulates running the Kotlin snippet inside the Apple Terminal console,
+     * evaluating variable bindings, string interpolations, loops, and `println(...)` calls.
+     */
+    fun simulateKotlinExecution(code: String): String {
+        val trimmed = code.trim()
+        if (trimmed.isBlank()) {
+            return "$ kotlinc -script section.kts\n(No Kotlin code to execute)"
+        }
+
+        val diagnostics = diagnoseKotlinSyntax(trimmed)
+        val errors = diagnostics.filter { it.severity == DiagnosticSeverity.ERROR }
+        if (errors.isNotEmpty()) {
+            return buildString {
+                appendLine("$ kotlinc section.kt -include-runtime -d section.jar")
+                errors.forEach { err ->
+                    appendLine("section.kt:${err.line}: error: ${err.message}")
+                }
+                append("COMPILATION FAILED (${errors.size} error${if (errors.size > 1) "s" else ""})")
+            }
+        }
+
+        // Extract simple val/var bindings for string interpolation in println
+        val env = mutableMapOf<String, String>()
+        val valRegex = Regex("""\b(?:val|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*[A-Za-z0-9_<>?]+)?\s*=\s*([^\n]+)""")
+        for (match in valRegex.findAll(trimmed)) {
+            val name = match.groupValues[1]
+            val rawExpr = match.groupValues[2].trim().removeSuffix(";")
+            val evaluated = evaluateSimpleExpression(rawExpr, env)
+            env[name] = evaluated
+        }
+
+        // Collect all println(...) outputs
+        val outputs = mutableListOf<String>()
+        val printlnRegex = Regex("""\bprint(?:ln)?\s*\(([^)]*)\)""")
+        for (match in printlnRegex.findAll(trimmed)) {
+            val arg = match.groupValues[1].trim()
+            outputs.add(evaluateSimpleExpression(arg, env))
+        }
+
+        return buildString {
+            appendLine("$ kotlinc section.kt && kotlin SectionKt")
+            if (outputs.isNotEmpty()) {
+                outputs.forEach { out -> appendLine(out) }
+            } else if (env.isNotEmpty()) {
+                env.entries.forEach { (k, v) ->
+                    appendLine(">> $k = $v")
+                }
+            } else {
+                val declarations = IDENTIFIER_REGEX.findAll(trimmed).map { it.groupValues[1] }.toList()
+                if (declarations.isNotEmpty()) {
+                    appendLine("Compiled successfully: ${declarations.joinToString(", ")}")
+                } else {
+                    appendLine("Compiled & executed cleanly (exit code 0)")
+                }
+            }
+            append("Process finished with exit code 0")
+        }
+    }
+
+    private fun evaluateSimpleExpression(expr: String, env: Map<String, String>): String {
+        val clean = expr.trim()
+        if (clean.startsWith("\"") && clean.endsWith("\"") && clean.length >= 2) {
+            var inner = clean.substring(1, clean.length - 1)
+            // Replace ${var} and $var
+            env.forEach { (k, v) ->
+                inner = inner.replace("\${$k}", v).replace("\$$k", v)
+            }
+            return inner
+        }
+        if (clean in env) {
+            return env.getValue(clean)
+        }
+        // Simple integer addition/multiplication
+        val mathMatch = Regex("""^(-?\d+)\s*([+\-*])\s*(-?\d+)$""").find(clean)
+        if (mathMatch != null) {
+            val a = mathMatch.groupValues[1].toLongOrNull() ?: 0L
+            val op = mathMatch.groupValues[2]
+            val b = mathMatch.groupValues[3].toLongOrNull() ?: 0L
+            return when (op) {
+                "+" -> (a + b).toString()
+                "-" -> (a - b).toString()
+                "*" -> (a * b).toString()
+                else -> clean
+            }
+        }
+        return clean
+    }
+
+    /**
+     * Detects all hex color codes (`0xFF7F52FF`, `#7F52FF`, etc.) inside the Kotlin code block.
      */
     fun detectColorCodes(code: String): List<DetectedColorCode> {
         if (code.isBlank()) return emptyList()
@@ -277,7 +487,7 @@ object KotlinCodeEngine {
     }
 
     /**
-     * Finds the matching bracket offset `( <-> )`, `{ <-> }`, `[ <-> ]` near the cursor for IDE bracket highlighting.
+     * Finds the matching bracket offset `( <-> )`, `{ <-> }`, `[ <-> ]` near the cursor.
      */
     fun findMatchingBracketOffsets(code: String, cursorOffset: Int): Pair<Int, Int>? {
         if (code.isEmpty()) return null
@@ -315,14 +525,11 @@ object KotlinCodeEngine {
 
     /**
      * Real-time Kotlin Syntax Checker & Auto-Corrector.
-     * Detects unbalanced brackets/braces/parens, unclosed string literals, invalid Java/JS keywords,
-     * accidental assignment inside `if (...)`, and missing syntax tokens, providing 1-tap Quick Fixes.
      */
     fun diagnoseKotlinSyntax(code: String): List<KotlinDiagnostic> {
         if (code.isBlank()) return emptyList()
         val diagnostics = mutableListOf<KotlinDiagnostic>()
 
-        // 1. Check balanced brackets/braces/parentheses outside strings & comments
         data class BracketFrame(val char: Char, val offset: Int, val line: Int)
         val stack = ArrayDeque<BracketFrame>()
         val matchingOpen = mapOf(')' to '(', '}' to '{', ']' to '[')
@@ -348,18 +555,15 @@ object KotlinCodeEngine {
                 }
                 continue
             }
-            // Skip line comment
             if (c == '/' && i + 1 < code.length && code[i + 1] == '/') {
                 while (i < code.length && code[i] != '\n') i++
                 continue
             }
-            // Skip block comment start
             if (c == '/' && i + 1 < code.length && code[i + 1] == '*') {
                 inBlockComment = true
                 i += 2
                 continue
             }
-            // Check string literals (single-line `"..."` or multi-line `"""..."""`)
             if (c == '"') {
                 if (i + 2 < code.length && code[i + 1] == '"' && code[i + 2] == '"') {
                     val startOffset = i
@@ -448,7 +652,6 @@ object KotlinCodeEngine {
             i++
         }
 
-        // Report any unclosed opening brackets remaining on the stack
         while (stack.isNotEmpty()) {
             val unclosed = stack.removeLast()
             val neededClose = matchingClose.getValue(unclosed.char)
@@ -466,7 +669,6 @@ object KotlinCodeEngine {
             )
         }
 
-        // 2. Line-by-line Kotlin syntax & keyword mistake checks
         val lines = code.split('\n')
         var lineStartOffset = 0
         lines.forEachIndexed { idx, rawLine ->
@@ -475,7 +677,6 @@ object KotlinCodeEngine {
             val lineEndOffset = lineStartOffset + rawLine.length
 
             if (!trimmed.startsWith("//") && !trimmed.startsWith("/*") && !trimmed.startsWith("*")) {
-                // Check A: `function ` or `func ` or `def ` instead of `fun `
                 val wrongFunMatch = Regex("""\b(function|func|def)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(""").find(rawLine)
                 if (wrongFunMatch != null) {
                     val badKeyword = wrongFunMatch.groupValues[1]
@@ -495,7 +696,6 @@ object KotlinCodeEngine {
                     )
                 }
 
-                // Check B: `let ` or `const ` variable declaration instead of `val `
                 val wrongValMatch = Regex("""^\s*(let|const)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=""").find(rawLine)
                 if (wrongValMatch != null) {
                     val badKeyword = wrongValMatch.groupValues[1]
@@ -516,7 +716,6 @@ object KotlinCodeEngine {
                     )
                 }
 
-                // Check C: `switch (` instead of `when (`
                 val switchMatch = Regex("""\bswitch\s*\(""").find(rawLine)
                 if (switchMatch != null) {
                     val badStart = lineStartOffset + switchMatch.range.first
@@ -535,7 +734,6 @@ object KotlinCodeEngine {
                     )
                 }
 
-                // Check D: `System.out.println` or `console.log`
                 val printMatch = Regex("""\b(System\.out\.println|console\.log)\s*\(""").find(rawLine)
                 if (printMatch != null) {
                     val badCall = printMatch.groupValues[1]
@@ -555,7 +753,6 @@ object KotlinCodeEngine {
                     )
                 }
 
-                // Check E: `new ClassName(...)` (Java 'new' keyword in Kotlin)
                 val newKeywordMatch = Regex("""\bnew\s+([A-Z][A-Za-z0-9_]*)\s*\(""").find(rawLine)
                 if (newKeywordMatch != null) {
                     val badStart = lineStartOffset + newKeywordMatch.range.first
@@ -574,7 +771,6 @@ object KotlinCodeEngine {
                     )
                 }
 
-                // Check F: Single '=' assignment inside `if (x = 5)` condition
                 val ifAssignMatch = Regex("""\bif\s*\(\s*[A-Za-z_][A-Za-z0-9_.]*\s*(=)\s*[^=]""").find(rawLine)
                 if (ifAssignMatch != null) {
                     val eqRange = ifAssignMatch.groups[1]!!.range
@@ -585,7 +781,7 @@ object KotlinCodeEngine {
                             line = lineNum,
                             startOffset = eqOffset,
                             endOffset = eqOffset + 1,
-                            message = "Assignment '=' used inside 'if' condition; Kotlin requires boolean comparison '=='",
+                            message = "Assignment '=' used inside 'if' condition; Kotlin requires '=='",
                             severity = DiagnosticSeverity.ERROR,
                             quickFixLabel = "Change '=' to '=='",
                             fixedCode = fixed
@@ -593,7 +789,22 @@ object KotlinCodeEngine {
                     )
                 }
 
-                // Check G: Incomplete `val` or `var` without identifier
+                if (trimmed.endsWith(";") && !trimmed.contains("for (") && !trimmed.contains("enum ")) {
+                    val semiIndex = lineStartOffset + rawLine.lastIndexOf(';')
+                    val fixed = code.removeRange(semiIndex, semiIndex + 1)
+                    diagnostics.add(
+                        KotlinDiagnostic(
+                            line = lineNum,
+                            startOffset = semiIndex,
+                            endOffset = semiIndex + 1,
+                            message = "Redundant trailing semicolon ';' in Kotlin",
+                            severity = DiagnosticSeverity.WARNING,
+                            quickFixLabel = "Remove ';'",
+                            fixedCode = fixed
+                        )
+                    )
+                }
+
                 if (trimmed == "val" || trimmed == "var" || trimmed == "fun") {
                     diagnostics.add(
                         KotlinDiagnostic(
@@ -614,8 +825,7 @@ object KotlinCodeEngine {
     }
 
     /**
-     * Highlights Kotlin syntax, hex color literals, matching brackets, and syntax error squiggles
-     * without altering character length so cursor offsets stay 1:1.
+     * Highlights Kotlin syntax, hex color literals, matching brackets, and syntax error squiggles.
      */
     fun highlightKotlinCode(
         code: String,
@@ -640,7 +850,6 @@ object KotlinCodeEngine {
                 val end = range.last + 1
 
                 when {
-                    // Single-line or multi-line comment
                     match.groups[1] != null || match.groups[2] != null -> {
                         addStyle(
                             SpanStyle(
@@ -651,7 +860,6 @@ object KotlinCodeEngine {
                             end
                         )
                     }
-                    // String literal
                     match.groups[3] != null -> {
                         addStyle(
                             SpanStyle(color = colors.stringLiteral),
@@ -659,7 +867,6 @@ object KotlinCodeEngine {
                             end
                         )
                     }
-                    // Annotation (@...)
                     match.groups[4] != null -> {
                         addStyle(
                             SpanStyle(
@@ -670,7 +877,6 @@ object KotlinCodeEngine {
                             end
                         )
                     }
-                    // Numeric or 0x Hex literal
                     match.groups[5] != null -> {
                         addStyle(
                             SpanStyle(color = colors.numberLiteral),
@@ -678,7 +884,6 @@ object KotlinCodeEngine {
                             end
                         )
                     }
-                    // Identifier or Keyword
                     match.groups[6] != null -> {
                         val word = match.value
                         val nextChar = code.getOrNull(end)
@@ -715,7 +920,6 @@ object KotlinCodeEngine {
                 }
             }
 
-            // Highlight hex color codes with a subtle tinted background/underline matching the color itself
             for (colorCode in colorLiterals) {
                 val s = colorCode.startOffset.coerceIn(0, code.length)
                 val e = colorCode.endOffset.coerceIn(s, code.length)
@@ -723,7 +927,7 @@ object KotlinCodeEngine {
                     val swatchColor = Color(colorCode.colorInt)
                     addStyle(
                         SpanStyle(
-                            background = swatchColor.copy(alpha = 0.24f),
+                            background = swatchColor.copy(alpha = 0.28f),
                             fontWeight = FontWeight.Bold,
                             textDecoration = TextDecoration.Underline
                         ),
@@ -733,11 +937,10 @@ object KotlinCodeEngine {
                 }
             }
 
-            // Highlight matching brackets at cursor position
             if (matchedBrackets != null) {
                 val (openIdx, closeIdx) = matchedBrackets
                 val bracketHighlight = SpanStyle(
-                    background = colors.keyword.copy(alpha = 0.28f),
+                    background = colors.keyword.copy(alpha = 0.32f),
                     color = colors.keyword,
                     fontWeight = FontWeight.ExtraBold
                 )
@@ -745,20 +948,19 @@ object KotlinCodeEngine {
                 if (closeIdx in code.indices) addStyle(bracketHighlight, closeIdx, closeIdx + 1)
             }
 
-            // Underline syntax errors/warnings in red/amber
             for (diag in diagnostics) {
                 val s = diag.startOffset.coerceIn(0, code.length)
                 val e = diag.endOffset.coerceIn(s, code.length)
                 if (s < e) {
                     val diagColor = if (diag.severity == DiagnosticSeverity.ERROR) {
-                        Color(0xFFEF4444)
+                        Color(0xFFFF5F56)
                     } else {
-                        Color(0xFFF59E0B)
+                        Color(0xFFFFBD2E)
                     }
                     addStyle(
                         SpanStyle(
                             textDecoration = TextDecoration.Underline,
-                            background = diagColor.copy(alpha = 0.18f)
+                            background = diagColor.copy(alpha = 0.22f)
                         ),
                         s,
                         e
@@ -768,10 +970,6 @@ object KotlinCodeEngine {
         }
     }
 
-    /**
-     * VisualTransformation wrapper for BasicTextField with live syntax highlighting, color code badges,
-     * bracket pair matching, and syntax diagnostic underlines.
-     */
     class KotlinSyntaxVisualTransformation(
         private val colors: KotlinSyntaxColors,
         private val cursorOffset: Int = -1,
@@ -790,9 +988,6 @@ object KotlinCodeEngine {
         }
     }
 
-    /**
-     * Extracts current prefix at cursor and provides context-aware Kotlin autocomplete suggestions.
-     */
     fun getAutocompleteSuggestions(
         code: String,
         cursorPosition: Int,
@@ -805,7 +1000,6 @@ object KotlinCodeEngine {
         }
         val prefix = code.substring(prefixStart, safeCursor)
 
-        // Discover user-declared symbols inside the current code block
         val userDeclaredSymbols = IDENTIFIER_REGEX.findAll(code)
             .map { it.groupValues[1] }
             .filter { it.isNotBlank() && it != prefix }
@@ -835,9 +1029,6 @@ object KotlinCodeEngine {
         return prefix to matches
     }
 
-    /**
-     * Applies an autocomplete suggestion at the current cursor offset and returns (newCode, newCursorOffset).
-     */
     fun applySuggestion(
         code: String,
         cursorPosition: Int,
@@ -864,12 +1055,6 @@ object KotlinCodeEngine {
         return newCode to (prefixStart + cursorOffsetInInsert).coerceIn(0, newCode.length)
     }
 
-    /**
-     * Language-specific Kotlin code formatter:
-     * - Applies safe syntax quick-fixes (e.g., `function ` -> `fun `)
-     * - Normalizes keyword spacing (`if(`, `for(`, `when(`, `while(`, `catch(` -> `if (`, etc.)
-     * - Auto-indents blocks using 4 spaces per brace/paren depth
-     */
     fun formatKotlinCode(rawCode: String): String {
         if (rawCode.isBlank()) return rawCode
 
@@ -902,6 +1087,7 @@ object KotlinCodeEngine {
                     .replace(Regex("\\}\\s*else\\s*\\{"), "} else {")
                     .replace(Regex("\\}\\s*catch"), "} catch")
                     .replace(Regex("\\}\\s*finally\\s*\\{"), "} finally {")
+                    .removeSuffix(";")
             }
 
             val leadingCloses = trimmed.takeWhile { it == '}' || it == ')' }.length
