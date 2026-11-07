@@ -1,0 +1,144 @@
+package com.example
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.components.ShortcutAndSettingsDialog
+import com.example.ui.screens.DocumentEditorScreen
+import com.example.ui.screens.DocumentListScreen
+import com.example.ui.theme.KtScribeTheme
+import com.example.ui.theme.ThemeMode
+import com.example.util.configureAppCheck
+import com.example.viewmodel.EditorViewModel
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // STEP 1: Configure Firebase App Check with launch intent before any UI or Firebase calls
+        configureAppCheck(this, intent)
+
+        // STEP 2: Enable edge-to-edge rendering
+        enableEdgeToEdge()
+
+        setContent {
+            KtScribeApp()
+        }
+    }
+}
+
+@Composable
+fun KtScribeApp(
+    editorViewModel: EditorViewModel = viewModel(
+        factory = EditorViewModel.Factory(LocalContext.current)
+    )
+) {
+    val uiState by editorViewModel.uiState.collectAsStateWithLifecycle()
+    val documents by editorViewModel.filteredDocuments.collectAsStateWithLifecycle()
+    var showSettingsDialog by remember { mutableStateOf(false) }
+
+    // Observe Activity lifecycle to immediately auto-save ongoing edits when minimizing or closing the app
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                editorViewModel.onAppMinimizedOrClosed()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val cycleThemeMode = {
+        val next = when (uiState.themeMode) {
+            ThemeMode.SYSTEM -> ThemeMode.DARK
+            ThemeMode.DARK -> ThemeMode.LIGHT
+            ThemeMode.LIGHT -> ThemeMode.SYSTEM
+        }
+        editorViewModel.setThemeMode(next)
+    }
+
+    KtScribeTheme(themeMode = uiState.themeMode) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            val activeDoc = uiState.activeDocument
+            if (activeDoc == null) {
+                DocumentListScreen(
+                    documents = documents,
+                    searchQuery = uiState.searchQuery,
+                    shortcutLetter = uiState.shortcutLetter,
+                    themeMode = uiState.themeMode,
+                    onSearchQueryChange = editorViewModel::updateSearchQuery,
+                    onOpenDocument = editorViewModel::openDocument,
+                    onCreateDocument = { editorViewModel.createAndOpenNewDocument() },
+                    onDeleteDocument = editorViewModel::deleteDocument,
+                    onCycleThemeMode = cycleThemeMode,
+                    onOpenSettings = { showSettingsDialog = true }
+                )
+            } else {
+                DocumentEditorScreen(
+                    uiState = uiState,
+                    document = activeDoc,
+                    onCloseDocument = editorViewModel::closeActiveDocument,
+                    onSaveNow = editorViewModel::saveNowManual,
+                    onTitleChange = editorViewModel::updateDocumentTitle,
+                    onIntroTextChange = editorViewModel::updateIntroText,
+                    onInsertCodeBlock = editorViewModel::insertCodeBlockAtActivePosition,
+                    onUpdateSectionCode = editorViewModel::updateSectionCode,
+                    onUpdateSectionExplanation = editorViewModel::updateSectionExplanation,
+                    onUpdateSectionTitle = editorViewModel::updateSectionTitleManual,
+                    onFormatSectionCode = editorViewModel::formatCodeInSection,
+                    onRequestAiNaming = editorViewModel::requestAiTitleForSection,
+                    onToggleSectionDivider = editorViewModel::toggleSectionDivider,
+                    onDeleteSection = editorViewModel::deleteSection,
+                    onSetActiveTarget = editorViewModel::setActiveTarget,
+                    onClearNewSectionFocusFlag = editorViewModel::clearNewlyInsertedSectionFocusFlag,
+                    onFontChoiceChange = editorViewModel::setFontChoice,
+                    onFontSizeChange = editorViewModel::setFontSizeSp,
+                    onToggleBold = editorViewModel::toggleBold,
+                    onToggleItalic = editorViewModel::toggleItalic,
+                    onToggleUnderline = editorViewModel::toggleUnderline,
+                    onToggleStrikethrough = editorViewModel::toggleStrikethrough,
+                    onAlignmentChange = editorViewModel::setTextAlignment,
+                    onUndo = editorViewModel::undo,
+                    onRedo = editorViewModel::redo,
+                    onCycleThemeMode = cycleThemeMode,
+                    onOpenSettings = { showSettingsDialog = true },
+                    onDismissBanner = editorViewModel::dismissBanners
+                )
+            }
+
+            if (showSettingsDialog) {
+                ShortcutAndSettingsDialog(
+                    currentShortcutLetter = uiState.shortcutLetter,
+                    currentThemeMode = uiState.themeMode,
+                    remainingAiQuota = uiState.remainingAiRpmQuota,
+                    onSelectShortcutLetter = editorViewModel::setShortcutLetter,
+                    onSelectThemeMode = editorViewModel::setThemeMode,
+                    onDismiss = { showSettingsDialog = false }
+                )
+            }
+        }
+    }
+}

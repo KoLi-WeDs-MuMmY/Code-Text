@@ -1,0 +1,6 @@
+{
+  "name": "KtScribe",
+  "description": "Lightweight rich text and Kotlin code section editor with auto-expanding code blocks, AI section naming, and local auto-save.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
