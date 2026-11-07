@@ -311,4 +311,97 @@ class ExampleUnitTest {
         )
         assertEquals(1, stateAfterClose.openFloatingWindows.size)
     }
+
+    @Test
+    fun `syntax-aware autocomplete suppresses suggestions in print string prose and comments`() {
+        // 1. Typing a normal sentence inside println("...") must NOT trigger variable or type suggestions
+        val codeInPrintString = """
+            val message = "Hello"
+            fun main() {
+                println("Writing a sentence about message and String
+        """.trimIndent()
+        val (_, stringProseSuggestions) = KotlinCodeEngine.getAutocompleteSuggestions(
+            code = codeInPrintString,
+            cursorPosition = codeInPrintString.length
+        )
+        assertTrue(stringProseSuggestions.isEmpty())
+
+        // 2. Typing inside a single-line comment must NOT trigger suggestions
+        val codeInComment = "val counter = 1\n// Typing counter in comment"
+        val (_, commentSuggestions) = KotlinCodeEngine.getAutocompleteSuggestions(
+            code = codeInComment,
+            cursorPosition = codeInComment.length
+        )
+        assertTrue(commentSuggestions.isEmpty())
+
+        // 3. Naming a brand new variable (`val myNewVar`) must NOT hijack typing with autocomplete
+        val codeDeclaringVar = "val counter = 1\nval coun"
+        val (_, declSuggestions) = KotlinCodeEngine.getAutocompleteSuggestions(
+            code = codeDeclaringVar,
+            cursorPosition = codeDeclaringVar.length
+        )
+        assertTrue(declSuggestions.isEmpty())
+
+        // 4. Typing `$coun` string template interpolation inside quotes DOES trigger variable suggestions
+        val codeStringTemplate = "val counter = 1\nprintln(\"Value is \$coun"
+        val (interpPrefix, interpSuggestions) = KotlinCodeEngine.getAutocompleteSuggestions(
+            code = codeStringTemplate,
+            cursorPosition = codeStringTemplate.length
+        )
+        assertEquals("coun", interpPrefix)
+        assertTrue(interpSuggestions.any { it.label == "counter" })
+
+        // 5. Typing after ':' only suggests Kotlin types
+        val codeTypeAnnotation = "fun demo(input: Str"
+        val (_, typeSuggestions) = KotlinCodeEngine.getAutocompleteSuggestions(
+            code = codeTypeAnnotation,
+            cursorPosition = codeTypeAnnotation.length
+        )
+        assertTrue(typeSuggestions.isNotEmpty())
+        assertTrue(typeSuggestions.all { it.category == "Type" || it.badgeChar == "C" || it.badgeChar == "I" })
+    }
+
+    @Test
+    fun `ktscribe file extension model formats 1 file per code block with bundled notes`() {
+        val section = CodeSectionUiModel(
+            id = 7L,
+            orderIndex = 0,
+            sectionTitle = "Coroutine Dispatcher Lab",
+            codeContent = "fun main() {\n    println(\"IO\")\n}",
+            explanationText = "Explains Dispatchers.IO usage",
+            explanationStyle = TextFormattingStyle(learnedConceptTag = "Coroutines")
+        )
+        assertEquals("CoroutineDispatcherLab.ktscribe", section.ktScribeFileName)
+        val payload = section.toKtScribeFilePayload("Concurrency Folder")
+        assertTrue(payload.contains("// @ktscribe-file: CoroutineDispatcherLab.ktscribe"))
+        assertTrue(payload.contains("// @folder: Concurrency Folder"))
+        assertTrue(payload.contains("Explains Dispatchers.IO usage"))
+    }
+
+    @Test
+    fun `floating window converts into adjustable split screen and toggles orientation`() {
+        val initial = com.example.viewmodel.EditorUiState(
+            openFloatingWindows = listOf(
+                com.example.model.FloatingWindowType.FOLDERS,
+                com.example.model.FloatingWindowType.RUN_OUTPUT
+            )
+        )
+        val docked = com.example.viewmodel.EditorUiState.applyDockWindowToSplitScreen(
+            initial,
+            com.example.model.FloatingWindowType.FOLDERS
+        )
+        assertEquals(com.example.model.FloatingWindowType.FOLDERS, docked.dockedSplitWindow)
+        assertFalse(docked.openFloatingWindows.contains(com.example.model.FloatingWindowType.FOLDERS))
+        assertEquals(
+            com.example.model.SplitScreenOrientation.SIDE_BY_SIDE,
+            docked.splitScreenOrientation
+        )
+
+        val toggled = com.example.viewmodel.EditorUiState.applyToggleSplitOrientation(docked)
+        assertEquals(
+            com.example.model.SplitScreenOrientation.BOTTOM_SPLIT,
+            toggled.splitScreenOrientation
+        )
+    }
 }
+

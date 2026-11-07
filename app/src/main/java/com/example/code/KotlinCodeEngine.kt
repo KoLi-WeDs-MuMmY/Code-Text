@@ -29,6 +29,22 @@ enum class DiagnosticSeverity {
     WARNING
 }
 
+/**
+ * Lexical syntax context at the active cursor position:
+ * Prevents false-positive autocomplete popups when writing sentences inside `println("...")`,
+ * comments (`// ...`, `/* ... */`), or when naming a brand-new variable/function (`val myNewVar`).
+ */
+enum class KotlinLexicalContext {
+    DEFAULT_CODE,
+    STRING_PROSE,
+    STRING_TEMPLATE_INTERPOLATION,
+    COMMENT,
+    CHAR_LITERAL,
+    DECLARATION_IDENTIFIER,
+    MEMBER_ACCESS_AFTER_DOT,
+    TYPE_ANNOTATION_AFTER_COLON
+}
+
 data class KotlinDiagnostic(
     val line: Int, // 1-indexed line number
     val startOffset: Int,
@@ -695,11 +711,26 @@ object KotlinCodeEngine {
         return null
     }
 
+    private val DECL_SYMBOL_REGEX = Regex("""\b(val|var|fun|class|interface|object)\s+([A-Za-z_][A-Za-z0-9_]*)""")
+    private val NEW_DECL_PREFIX_REGEX = Regex("""\b(?:val|var|fun|class|interface|object|typealias)\s+[A-Za-z_][A-Za-z0-9_]*$""")
+    private val TYPE_CONTEXT_PREFIX_REGEX = Regex("""(?::|\bas\??|\bis)\s*[A-Za-z_][A-Za-z0-9_]*$""")
+
+    private val diagnosticsCache = object : LinkedHashMap<String, List<KotlinDiagnostic>>(24, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<KotlinDiagnostic>>?): Boolean = size > 20
+    }
+
+    private val structureCache = object : LinkedHashMap<String, List<KotlinStructureSymbol>>(24, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<KotlinStructureSymbol>>?): Boolean = size > 20
+    }
+
     /**
-     * Real-time Kotlin Syntax Checker & Auto-Corrector.
+     * Real-time Kotlin Syntax Checker & Auto-Corrector (with O(1) LRU memoization).
      */
     fun diagnoseKotlinSyntax(code: String): List<KotlinDiagnostic> {
         if (code.isBlank()) return emptyList()
+        synchronized(diagnosticsCache) {
+            diagnosticsCache[code]?.let { return it }
+        }
         val diagnostics = mutableListOf<KotlinDiagnostic>()
 
         data class BracketFrame(val char: Char, val offset: Int, val line: Int)
@@ -1065,6 +1096,9 @@ object KotlinCodeEngine {
             lineStartOffset = lineEndOffset + 1
         }
 
+        synchronized(diagnosticsCache) {
+            diagnosticsCache[code] = diagnostics
+        }
         return diagnostics
     }
 
@@ -1232,20 +1266,201 @@ object KotlinCodeEngine {
         }
     }
 
+    private val MEMBER_EXTENSION_SUGGESTIONS = listOf(
+        KotlinSuggestion("forEach", "forEach { item ->\n    \n}", "Function", "Performs the given action on each element", "inline fun Iterable<T>.forEach", "m"),
+        KotlinSuggestion("map", "map { it }", "Function", "Returns a list containing the results of applying transform", "inline fun Iterable<T>.map", "m"),
+        KotlinSuggestion("filter", "filter { it }", "Function", "Returns a list containing only elements matching predicate", "inline fun Iterable<T>.filter", "m"),
+        KotlinSuggestion("firstOrNull", "firstOrNull()", "Function", "Returns the first element, or null if empty", "fun Iterable<T>.firstOrNull(): T?", "m"),
+        KotlinSuggestion("isNotEmpty", "isNotEmpty()", "Function", "Returns true if this char sequence or collection is not empty", "fun isNotEmpty(): Boolean", "m"),
+        KotlinSuggestion("isEmpty", "isEmpty()", "Function", "Returns true if this char sequence or collection is empty", "fun isEmpty(): Boolean", "m"),
+        KotlinSuggestion("length", "length", "Property", "Returns the length of this character sequence", "val String.length: Int", "v"),
+        KotlinSuggestion("size", "size", "Property", "Returns the number of elements in the collection", "val Collection<T>.size: Int", "v"),
+        KotlinSuggestion("trim", "trim()", "Function", "Removes leading and trailing whitespace", "fun String.trim(): String", "m"),
+        KotlinSuggestion("let", "let { \n    \n}", "Scope", "Calls the specified function block with this value as its argument", "inline fun <T, R> T.let", "m"),
+        KotlinSuggestion("apply", "apply {\n    \n}", "Scope", "Calls the specified function block with this value as its receiver", "inline fun <T> T.apply: T", "m"),
+        KotlinSuggestion("also", "also { \n    \n}", "Scope", "Calls the specified function block with this value as its argument and returns this", "inline fun <T> T.also: T", "m"),
+        KotlinSuggestion("toString", "toString()", "Function", "Returns a string representation of the object", "fun Any.toString(): String", "m")
+    )
+
+    /**
+     * Scans the Kotlin source from index 0 up to `cursorPosition` to determine the exact lexical syntax context.
+     * Ensures that typing normal text inside `println("some sentence here")` or inside comments NEVER pops up variable suggestions!
+     */
+    fun analyzeLexicalContext(code: String, cursorPosition: Int): KotlinLexicalContext {
+        val safeCursor = cursorPosition.coerceIn(0, code.length)
+        var i = 0
+        var inLineComment = false
+        var inBlockComment = false
+        var inSingleLineString = false
+        var inRawTripleString = false
+        var inCharLiteral = false
+        var templateBraceDepth = 0
+
+        while (i < safeCursor) {
+            val c = code[i]
+
+            if (inLineComment) {
+                if (c == '\n') inLineComment = false
+                i++
+                continue
+            }
+            if (inBlockComment) {
+                if (c == '*' && i + 1 < safeCursor && code[i + 1] == '/') {
+                    inBlockComment = false
+                    i += 2
+                } else {
+                    i++
+                }
+                continue
+            }
+            if (inCharLiteral) {
+                if (c == '\\') {
+                    i += 2
+                    continue
+                }
+                if (c == '\'' || c == '\n') {
+                    inCharLiteral = false
+                }
+                i++
+                continue
+            }
+            if (inRawTripleString) {
+                if (templateBraceDepth > 0) {
+                    if (c == '{') templateBraceDepth++
+                    else if (c == '}') templateBraceDepth--
+                    i++
+                    continue
+                }
+                if (c == '$' && i + 1 < safeCursor && code[i + 1] == '{') {
+                    templateBraceDepth = 1
+                    i += 2
+                    continue
+                }
+                if (c == '"' && i + 2 < safeCursor && code[i + 1] == '"' && code[i + 2] == '"') {
+                    inRawTripleString = false
+                    i += 3
+                    continue
+                }
+                i++
+                continue
+            }
+            if (inSingleLineString) {
+                if (templateBraceDepth > 0) {
+                    if (c == '{') templateBraceDepth++
+                    else if (c == '}') templateBraceDepth--
+                    i++
+                    continue
+                }
+                if (c == '\\') {
+                    i += 2
+                    continue
+                }
+                if (c == '$' && i + 1 < safeCursor && code[i + 1] == '{') {
+                    templateBraceDepth = 1
+                    i += 2
+                    continue
+                }
+                if (c == '"' || c == '\n') {
+                    inSingleLineString = false
+                }
+                i++
+                continue
+            }
+
+            // Outside comments and strings:
+            if (c == '/' && i + 1 < safeCursor && code[i + 1] == '/') {
+                inLineComment = true
+                i += 2
+                continue
+            }
+            if (c == '/' && i + 1 < safeCursor && code[i + 1] == '*') {
+                inBlockComment = true
+                i += 2
+                continue
+            }
+            if (c == '\'') {
+                inCharLiteral = true
+                i++
+                continue
+            }
+            if (c == '"') {
+                if (i + 2 < safeCursor && code[i + 1] == '"' && code[i + 2] == '"') {
+                    inRawTripleString = true
+                    i += 3
+                } else {
+                    inSingleLineString = true
+                    i++
+                }
+                continue
+            }
+            i++
+        }
+
+        if (inLineComment || inBlockComment) return KotlinLexicalContext.COMMENT
+        if (inCharLiteral) return KotlinLexicalContext.CHAR_LITERAL
+
+        if (inSingleLineString || inRawTripleString) {
+            if (templateBraceDepth > 0) {
+                return KotlinLexicalContext.STRING_TEMPLATE_INTERPOLATION
+            }
+            // Check if cursor is immediately preceded by `$identifier` or `$` inside the string
+            var scanBack = safeCursor
+            while (scanBack > 0 && (code[scanBack - 1].isLetterOrDigit() || code[scanBack - 1] == '_')) {
+                scanBack--
+            }
+            if (scanBack > 0 && code[scanBack - 1] == '$' && (scanBack < 2 || code[scanBack - 2] != '\\')) {
+                return KotlinLexicalContext.STRING_TEMPLATE_INTERPOLATION
+            }
+            return KotlinLexicalContext.STRING_PROSE
+        }
+
+        // In DEFAULT_CODE: check if we are naming a brand-new identifier, after a dot `.`, or after a type colon `:`
+        val lineStart = code.lastIndexOf('\n', (safeCursor - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+        val linePrefix = code.substring(lineStart, safeCursor)
+
+        if (NEW_DECL_PREFIX_REGEX.containsMatchIn(linePrefix)) {
+            return KotlinLexicalContext.DECLARATION_IDENTIFIER
+        }
+
+        var tokenStart = safeCursor
+        while (tokenStart > 0 && (code[tokenStart - 1].isLetterOrDigit() || code[tokenStart - 1] == '_' || code[tokenStart - 1] == '@')) {
+            tokenStart--
+        }
+        if (tokenStart > 0 && code[tokenStart - 1] == '.') {
+            return KotlinLexicalContext.MEMBER_ACCESS_AFTER_DOT
+        }
+        if (TYPE_CONTEXT_PREFIX_REGEX.containsMatchIn(linePrefix)) {
+            return KotlinLexicalContext.TYPE_ANNOTATION_AFTER_COLON
+        }
+
+        return KotlinLexicalContext.DEFAULT_CODE
+    }
+
     fun getAutocompleteSuggestions(
         code: String,
         cursorPosition: Int,
         maxResults: Int = 8
     ): Pair<String, List<KotlinSuggestion>> {
         val safeCursor = cursorPosition.coerceIn(0, code.length)
+        val lexicalContext = analyzeLexicalContext(code, safeCursor)
+
+        // Never pop up suggestions when writing normal prose inside a string (e.g. inside println("...")),
+        // inside comments, inside char literals, or when naming a brand-new declaration!
+        when (lexicalContext) {
+            KotlinLexicalContext.STRING_PROSE,
+            KotlinLexicalContext.COMMENT,
+            KotlinLexicalContext.CHAR_LITERAL,
+            KotlinLexicalContext.DECLARATION_IDENTIFIER -> return "" to emptyList()
+            else -> {}
+        }
+
         var prefixStart = safeCursor
         while (prefixStart > 0 && (code[prefixStart - 1].isLetterOrDigit() || code[prefixStart - 1] == '_' || code[prefixStart - 1] == '@')) {
             prefixStart--
         }
         val prefix = code.substring(prefixStart, safeCursor)
 
-        val declRegex = Regex("""\b(val|var|fun|class|interface|object)\s+([A-Za-z_][A-Za-z0-9_]*)""")
-        val userDeclaredSymbols = declRegex.findAll(code)
+        val userDeclaredSymbols = DECL_SYMBOL_REGEX.findAll(code)
             .mapNotNull { match ->
                 val kind = match.groupValues[1]
                 val symbol = match.groupValues[2]
@@ -1261,8 +1476,8 @@ object KotlinCodeEngine {
                         label = symbol,
                         insertText = if (kind == "fun") "$symbol()" else symbol,
                         category = "Local Symbol",
-                        description = "Newly declared $kind '$symbol' in current Kotlin block",
-                        tailSignature = "($kind in block)",
+                        description = "Newly declared $kind '$symbol' in current .ktscribe file",
+                        tailSignature = "($kind in file)",
                         badgeChar = badge,
                         isNewSymbol = true
                     )
@@ -1271,13 +1486,37 @@ object KotlinCodeEngine {
             .distinctBy { it.label }
             .toList()
 
-        val combinedPool = POSTFIX_SUGGESTIONS + userDeclaredSymbols + BUILTIN_SUGGESTIONS
-
-        if (prefix.isBlank()) {
-            return "" to (POSTFIX_SUGGESTIONS.take(3) + userDeclaredSymbols.take(2) + BUILTIN_SUGGESTIONS.take(maxResults - 3))
+        // Choose syntax-specific candidate pool based on lexicalContext
+        val combinedPool = when (lexicalContext) {
+            KotlinLexicalContext.MEMBER_ACCESS_AFTER_DOT -> {
+                MEMBER_EXTENSION_SUGGESTIONS + userDeclaredSymbols.filter { it.badgeChar == "m" || it.badgeChar == "v" }
+            }
+            KotlinLexicalContext.TYPE_ANNOTATION_AFTER_COLON -> {
+                userDeclaredSymbols.filter { it.badgeChar == "C" || it.badgeChar == "I" } +
+                    BUILTIN_SUGGESTIONS.filter { it.badgeChar == "C" || it.badgeChar == "I" }
+            }
+            KotlinLexicalContext.STRING_TEMPLATE_INTERPOLATION -> {
+                userDeclaredSymbols + BUILTIN_SUGGESTIONS.filter { it.badgeChar == "m" || it.badgeChar == "v" }
+            }
+            else -> {
+                POSTFIX_SUGGESTIONS + userDeclaredSymbols + BUILTIN_SUGGESTIONS
+            }
         }
 
-        // Exact prefix matches first (like `sout`, `soutv`, `fun`, `fun interface`), followed by fuzzy/contains matches (like `SourceDebugExtension`, `SocketTimeoutException` when typing `so`)
+        if (prefix.isBlank()) {
+            return when (lexicalContext) {
+                KotlinLexicalContext.MEMBER_ACCESS_AFTER_DOT -> {
+                    "" to MEMBER_EXTENSION_SUGGESTIONS.take(maxResults)
+                }
+                KotlinLexicalContext.TYPE_ANNOTATION_AFTER_COLON -> {
+                    "" to combinedPool.take(maxResults)
+                }
+                else -> {
+                    "" to (POSTFIX_SUGGESTIONS.take(3) + userDeclaredSymbols.take(2) + BUILTIN_SUGGESTIONS.take(maxResults - 3))
+                }
+            }
+        }
+
         val prefixFirst = prefix.take(2)
         val exactStarts = combinedPool.filter { suggestion ->
             (suggestion.label.startsWith(prefix, ignoreCase = true) ||
@@ -1304,14 +1543,16 @@ object KotlinCodeEngine {
 
     /**
      * Extracts structure outline symbols (functions, classes, interfaces, properties) with 1-indexed line numbers
-     * for the Left Rail Structure & Find tool.
+     * for the Left Rail Structure & Find tool (with O(1) LRU memoization).
      */
     fun extractStructureSymbols(code: String): List<KotlinStructureSymbol> {
         if (code.isBlank()) return emptyList()
+        synchronized(structureCache) {
+            structureCache[code]?.let { return it }
+        }
         val results = mutableListOf<KotlinStructureSymbol>()
-        val declRegex = Regex("""\b(fun|class|interface|object|val|var)\s+([A-Za-z_][A-Za-z0-9_]*)""")
         code.lines().forEachIndexed { idx, line ->
-            val match = declRegex.find(line)
+            val match = DECL_SYMBOL_REGEX.find(line)
             if (match != null) {
                 val kind = match.groupValues[1]
                 val name = match.groupValues[2]
@@ -1330,6 +1571,9 @@ object KotlinCodeEngine {
                     )
                 )
             }
+        }
+        synchronized(structureCache) {
+            structureCache[code] = results
         }
         return results
     }

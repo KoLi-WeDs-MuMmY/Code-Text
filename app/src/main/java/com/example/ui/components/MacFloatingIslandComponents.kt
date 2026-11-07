@@ -9,6 +9,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -192,12 +194,13 @@ fun SketchTopBarWithFourPills(
         modifier = modifier
             .fillMaxWidth()
             .background(OuterTrenchBg)
-            .padding(horizontal = 10.dp, vertical = 6.dp)
+            // Generous bezel-safe breathing space so top buttons never clip at curved screen corners
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)
             .testTag("mac_floating_dynamic_island"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Top-Left Back Arrow (`←` from Sketch 1) + Folder badge
+        // Top-Left Back Arrow (`←` from Sketch 1) + Folder & Active `.ktscribe` File badge
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -214,8 +217,8 @@ fun SketchTopBarWithFourPills(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -224,7 +227,7 @@ fun SketchTopBarWithFourPills(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = activeFolder.title.take(14),
+                        text = activeSection?.ktScribeFileName ?: activeFolder.title.take(14),
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -420,94 +423,149 @@ private fun TopRightOvalWindowPill(
 }
 
 /**
- * Left Vertical Rail with 5 Circular IDE Tool Buttons (matching the 5 pink circles on the left edge of Sketch 1 & 2):
- * 1. `{ }` Format Code
- * 2. `✓/!` Syntax Quick-Fix & Diagnostics
- * 3. `🔍` Structure Outline & Find/Replace
- * 4. `⌘/` Line Comment, Duplicate & Surround Refactoring
- * 5. `+` Insert New Kotlin Code Section (`Ctrl+K`)
+ * Left Vertical Rail with Bezel Breathing Room, Collapse Toggle (`«`/`»`), Undo (`↶`), and 5 Circular IDE Tool Buttons:
+ * - Tapping any active tool button a second time turns it OFF (`LeftRailIdeTool.NONE`).
+ * - Includes an explicit Undo (`↶`) button so any left-rail action (`{ }` Format, `!` Quick-Fix, `⌘/` Line Actions, `+` New `.ktscribe` File) can be undone immediately.
+ * - Includes a Collapse/Hide toggle (`«` / `»`) so the user can collapse or restore the left rail.
  */
 @Composable
 fun SketchLeftCircularIdeRail(
     activeTool: LeftRailIdeTool,
     syntaxErrorCount: Int,
+    canUndo: Boolean = false,
+    onUndo: () -> Unit = {},
     onFormatCode: () -> Unit,
     onSelectTool: (LeftRailIdeTool) -> Unit,
     onApplyQuickFixOrDiagnostics: () -> Unit,
     onInsertNewSection: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var isRailCollapsed by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
-            .padding(start = 6.dp, end = 4.dp, top = 12.dp, bottom = 12.dp)
+            // Generous bezel-safe breathing room from the left screen edge and top/bottom corners
+            .padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 14.dp)
+            .verticalScroll(rememberScrollState())
             .testTag("left_circular_ide_rail"),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Circle 1: Format Kotlin Code (`{ }`)
-        LeftRailCircleButton(
-            textSymbol = "{ }",
-            icon = null,
-            tooltip = "Format Code",
-            isSelected = false,
-            accentColor = WarmAmberAccent,
-            onClick = onFormatCode,
-            testTag = "left_rail_format_button"
-        )
+        // Top Rail Toggle: Collapse / Expand Left Rail (`«` / `»`)
+        Surface(
+            color = Color(0xFF1E1C1A),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .border(1.dp, PillBorderColor, RoundedCornerShape(12.dp))
+                .clickable {
+                    isRailCollapsed = !isRailCollapsed
+                    if (isRailCollapsed && activeTool != LeftRailIdeTool.NONE) {
+                        onSelectTool(LeftRailIdeTool.NONE)
+                    }
+                }
+                .testTag("left_rail_collapse_toggle_button")
+        ) {
+            Text(
+                text = if (isRailCollapsed) "»" else "«",
+                fontFamily = JetBrainsMonoFontFamily,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MutedTaupeText,
+                modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
+            )
+        }
 
-        // Circle 2: Quick-Fix / Syntax Diagnostics (`✓` or `!`)
-        LeftRailCircleButton(
-            textSymbol = if (syntaxErrorCount > 0) "!$syntaxErrorCount" else "✓",
-            icon = null,
-            tooltip = "Diagnostics & Quick-Fix",
-            isSelected = activeTool == LeftRailIdeTool.DIAGNOSTICS,
-            accentColor = if (syntaxErrorCount > 0) MacRedDot else MutedSageAccent,
-            onClick = onApplyQuickFixOrDiagnostics,
-            testTag = "left_rail_diagnostics_button"
-        )
+        if (!isRailCollapsed) {
+            // Circle 1: Format Kotlin Code (`{ }`) — Undoable via `↶` below
+            LeftRailCircleButton(
+                textSymbol = "{ }",
+                icon = null,
+                tooltip = "Format Code (Undoable)",
+                isSelected = false,
+                accentColor = WarmAmberAccent,
+                onClick = onFormatCode,
+                testTag = "left_rail_format_button"
+            )
 
-        // Circle 3: Structure Outline & Find (`🔍`)
-        LeftRailCircleButton(
-            textSymbol = null,
-            icon = Icons.Default.Search,
-            tooltip = "Structure & Find",
-            isSelected = activeTool == LeftRailIdeTool.STRUCTURE_AND_FIND,
-            accentColor = MutedSteelAccent,
-            onClick = {
-                onSelectTool(
-                    if (activeTool == LeftRailIdeTool.STRUCTURE_AND_FIND) LeftRailIdeTool.NONE
-                    else LeftRailIdeTool.STRUCTURE_AND_FIND
+            // Circle 2: Quick-Fix / Syntax Diagnostics (`✓` or `!`) — Tap again to turn OFF
+            LeftRailCircleButton(
+                textSymbol = if (syntaxErrorCount > 0) "!$syntaxErrorCount" else "✓",
+                icon = null,
+                tooltip = "Diagnostics & Quick-Fix (Tap again to turn off)",
+                isSelected = activeTool == LeftRailIdeTool.DIAGNOSTICS,
+                accentColor = if (syntaxErrorCount > 0) MacRedDot else MutedSageAccent,
+                onClick = onApplyQuickFixOrDiagnostics,
+                testTag = "left_rail_diagnostics_button"
+            )
+
+            // Circle 3: Structure Outline & Find (`🔍`) — Tap again to turn OFF
+            LeftRailCircleButton(
+                textSymbol = null,
+                icon = Icons.Default.Search,
+                tooltip = "Structure & Find (Tap again to turn off)",
+                isSelected = activeTool == LeftRailIdeTool.STRUCTURE_AND_FIND,
+                accentColor = MutedSteelAccent,
+                onClick = {
+                    onSelectTool(
+                        if (activeTool == LeftRailIdeTool.STRUCTURE_AND_FIND) LeftRailIdeTool.NONE
+                        else LeftRailIdeTool.STRUCTURE_AND_FIND
+                    )
+                },
+                testTag = "left_rail_structure_find_button"
+            )
+
+            // Circle 4: Line Comment, Duplicate & Surround (`⌘/`) — Tap again to turn OFF
+            LeftRailCircleButton(
+                textSymbol = "⌘/",
+                icon = null,
+                tooltip = "Line & Surround Actions (Tap again to turn off)",
+                isSelected = activeTool == LeftRailIdeTool.LINE_ACTIONS,
+                accentColor = WarmAmberAccent,
+                onClick = {
+                    onSelectTool(
+                        if (activeTool == LeftRailIdeTool.LINE_ACTIONS) LeftRailIdeTool.NONE
+                        else LeftRailIdeTool.LINE_ACTIONS
+                    )
+                },
+                testTag = "left_rail_line_actions_button"
+            )
+
+            // Circle 5: Add New `.ktscribe` File in Folder (`+`)
+            LeftRailCircleButton(
+                textSymbol = null,
+                icon = Icons.Default.Add,
+                tooltip = "New .ktscribe File in Folder",
+                isSelected = false,
+                accentColor = MutedSageAccent,
+                onClick = onInsertNewSection,
+                testTag = "toolbar_insert_code_block_button"
+            )
+
+            // Circle 6: Dedicated Undo (`↶`) Button for undoing any Left-Rail action or code edit
+            LeftRailCircleButton(
+                textSymbol = "↶",
+                icon = null,
+                tooltip = "Undo Last Action",
+                isSelected = canUndo,
+                accentColor = if (canUndo) WarmAmberAccent else MutedTaupeText.copy(alpha = 0.45f),
+                onClick = onUndo,
+                testTag = "left_rail_undo_button"
+            )
+
+            // Explicit Turn-Off Button whenever a Left-Rail Tool Bar is active
+            if (activeTool != LeftRailIdeTool.NONE) {
+                LeftRailCircleButton(
+                    textSymbol = "Off",
+                    icon = null,
+                    tooltip = "Turn Off Active Left Rail Tool",
+                    isSelected = true,
+                    accentColor = MacRedDot,
+                    onClick = { onSelectTool(LeftRailIdeTool.NONE) },
+                    testTag = "left_rail_turn_off_tool_button"
                 )
-            },
-            testTag = "left_rail_structure_find_button"
-        )
-
-        // Circle 4: Line Comment, Duplicate & Surround (`⌘/`)
-        LeftRailCircleButton(
-            textSymbol = "⌘/",
-            icon = null,
-            tooltip = "Line & Surround Actions",
-            isSelected = activeTool == LeftRailIdeTool.LINE_ACTIONS,
-            accentColor = WarmAmberAccent,
-            onClick = {
-                onSelectTool(
-                    if (activeTool == LeftRailIdeTool.LINE_ACTIONS) LeftRailIdeTool.NONE
-                    else LeftRailIdeTool.LINE_ACTIONS
-                )
-            },
-            testTag = "left_rail_line_actions_button"
-        )
-
-        // Circle 5: Add New Code Section (`+`)
-        LeftRailCircleButton(
-            textSymbol = null,
-            icon = Icons.Default.Add,
-            tooltip = "New Code Section",
-            isSelected = false,
-            accentColor = MutedSageAccent,
-            onClick = onInsertNewSection,
-            testTag = "toolbar_insert_code_block_button"
-        )
+            }
+        }
     }
 }
 
@@ -580,19 +638,22 @@ fun MacDraggableFloatingWindow(
     isForegroundWindow: Boolean,
     windowSlotIndex: Int, // 0 or 1 so 2 open windows cascade with distinct initial offsets
     shakeTriggerCount: Int,
+    workspaceWidthPx: Float = 2400f,
+    workspaceHeightPx: Float = 2400f,
     initialWidthDp: Float = 365f,
     initialHeightDp: Float = 320f,
     onFocusWindow: () -> Unit,
     onCancelWindow: () -> Unit,
+    onDockToSplitScreen: (() -> Unit)? = null,
     headerExtraActions: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current
     var offsetX by remember(windowType) {
-        mutableFloatStateOf(if (windowSlotIndex == 0) 0f else -46f)
+        mutableFloatStateOf(if (windowSlotIndex == 0) 0f else -56f)
     }
     var offsetY by remember(windowType) {
-        mutableFloatStateOf(if (windowSlotIndex == 0) 8f else 48f)
+        mutableFloatStateOf(if (windowSlotIndex == 0) 6f else 48f)
     }
     var widthDp by remember(windowType) { mutableFloatStateOf(initialWidthDp) }
     var heightDp by remember(windowType) { mutableFloatStateOf(initialHeightDp) }
@@ -602,7 +663,7 @@ fun MacDraggableFloatingWindow(
         if (shakeTriggerCount > 0 && isOpen) {
             val keyframes = listOf(-18f, 18f, -14f, 14f, -8f, 8f, 0f)
             for (target in keyframes) {
-                shakeOffsetX.animateTo(target, animationSpec = tween(durationMillis = 42))
+                shakeOffsetX.animateTo(target, animationSpec = tween(durationMillis = 38))
             }
         }
     }
@@ -612,24 +673,29 @@ fun MacDraggableFloatingWindow(
     val topBevelColor = if (isForegroundWindow) Tier3FloatingWindowActiveBevel else Tier3FloatingWindowInactiveBevel
     val elevationDp = if (isForegroundWindow) 28.dp else 14.dp
 
+    val maxDragLeftPx = -(workspaceWidthPx.coerceAtLeast(1200f) * 0.95f)
+    val maxDragRightPx = (workspaceWidthPx.coerceAtLeast(1200f) * 0.95f)
+    val maxDragUpPx = -(workspaceHeightPx.coerceAtLeast(1200f) * 0.85f)
+    val maxDragDownPx = (workspaceHeightPx.coerceAtLeast(1200f) * 0.85f)
+
     AnimatedVisibility(
         visible = isOpen,
         enter = scaleIn(
-            initialScale = 0.84f,
+            initialScale = 0.88f,
             transformOrigin = TransformOrigin(0.92f, 0.04f),
             animationSpec = spring(
-                dampingRatio = 0.78f,
-                stiffness = 380f
+                dampingRatio = 0.82f,
+                stiffness = 420f
             )
-        ) + fadeIn(animationSpec = tween(durationMillis = 190)),
+        ) + fadeIn(animationSpec = tween(durationMillis = 160)),
         exit = scaleOut(
-            targetScale = 0.86f,
+            targetScale = 0.88f,
             transformOrigin = TransformOrigin(0.92f, 0.04f),
             animationSpec = spring(
                 dampingRatio = Spring.DampingRatioNoBouncy,
                 stiffness = Spring.StiffnessMedium
             )
-        ) + fadeOut(animationSpec = tween(durationMillis = 150)),
+        ) + fadeOut(animationSpec = tween(durationMillis = 135)),
         modifier = Modifier
             .zIndex(if (isForegroundWindow) 20f else 10f)
             .offset {
@@ -720,18 +786,19 @@ fun MacDraggableFloatingWindow(
                         .weight(1f)
                         .fillMaxHeight()
                 ) {
-                    // 1. Draggable macOS Window Header Bar (`• • •` + Title + Cancel `✕`)
+                    // 1. Draggable macOS Window Header Bar (`• • •` + Title + `◫ Split` + Cancel `✕`)
+                    // Uses full-screen pixel bounds so the floating window can pass freely across the middle of the screen!
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(headerBg)
-                            .pointerInput(windowType) {
+                            .pointerInput(windowType, maxDragLeftPx, maxDragRightPx, maxDragUpPx, maxDragDownPx) {
                                 detectDragGestures(
                                     onDragStart = { onFocusWindow() }
                                 ) { change, dragAmount ->
                                     change.consume()
-                                    offsetX = (offsetX + dragAmount.x).coerceIn(-420f, 420f)
-                                    offsetY = (offsetY + dragAmount.y).coerceIn(-380f, 420f)
+                                    offsetX = (offsetX + dragAmount.x).coerceIn(maxDragLeftPx, maxDragRightPx)
+                                    offsetY = (offsetY + dragAmount.y).coerceIn(maxDragUpPx, maxDragDownPx)
                                 }
                             }
                             .padding(horizontal = 10.dp, vertical = 7.dp),
@@ -782,7 +849,7 @@ fun MacDraggableFloatingWindow(
                                 )
                                 Text(
                                     text = if (isForegroundWindow) {
-                                        "Active Window • Drag header to move"
+                                        "Free Drag Anywhere • Convert to Split Screen"
                                     } else {
                                         "Background Window • Tap to focus"
                                     },
@@ -800,6 +867,45 @@ fun MacDraggableFloatingWindow(
                         ) {
                             if (headerExtraActions != null) {
                                 headerExtraActions()
+                            }
+
+                            // Option to convert ANY floating window into an Adjustable Split Screen (`◫ Split`)!
+                            if (onDockToSplitScreen != null) {
+                                Surface(
+                                    color = Color(0xFF28323B),
+                                    shape = RoundedCornerShape(7.dp),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(7.dp))
+                                        .border(1.dp, MutedSteelAccent.copy(alpha = 0.55f), RoundedCornerShape(7.dp))
+                                        .clickable(onClick = onDockToSplitScreen)
+                                        .testTag(
+                                            if (windowType == FloatingWindowType.EXPLANATION) {
+                                                "toggle_split_screen_explanation_button"
+                                            } else {
+                                                "dock_split_window_${windowType.name.lowercase()}"
+                                            }
+                                        )
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.VerticalSplit,
+                                            contentDescription = "Convert Floating Window to Adjustable Split Screen",
+                                            tint = MutedSteelAccent,
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                        Text(
+                                            text = "Split",
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MutedSteelAccent
+                                        )
+                                    }
+                                }
                             }
 
                             // Explicit Cancel / Close Window Button (`✕`)
@@ -900,42 +1006,74 @@ fun MacDraggableFloatingWindow(
 }
 
 /**
- * Resizable Command Block Window (`⌘P` Command Palette, exempt from the 2-window limit).
+ * BOTTOM-DOCKED IDE COMMAND BLOCK (`⌘P` Command & Terminal Drawer):
+ * Spawns at the BOTTOM of the IDE workspace (just like IntelliJ IDEA / VS Code bottom panels)
+ * with a top resize drag handle (`═`) and smooth vertical slide transition.
  */
 @Composable
 fun ResizableIslandDropdownWindow(
     title: String,
     subtitle: String,
-    initialWidthDp: Float = 520f,
-    initialHeightDp: Float = 370f,
+    initialWidthDp: Float = 720f,
+    initialHeightDp: Float = 290f,
     onClose: () -> Unit,
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current
-    var widthDp by remember { mutableFloatStateOf(initialWidthDp) }
     var heightDp by remember { mutableFloatStateOf(initialHeightDp) }
 
     Surface(
         color = Tier3FloatingWindowActiveBg,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 12.dp, bottomEnd = 12.dp),
         shadowElevation = 28.dp,
         modifier = Modifier
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .widthIn(min = 280.dp, max = widthDp.dp)
+            .padding(horizontal = 14.dp, vertical = 4.dp)
             .fillMaxWidth()
-            .heightIn(min = 200.dp, max = heightDp.dp)
-            .tactileWindowDepth(isForeground = true, cornerRadiusDp = 18f)
-            .border(1.5.dp, Color(0xFF080707), RoundedCornerShape(18.dp))
+            .heightIn(min = 190.dp, max = heightDp.dp)
+            .tactileWindowDepth(isForeground = true, cornerRadiusDp = 20f)
+            .border(
+                width = 1.5.dp,
+                color = Color(0xFF080707),
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 12.dp, bottomEnd = 12.dp)
+            )
             .padding(1.dp)
-            .border(1.dp, Tier3FloatingWindowActiveBevel, RoundedCornerShape(17.dp))
+            .border(
+                width = 1.dp,
+                color = Tier3FloatingWindowActiveBevel,
+                shape = RoundedCornerShape(topStart = 19.dp, topEnd = 19.dp, bottomStart = 11.dp, bottomEnd = 11.dp)
+            )
             .testTag("resizable_island_dropdown_window")
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
+            // Top Resize Drag Handle (`═`) for the Bottom-Docked Command Block
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF1F1C1A))
+                    .pointerInput(Unit) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            val dyDp = with(density) { dragAmount.y.toDp().value }
+                            heightDp = (heightDp - dyDp).coerceIn(190f, 520f)
+                        }
+                    }
+                    .padding(vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(3.5.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(WarmAmberAccent.copy(alpha = 0.7f))
+                )
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Tier3FloatingWindowActiveHeader)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -955,31 +1093,28 @@ fun ResizableIslandDropdownWindow(
                             .size(11.dp)
                             .clip(CircleShape)
                             .background(MacYellowDot)
-                            .clickable { heightDp = 240f }
+                            .clickable { heightDp = 210f }
                     )
                     Box(
                         modifier = Modifier
                             .size(11.dp)
                             .clip(CircleShape)
                             .background(MacGreenDot)
-                            .clickable {
-                                widthDp = 680f
-                                heightDp = 500f
-                            }
+                            .clickable { heightDp = 440f }
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Column {
                         Text(
                             text = title,
                             fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 12.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = WarmCreamText
                         )
                         Text(
-                            text = subtitle,
+                            text = "$subtitle • Bottom IDE Dock (Drag top bar ═ to resize)",
                             fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 10.sp,
+                            fontSize = 9.5.sp,
                             color = MutedTaupeText
                         )
                     }
@@ -988,7 +1123,7 @@ fun ResizableIslandDropdownWindow(
                 IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Close Command Block",
+                        contentDescription = "Close Bottom Command Block",
                         tint = MutedTaupeText,
                         modifier = Modifier.size(14.dp)
                     )
@@ -999,40 +1134,9 @@ fun ResizableIslandDropdownWindow(
                 modifier = Modifier
                     .weight(1f, fill = false)
                     .fillMaxWidth()
-                    .padding(12.dp)
+                    .padding(10.dp)
             ) {
                 content()
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF1D1A18))
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            val dxDp = with(density) { dragAmount.x.toDp().value }
-                            val dyDp = with(density) { dragAmount.y.toDp().value }
-                            widthDp = (widthDp + dxDp).coerceIn(300f, 760f)
-                            heightDp = (heightDp + dyDp).coerceIn(220f, 620f)
-                        }
-                    }
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "⇥ Drag to resize Command Block (${widthDp.roundToInt()}×${heightDp.roundToInt()} dp)",
-                    fontFamily = JetBrainsMonoFontFamily,
-                    fontSize = 9.5.sp,
-                    color = MutedTaupeText
-                )
-                Icon(
-                    imageVector = Icons.Default.OpenInFull,
-                    contentDescription = "Resize Window Handle",
-                    tint = MutedTaupeText,
-                    modifier = Modifier.size(12.dp)
-                )
             }
         }
     }
@@ -1397,16 +1501,16 @@ fun FolderAndSectionsDropdownContent(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "KOTLIN SECTIONS (${activeFolder.sections.size})",
+                text = ".KTSCRIBE FILES IN FOLDER (${activeFolder.sections.size} • 1 File = 1 Code Block)",
                 fontFamily = JetBrainsMonoFontFamily,
-                fontSize = 10.5.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = MutedSageAccent
             )
             TextButton(onClick = onInsertNewSection) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Add Section", fontSize = 11.sp)
+                Text("New .ktscribe File", fontSize = 11.sp)
             }
         }
 
@@ -1435,7 +1539,7 @@ fun FolderAndSectionsDropdownContent(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "§${sec.orderIndex + 1} • ${sec.displayTitle}",
+                            text = "📄 ${sec.ktScribeFileName}",
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
@@ -1444,7 +1548,7 @@ fun FolderAndSectionsDropdownContent(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "Concept: [${sec.effectiveLearnedConceptTag}] • ${sec.lineCount} lines",
+                            text = "1 Code Block (${sec.lineCount}L) + Notes • [${sec.effectiveLearnedConceptTag}]",
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 10.sp,
                             color = MutedSageAccent
@@ -1457,7 +1561,7 @@ fun FolderAndSectionsDropdownContent(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DeleteOutline,
-                                contentDescription = "Delete Section",
+                                contentDescription = "Delete .ktscribe File",
                                 tint = MutedTaupeText,
                                 modifier = Modifier.size(15.dp)
                             )

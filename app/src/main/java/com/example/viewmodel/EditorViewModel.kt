@@ -19,6 +19,7 @@ import com.example.model.EditorFontChoice
 import com.example.model.ExplanationWindowMode
 import com.example.model.FloatingWindowType
 import com.example.model.IslandDropdownMenu
+import com.example.model.SplitScreenOrientation
 import com.example.model.TextAlignmentChoice
 import com.example.model.TextFormattingStyle
 import com.example.ui.theme.ThemeMode
@@ -40,13 +41,16 @@ data class EditorUiState(
     val searchQuery: String = "",
     val activeDocument: DocumentDetailUiModel? = null,
     val activeTarget: ActiveEditorTarget = ActiveEditorTarget.Intro,
-    // Full-screen Apple cmd code editor focuses on the active section by default
+    // Full-screen Apple cmd code editor focuses on the active .ktscribe file by default
     val isFocusedSingleSectionMode: Boolean = true,
     val focusedSectionId: Long? = null,
     val newlyInsertedSectionId: Long? = null,
     // Dual Floating Windows (max 2 concurrent excluding Command Block, ordered back-to-front by zIndex)
     val openFloatingWindows: List<FloatingWindowType> = emptyList(),
     val windowLimitShakeCount: Int = 0,
+    // Adjustable Split-Screen Window State (any floating window can convert to Side-by-Side or Bottom Split)
+    val dockedSplitWindow: FloatingWindowType? = null,
+    val splitScreenOrientation: SplitScreenOrientation = SplitScreenOrientation.SIDE_BY_SIDE,
     // Command Block / Split Window state
     val activeIslandDropdown: IslandDropdownMenu = IslandDropdownMenu.NONE,
     val explanationWindowMode: ExplanationWindowMode = ExplanationWindowMode.HIDDEN,
@@ -89,7 +93,8 @@ data class EditorUiState(
 
         /**
          * Pure state transition for opening/toggling one of the 4 floating windows:
-         * - If already open, closes it.
+         * - If currently docked in split-screen, closes split-screen.
+         * - If already open as a floating window, closes it.
          * - If fewer than 2 windows are open, opens it at the top of the z-order.
          * - If 2 windows are already open, keeps existing 2 windows and increments windowLimitShakeCount.
          */
@@ -97,6 +102,12 @@ data class EditorUiState(
             current: EditorUiState,
             type: FloatingWindowType
         ): EditorUiState {
+            if (current.dockedSplitWindow == type) {
+                return current.copy(
+                    dockedSplitWindow = null,
+                    explanationWindowMode = ExplanationWindowMode.HIDDEN
+                )
+            }
             return if (type in current.openFloatingWindows) {
                 val updated = current.openFloatingWindows - type
                 current.copy(
@@ -123,6 +134,37 @@ data class EditorUiState(
                     aiStatusMessage = "Max 2 floating windows open — cancel (✕) one to open ${type.pillLabel}"
                 )
             }
+        }
+
+        /**
+         * Converts a floating window into an adjustable Split-Screen pane alongside (or below) the `.ktscribe` code block.
+         */
+        fun applyDockWindowToSplitScreen(
+            current: EditorUiState,
+            type: FloatingWindowType
+        ): EditorUiState {
+            return current.copy(
+                openFloatingWindows = current.openFloatingWindows - type,
+                dockedSplitWindow = type,
+                explanationWindowMode = if (type == FloatingWindowType.EXPLANATION) {
+                    ExplanationWindowMode.SPLIT_SCREEN
+                } else {
+                    ExplanationWindowMode.HIDDEN
+                },
+                aiStatusMessage = "Docked ${type.pillLabel} into ${current.splitScreenOrientation.label}"
+            )
+        }
+
+        fun applyToggleSplitOrientation(current: EditorUiState): EditorUiState {
+            val next = if (current.splitScreenOrientation == SplitScreenOrientation.SIDE_BY_SIDE) {
+                SplitScreenOrientation.BOTTOM_SPLIT
+            } else {
+                SplitScreenOrientation.SIDE_BY_SIDE
+            }
+            return current.copy(
+                splitScreenOrientation = next,
+                aiStatusMessage = "Switched to ${next.label}"
+            )
         }
     }
 }
@@ -336,11 +378,65 @@ class EditorViewModel(
                     current.openFloatingWindows - FloatingWindowType.EXPLANATION
                 }
             }
+            val updatedDocked = when (mode) {
+                ExplanationWindowMode.SPLIT_SCREEN -> FloatingWindowType.EXPLANATION
+                else -> if (current.dockedSplitWindow == FloatingWindowType.EXPLANATION) null else current.dockedSplitWindow
+            }
             current.copy(
                 explanationWindowMode = mode,
+                dockedSplitWindow = updatedDocked,
                 openFloatingWindows = updatedWindows,
                 activeIslandDropdown = IslandDropdownMenu.NONE
             )
+        }
+    }
+
+    fun dockWindowToSplitScreen(type: FloatingWindowType) {
+        if (type == FloatingWindowType.RUN_OUTPUT) {
+            val doc = _uiState.value.activeDocument
+            val activeSec = doc?.sections?.find { it.id == _uiState.value.focusedSectionId }
+                ?: doc?.sections?.firstOrNull()
+            val output = activeSec?.let { KotlinCodeEngine.simulateKotlinExecution(it.codeContent) }
+            _uiState.update { current ->
+                EditorUiState.applyDockWindowToSplitScreen(current, type).copy(
+                    terminalExecutionOutput = output ?: current.terminalExecutionOutput
+                )
+            }
+        } else {
+            _uiState.update { current ->
+                EditorUiState.applyDockWindowToSplitScreen(current, type)
+            }
+        }
+    }
+
+    fun undockSplitWindowToFloating() {
+        _uiState.update { current ->
+            val docked = current.dockedSplitWindow ?: return@update current
+            val cleared = current.copy(
+                dockedSplitWindow = null,
+                explanationWindowMode = ExplanationWindowMode.HIDDEN
+            )
+            if (cleared.openFloatingWindows.size < EditorUiState.MAX_CONCURRENT_FLOATING_WINDOWS) {
+                EditorUiState.applyToggleFloatingWindow(cleared, docked)
+            } else {
+                val droppedOldest = cleared.copy(openFloatingWindows = cleared.openFloatingWindows.drop(1))
+                EditorUiState.applyToggleFloatingWindow(droppedOldest, docked)
+            }
+        }
+    }
+
+    fun closeSplitScreenWindow() {
+        _uiState.update { current ->
+            current.copy(
+                dockedSplitWindow = null,
+                explanationWindowMode = ExplanationWindowMode.HIDDEN
+            )
+        }
+    }
+
+    fun toggleSplitScreenOrientation() {
+        _uiState.update { current ->
+            EditorUiState.applyToggleSplitOrientation(current)
         }
     }
 
@@ -803,7 +899,9 @@ class EditorViewModel(
                     activeIslandDropdown = IslandDropdownMenu.NONE,
                     hasUnsavedChanges = true,
                     secondsUntilAutoSave = EditorUiState.AUTO_SAVE_INTERVAL_SECONDS,
-                    saveStatusBanner = "Added Section • Auto-save in ${EditorUiState.AUTO_SAVE_INTERVAL_SECONDS}s"
+                    saveStatusBanner = "Created ${newSection.ktScribeFileName} • Auto-save in ${EditorUiState.AUTO_SAVE_INTERVAL_SECONDS}s",
+                    canUndo = undoStack.isNotEmpty(),
+                    canRedo = redoStack.isNotEmpty()
                 )
             }
 

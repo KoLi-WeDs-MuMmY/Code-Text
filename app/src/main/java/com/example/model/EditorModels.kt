@@ -46,9 +46,19 @@ enum class ExplanationWindowMode(val label: String) {
 }
 
 /**
+ * Controls how a docked floating window splits the screen with the full-screen `.ktscribe` code block:
+ * - SIDE_BY_SIDE: Code block on the left, docked window on the right with a vertical draggable divider.
+ * - BOTTOM_SPLIT: Code block on the top, docked window on the bottom with a horizontal draggable divider.
+ */
+enum class SplitScreenOrientation(val label: String, val badge: String) {
+    SIDE_BY_SIDE("Side-by-Side Split", "◫ Side"),
+    BOTTOM_SPLIT("Bottom Split", "⬒ Bottom")
+}
+
+/**
  * The 4 top-right oval pill floating windows from the user's sketch.
- * Up to 2 floating windows can be open at the same time (excluding Command Palette),
- * dragged anywhere on screen, resized from their left edge or corner, and canceled (`✕`).
+ * Up to 2 floating windows can be open at the same time (excluding the bottom-docked Command Block),
+ * dragged anywhere across the entire screen, converted into an adjustable split screen, resized, or canceled (`✕`).
  */
 enum class FloatingWindowType(
     val pillLabel: String,
@@ -57,13 +67,13 @@ enum class FloatingWindowType(
 ) {
     EXPLANATION(
         pillLabel = "Explain",
-        windowTitle = "Explanation & Concept Notes",
-        windowSubtitle = "Draggable & Resizable • Paired with Active Section"
+        windowTitle = "Explanation & .ktscribe Notes",
+        windowSubtitle = "Bundled inside active .ktscribe file • Float or Split"
     ),
     FOLDERS(
-        pillLabel = "Folders",
-        windowTitle = "Folders & Kotlin Sections",
-        windowSubtitle = "Switch folders, manage sections, or create folder"
+        pillLabel = "Files",
+        windowTitle = "Folders & .ktscribe Files",
+        windowSubtitle = "1 .ktscribe file = 1 code block • Switch or create"
     ),
     AI_STUDIO(
         pillLabel = "AI Guide",
@@ -78,7 +88,7 @@ enum class FloatingWindowType(
 }
 
 /**
- * Controls which modal overlay is open (such as Command Palette).
+ * Controls which modal or bottom-docked IDE panel is open (such as the Bottom Command Block).
  */
 enum class IslandDropdownMenu {
     NONE,
@@ -89,12 +99,12 @@ enum class IslandDropdownMenu {
 }
 
 /**
- * Filter categories inside the Floating Command Palette (matching the user's reference screenshot).
+ * Filter categories inside the Bottom-Docked IDE Command Block.
  */
 enum class CommandPaletteFilter(val label: String) {
     ALL("All"),
     COMMANDS("Commands"),
-    FOLDERS("Folders"),
+    FOLDERS("Files & Folders"),
     SYMBOLS("Symbols"),
     CONCEPTS("Concepts")
 }
@@ -175,8 +185,54 @@ data class CodeSectionUiModel(
     val explanationStyle: TextFormattingStyle = TextFormattingStyle(),
     val showDivider: Boolean = true
 ) {
+    /**
+     * Canonical `.ktscribe` file name for this single-code-block file inside its parent Folder.
+     * Enforces the `1 .ktscribe file = 1 code block + bundled notes` workspace model.
+     */
+    val ktScribeFileName: String
+        get() {
+            val raw = sectionTitle.trim()
+            if (raw.endsWith(".ktscribe", ignoreCase = true)) return raw
+            val cleaned = raw
+                .replace(Regex("^Section\\s*\\d+\\s*[•\\-:]?\\s*", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("[^A-Za-z0-9_\\-]"), "")
+                .take(22)
+            val stem = when {
+                cleaned.isNotBlank() -> cleaned.replaceFirstChar { it.uppercase() }
+                else -> {
+                    val decl = Regex("""\b(?:class|interface|object|fun)\s+([A-Za-z_][A-Za-z0-9_]*)""")
+                        .find(codeContent)?.groupValues?.getOrNull(1)
+                    if (!decl.isNullOrBlank()) decl.replaceFirstChar { it.uppercase() }
+                    else "File${orderIndex + 1}"
+                }
+            }
+            return "$stem.ktscribe"
+        }
+
     val displayTitle: String
-        get() = sectionTitle.ifBlank { "Section ${orderIndex + 1} • Untitled Kotlin Block" }
+        get() = ktScribeFileName
+
+    /**
+     * Serializes this single-code-block `.ktscribe` file together with its bundled concept tag and explanation notes.
+     */
+    fun toKtScribeFilePayload(folderTitle: String = "Workspace"): String = buildString {
+        appendLine("// ============================================================================")
+        appendLine("// @ktscribe-file: $ktScribeFileName")
+        appendLine("// @folder: ${folderTitle.ifBlank { "DefaultFolder" }}")
+        appendLine("// @concept: $effectiveLearnedConceptTag")
+        appendLine("// @notes-start")
+        if (explanationText.isBlank()) {
+            appendLine("// (No explanation notes added yet)")
+        } else {
+            explanationText.lines().forEach { line ->
+                appendLine("// $line")
+            }
+        }
+        appendLine("// @notes-end")
+        appendLine("// ============================================================================")
+        appendLine()
+        append(codeContent)
+    }
 
     val effectiveLearnedConceptTag: String
         get() {

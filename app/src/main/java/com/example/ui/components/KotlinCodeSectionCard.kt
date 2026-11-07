@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -28,6 +30,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -187,6 +192,9 @@ fun KotlinCodeSectionCard(
     onToggleFocusMode: () -> Unit = {},
     onToggleDivider: () -> Unit,
     onDeleteSection: () -> Unit,
+    canUndo: Boolean = false,
+    onUndo: () -> Unit = {},
+    onDeactivateLeftRailTool: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val terminalSyntaxColors = DarkKotlinSyntaxColors
@@ -196,8 +204,10 @@ fun KotlinCodeSectionCard(
     val explanationFocusRequester = remember { FocusRequester() }
     val codeBringIntoViewRequester = remember { BringIntoViewRequester() }
     val explanationBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val internalCodeScrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
 
+    var codeViewportHeightPx by remember { mutableIntStateOf(0) }
     var showColorPalettePicker by remember { mutableStateOf(false) }
     var showFindReplaceBar by remember { mutableStateOf(false) }
     var showLiveTemplatesBar by remember { mutableStateOf(false) }
@@ -212,19 +222,29 @@ fun KotlinCodeSectionCard(
     var selectedSuggestionIndex by remember { mutableIntStateOf(0) }
     var dismissedCompletionForPrefix by remember { mutableStateOf<String?>(null) }
 
-    // Respond to the 5 Left-Rail circular IDE buttons from DocumentEditorScreen
+    // Respond to the Left-Rail circular IDE buttons from DocumentEditorScreen — including turning them OFF when set to NONE!
     LaunchedEffect(activeLeftRailTool) {
         when (activeLeftRailTool) {
             LeftRailIdeTool.STRUCTURE_AND_FIND -> {
                 showFindReplaceBar = true
+                showLiveTemplatesBar = false
+                showMetricsBar = false
             }
             LeftRailIdeTool.LINE_ACTIONS -> {
                 showLiveTemplatesBar = true
+                showFindReplaceBar = false
+                showMetricsBar = false
             }
             LeftRailIdeTool.DIAGNOSTICS -> {
                 showMetricsBar = true
+                showFindReplaceBar = false
+                showLiveTemplatesBar = false
             }
-            LeftRailIdeTool.NONE -> {}
+            LeftRailIdeTool.NONE -> {
+                showFindReplaceBar = false
+                showLiveTemplatesBar = false
+                showMetricsBar = false
+            }
         }
     }
 
@@ -291,25 +311,18 @@ fun KotlinCodeSectionCard(
         onActiveCodeLineChanged(info.line, info.totalLines)
         coroutineScope.launch {
             try {
-                if (info.totalLines != previousCodeLineCount) {
-                    previousCodeLineCount = info.totalLines
-                    delay(35)
-                }
-                val layout = codeLayoutResult
-                if (layout != null && currentText.isNotEmpty()) {
-                    val safeOffset = cursorOffset.coerceIn(0, currentText.length)
-                    val cursorRect = layout.getCursorRect(safeOffset)
-                    val topPadPx = with(density) { 48.dp.toPx() }
-                    val bottomPadPx = with(density) { 120.dp.toPx() }
-                    val targetRect = Rect(
-                        left = 0f,
-                        top = (cursorRect.top - topPadPx).coerceAtLeast(0f),
-                        right = cursorRect.right + 24f,
-                        bottom = cursorRect.bottom + bottomPadPx
-                    )
-                    codeBringIntoViewRequester.bringIntoView(targetRect)
-                } else {
-                    codeBringIntoViewRequester.bringIntoView()
+                val linePx = with(density) { 22.dp.toPx() }
+                val cursorTopPx = ((info.line - 1).coerceAtLeast(0) * linePx).toInt()
+                val cursorBottomPx = (cursorTopPx + linePx * 2.2f).toInt()
+                val viewportH = codeViewportHeightPx
+                if (viewportH > 0) {
+                    val currentScroll = internalCodeScrollState.value
+                    if (cursorBottomPx > currentScroll + viewportH) {
+                        val target = (cursorBottomPx - viewportH + linePx.toInt()).coerceIn(0, internalCodeScrollState.maxValue)
+                        internalCodeScrollState.animateScrollTo(target)
+                    } else if (cursorTopPx < currentScroll) {
+                        internalCodeScrollState.animateScrollTo(cursorTopPx.coerceAtLeast(0))
+                    }
                 }
             } catch (_: Exception) {
             }
@@ -412,16 +425,12 @@ fun KotlinCodeSectionCard(
 
     Column(
         modifier = modifier
-            .fillMaxWidth()
-            .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMediumLow
-                )
+            .then(
+                if (isSingleSectionFocusMode) Modifier.fillMaxSize() else Modifier.fillMaxWidth()
             )
             .testTag("section_container_${section.orderIndex}")
     ) {
-        // 1. Optional/Removable Top Section Divider
+        // 1. Optional/Removable Top Section Divider (only in multi-section view)
         if (section.showDivider && !isSingleSectionFocusMode) {
             SectionDividerBar(
                 sectionNumber = section.orderIndex + 1,
@@ -454,9 +463,7 @@ fun KotlinCodeSectionCard(
             }
         }
 
-        // 2. TIER 1 DEPTH: Beveled Matte Darcula Code Block Window
-        // Features a recessed pitch-black outer separation rim (#080707), 8.dp drop shadow,
-        // and a top-lit inner bevel (#3A3530 -> #24211E) so the code canvas has real physical depth.
+        // 2. TIER 1 DEPTH: Full-Screen Beveled Matte Darcula `.ktscribe` Code Block Window
         Card(
             shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(
@@ -466,7 +473,9 @@ fun KotlinCodeSectionCard(
                 defaultElevation = if (isCodeFocused || isExplanationFocused) 10.dp else 6.dp
             ),
             modifier = Modifier
-                .fillMaxWidth()
+                .then(
+                    if (isSingleSectionFocusMode) Modifier.fillMaxSize() else Modifier.fillMaxWidth()
+                )
                 .shadow(
                     elevation = if (isCodeFocused) 12.dp else 6.dp,
                     shape = RoundedCornerShape(22.dp),
@@ -490,13 +499,15 @@ fun KotlinCodeSectionCard(
                             } else {
                                 Tier1CodeBevelTop
                             },
-                             Color(0xFF221F1D)
+                            Color(0xFF221F1D)
                         )
                     ),
                     shape = RoundedCornerShape(21.dp)
                 )
         ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = if (isSingleSectionFocusMode) Modifier.fillMaxSize() else Modifier.fillMaxWidth()
+            ) {
                 // =========================================================================
                 // A. APPLE `cmd` / DARCULA WINDOW HEADER BAR (`• • •` + Concept Tag + Actions)
                 // =========================================================================
@@ -1100,6 +1111,21 @@ fun KotlinCodeSectionCard(
                                     bringActiveCodeLineIntoView(updated.selection.end, updated.text)
                                 }
                             )
+                            if (canUndo) {
+                                IdeActionChip(
+                                    label = "↶ Undo",
+                                    accentColor = DarculaWarmAmber,
+                                    onClick = onUndo
+                                )
+                            }
+                            IdeActionChip(
+                                label = "✕ Turn Off",
+                                accentColor = MacTrafficRed,
+                                onClick = {
+                                    showLiveTemplatesBar = false
+                                    onDeactivateLeftRailTool()
+                                }
+                            )
                         }
 
                         Row(
@@ -1232,6 +1258,21 @@ fun KotlinCodeSectionCard(
                                 }
                             }
                         }
+                        if (canUndo) {
+                            IdeActionChip(
+                                label = "↶ Undo",
+                                accentColor = DarculaWarmAmber,
+                                onClick = onUndo
+                            )
+                        }
+                        IdeActionChip(
+                            label = "✕ Turn Off",
+                            accentColor = MacTrafficRed,
+                            onClick = {
+                                showMetricsBar = false
+                                onDeactivateLeftRailTool()
+                            }
+                        )
                     }
                 }
 
@@ -1396,6 +1437,23 @@ fun KotlinCodeSectionCard(
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                                 )
                             }
+
+                            if (canUndo) {
+                                IdeActionChip(
+                                    label = "↶ Undo",
+                                    accentColor = DarculaWarmAmber,
+                                    onClick = onUndo
+                                )
+                            }
+
+                            IdeActionChip(
+                                label = "✕ Turn Off",
+                                accentColor = MacTrafficRed,
+                                onClick = {
+                                    showFindReplaceBar = false
+                                    onDeactivateLeftRailTool()
+                                }
+                            )
                         }
                     }
                 }
@@ -1501,7 +1559,7 @@ fun KotlinCodeSectionCard(
                             color = DarculaSageGreen
                         )
                         Text(
-                            text = "kotlinc section_${section.orderIndex + 1}.kt",
+                            text = "kotlinc ${section.ktScribeFileName}",
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 11.sp,
                             color = DarculaMutedText
@@ -1578,23 +1636,41 @@ fun KotlinCodeSectionCard(
 
                 // =========================================================================
                 // F. MATTE DARCULA CODE EDITOR + INLINE LINE ERROR PILLS + CURSOR COMPLETION BOX
-                // Matches Screenshots 3 & 4:
-                // - `1.` numbered gutter
-                // - Inline wine-red error pill right on the offending line (`⊗ Unresolved reference: sout` / `⊗ Syntax error  2`)
-                // - Tier 2 (`18.dp` shadow) Cursor-Anchored Vertical Completion Popup + Right Documentation Card
+                // - Takes the full remaining height (`weight(1f)`) in single-file mode
+                // - Scrolls internally so header & bottom shortcut bar remain anchored
+                // - Renders the Suggestion Box as a ZERO-LAYOUT-IMPACT overlay (`layout(0, 0)`)
+                //   that NEVER scrolls the screen up and down and automatically flips above
+                //   the cursor line when the keyboard pops up!
                 // =========================================================================
-                AnimatedVisibility(visible = !isCodeFolded && !isDockedCompactForExplanation) {
+                if (!isCodeFolded && !isDockedCompactForExplanation) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .then(
+                                if (isSingleSectionFocusMode) {
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
+                                } else {
+                                    Modifier.fillMaxWidth()
+                                }
+                            )
                             .background(DarculaCanvasBg)
+                            .onSizeChanged { codeViewportHeightPx = it.height }
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = minCodeEditorHeight)
+                                .then(
+                                    if (isSingleSectionFocusMode) {
+                                        Modifier
+                                            .fillMaxHeight()
+                                            .verticalScroll(internalCodeScrollState)
+                                    } else {
+                                        Modifier.heightIn(min = minCodeEditorHeight)
+                                    }
+                                )
                                 .bringIntoViewRequester(codeBringIntoViewRequester)
-                                .padding(vertical = 8.dp),
+                                .padding(top = 8.dp, bottom = if (isSingleSectionFocusMode) 88.dp else 8.dp),
                             verticalAlignment = Alignment.Top
                         ) {
                             // Line Numbers Gutter (`1.`, `2.`, `3.` matching Sketch 1)
@@ -1676,7 +1752,10 @@ fun KotlinCodeSectionCard(
                                         )
                                         codeFieldValue = processed
                                         onCodeChange(processed.text)
-                                        bringActiveCodeLineIntoView(processed.selection.end, processed.text)
+                                        if (processed.text.count { it == '\n' } != previousCodeLineCount) {
+                                            previousCodeLineCount = processed.text.count { it == '\n' }
+                                            bringActiveCodeLineIntoView(processed.selection.end, processed.text)
+                                        }
                                     },
                                     onTextLayout = { layoutResult ->
                                         codeLayoutResult = layoutResult
@@ -1713,15 +1792,6 @@ fun KotlinCodeSectionCard(
                                         .focusRequester(codeFocusRequester)
                                         .onFocusChanged { focusState ->
                                             onCodeFocusChanged(focusState.isFocused)
-                                            if (focusState.isFocused) {
-                                                coroutineScope.launch {
-                                                    delay(100)
-                                                    bringActiveCodeLineIntoView(
-                                                        codeFieldValue.selection.end,
-                                                        codeFieldValue.text
-                                                    )
-                                                }
-                                            }
                                         }
                                         .testTag("kotlin_code_input_${section.orderIndex}")
                                 )
@@ -1785,19 +1855,46 @@ fun KotlinCodeSectionCard(
                         }
 
                         // =========================================================================
-                        // TIER 2 DEPTH: CURSOR-ANCHORED VERTICAL IDE COMPLETION BOX + SIDE DOC CARD
-                        // Appears right below the active cursor line (Screenshots 3 & 4)
+                        // TIER 2 DEPTH: ZERO-SCROLL-JUMP, KEYBOARD-AWARE CURSOR COMPLETION OVERLAY
+                        // Uses `layout(0, 0)` so opening/closing suggestions NEVER expands parent
+                        // height or scrolls the editor up/down, and flips above the cursor line
+                        // when the soft keyboard reduces the visible viewport height!
                         // =========================================================================
                         if (showCursorCompletionPopup) {
-                            val popupTopOffsetDp = ((cursorInfo.line) * 22 + 10).dp
-                            val popupLeftOffsetDp = (48 + (cursorInfo.column.coerceAtMost(16) * 6)).dp
+                            val scrollOffsetDp = with(density) { internalCodeScrollState.value.toDp() }
+                            val cursorLineBottomDp = (cursorInfo.line * 22 + 10).dp - scrollOffsetDp
+                            val cursorLineTopDp = ((cursorInfo.line - 1).coerceAtLeast(0) * 22 + 4).dp - scrollOffsetDp
+                            val viewportHeightDp = with(density) { codeViewportHeightPx.toDp() }.coerceAtLeast(180.dp)
+                            val visibleRows = suggestions.size.coerceAtMost(6)
+                            val estimatedPopupHeightDp = (visibleRows * 28 + 14).dp
+
+                            // Flip above the active line if the keyboard is open and the popup would clip below
+                            val shouldFlipAboveLine = (cursorLineBottomDp + estimatedPopupHeightDp > viewportHeightDp - 6.dp) &&
+                                (cursorLineTopDp > estimatedPopupHeightDp)
+                            val popupTopOffsetDp = if (shouldFlipAboveLine) {
+                                (cursorLineTopDp - estimatedPopupHeightDp).coerceAtLeast(4.dp)
+                            } else {
+                                cursorLineBottomDp.coerceIn(4.dp, (viewportHeightDp - estimatedPopupHeightDp).coerceAtLeast(4.dp))
+                            }
+                            val popupLeftOffsetDp = (48 + (cursorInfo.column.coerceAtMost(14) * 6)).dp
                             val safeIndex = selectedSuggestionIndex.coerceIn(0, suggestions.lastIndex)
                             val activeSuggestion = suggestions[safeIndex]
 
                             Row(
                                 modifier = Modifier
-                                    .offset(x = popupLeftOffsetDp, y = popupTopOffsetDp)
-                                    .zIndex(15f)
+                                    .zIndex(25f)
+                                    .layout { measurable, constraints ->
+                                        val placeable = measurable.measure(
+                                            constraints.copy(minWidth = 0, minHeight = 0)
+                                        )
+                                        // Zero layout footprint (0x0) so the code scroll container NEVER jumps!
+                                        layout(0, 0) {
+                                            placeable.placeRelative(
+                                                x = popupLeftOffsetDp.roundToPx(),
+                                                y = popupTopOffsetDp.roundToPx()
+                                            )
+                                        }
+                                    }
                                     .padding(end = 8.dp, bottom = 8.dp)
                                     .testTag("autocomplete_bar_${section.orderIndex}"),
                                 verticalAlignment = Alignment.Top,
