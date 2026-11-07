@@ -1,19 +1,19 @@
 <resources>
     <string name="app_name">KtScribe</string>
-    <string name="subtitle_tagline">Lightweight Rich Text &amp; Kotlin Code Studio</string>
-    <string name="search_documents_hint">Search documents, Kotlin code, or explanations…</string>
-    <string name="new_document">New Document</string>
-    <string name="empty_documents_title">Start Your First Kotlin Note</string>
-    <string name="empty_documents_subtitle">Combine rich prose with auto-expanding Kotlin code blocks, paired explanations, and smart AI section titles.</string>
-    <string name="insert_code_block">Insert Code Block</string>
+    <string name="subtitle_tagline">macOS Dynamic Island &amp; Apple cmd Kotlin Studio</string>
+    <string name="search_documents_hint">Search folders, Kotlin code, symbols, or concept tags…</string>
+    <string name="new_document">New Folder</string>
+    <string name="empty_documents_title">Create Your First Kotlin Folder</string>
+    <string name="empty_documents_subtitle">Organize full-screen Apple cmd Kotlin code blocks, floating explanations, and AI concept tags into project folders.</string>
+    <string name="insert_code_block">New Code Section</string>
     <string name="format_kotlin_code">Format Kotlin</string>
     <string name="ai_name_section">AI Name Section</string>
     <string name="toggle_divider">Toggle Divider</string>
     <string name="delete_section">Delete Section</string>
-    <string name="shortcut_settings_title">Shortcut &amp; Editor Settings</string>
+    <string name="shortcut_settings_title">Dynamic Island &amp; IDE Settings</string>
     <string name="theme_mode_label">Appearance Mode</string>
-    <string name="auto_save_active">Auto-save (30s &amp; on exit)</string>
-    <string name="explanation_placeholder">Write the explanation &amp; context for this Kotlin code block… (Part of this code section until the next code block)</string>
-    <string name="intro_placeholder">Write introductory document notes here, or press Ctrl+%1$s to insert a Kotlin code block…</string>
-    <string name="code_placeholder">// Write Kotlin code here (starts at 4 lines, expands automatically)\nfun main() {\n    \n}</string>
+    <string name="auto_save_active">Auto-save &amp; Hidden Vault Sync (30s)</string>
+    <string name="explanation_placeholder">Write your explanation &amp; notes here in the resizable floating window (or dock into 2-window split screen)…</string>
+    <string name="intro_placeholder">Folder README / Architecture Overview…</string>
+    <string name="code_placeholder">// Type sout for println(), main for fun main(), or fori for loop\nfun main() {\n    \n}</string>
 </resources>

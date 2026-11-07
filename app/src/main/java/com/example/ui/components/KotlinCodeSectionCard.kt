@@ -144,20 +144,12 @@ private data class QuickSymbolKey(
 )
 
 private val QUICK_SYMBOL_KEYS = listOf(
+    QuickSymbolKey("sout ⇥ println()", "println(\"\")", 2),
     QuickSymbolKey("Tab", "    ", 0),
     QuickSymbolKey("( )", "()", 1),
     QuickSymbolKey("{ }", "{}", 1),
-    QuickSymbolKey("[ ]", "[]", 1),
-    QuickSymbolKey("< >", "<>", 1),
     QuickSymbolKey("\" \"", "\"\"", 1),
-    QuickSymbolKey("->", " -> ", 0),
-    QuickSymbolKey("=", " = ", 0),
-    QuickSymbolKey(":", ": ", 0),
-    QuickSymbolKey(".", ".", 0),
-    QuickSymbolKey("?:", " ?: ", 0),
-    QuickSymbolKey("val", "val ", 0),
-    QuickSymbolKey("fun", "fun ", 0),
-    QuickSymbolKey("println", "println()", 1)
+    QuickSymbolKey("->", " -> ", 0)
 )
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -167,6 +159,7 @@ fun KotlinCodeSectionCard(
     isCodeFocused: Boolean,
     isExplanationFocused: Boolean,
     isSingleSectionFocusMode: Boolean = false,
+    hideInlineExplanation: Boolean = false,
     requestAutoFocus: Boolean,
     onAutoFocusConsumed: () -> Unit,
     onCodeFocusChanged: (Boolean) -> Unit,
@@ -1898,12 +1891,12 @@ fun KotlinCodeSectionCard(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
-                                    text = if (currentPrefix.isNotBlank()) "Complete ($currentPrefix):" else "Snippets:",
+                                    text = if (currentPrefix.isNotBlank()) "IDE Suggest ($currentPrefix):" else "Live Postfix (type sout, fori, main):",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 10.5.sp,
-                                    color = MacTerminalMutedText
+                                    color = MacTerminalPromptGreen
                                 )
-                                suggestions.forEach { suggestion ->
+                                suggestions.take(4).forEach { suggestion ->
                                     AssistChip(
                                         onClick = {
                                             val (newCode, newCursor) = KotlinCodeEngine.applySuggestion(
@@ -1937,6 +1930,7 @@ fun KotlinCodeSectionCard(
                     }
                 }
 
+                if (!hideInlineExplanation) {
                 HorizontalDivider(color = MacTerminalBorder, thickness = 1.dp)
 
                 // =========================================================================
@@ -2115,6 +2109,7 @@ fun KotlinCodeSectionCard(
                             }
                             .testTag("section_explanation_input_${section.orderIndex}")
                     )
+                }
                 }
             }
         }

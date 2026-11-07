@@ -97,6 +97,20 @@ object KotlinCodeEngine {
         "SharedFlow", "Result", "Pair", "Triple"
     )
 
+    private val POSTFIX_SUGGESTIONS = listOf(
+        KotlinSuggestion("sout ⇥ println()", "println(\"\")", "Postfix", "Expand sout to println(\"\")"),
+        KotlinSuggestion("soutv ⇥ println(val)", "println(\"value = \$value\")", "Postfix", "Print variable name and value"),
+        KotlinSuggestion("serr ⇥ stderr", "System.err.println(\"\")", "Postfix", "Print to standard error"),
+        KotlinSuggestion("main ⇥ fun main()", "fun main() {\n    \n}", "Postfix", "Kotlin main entry point"),
+        KotlinSuggestion("psvm ⇥ fun main()", "fun main() {\n    \n}", "Postfix", "Public static void main equivalent"),
+        KotlinSuggestion("fori ⇥ for (i in 0 until n)", "for (i in 0 until n) {\n    \n}", "Postfix", "Indexed range loop"),
+        KotlinSuggestion("iter ⇥ for (item in items)", "for (item in items) {\n    \n}", "Postfix", "For-each loop over collection"),
+        KotlinSuggestion("ifn ⇥ if (x == null)", "if (value == null) {\n    \n}", "Postfix", "Check if reference is null"),
+        KotlinSuggestion("inn ⇥ if (x != null)", "if (value != null) {\n    \n}", "Postfix", "Check if reference is not null"),
+        KotlinSuggestion("tryc ⇥ try / catch", "try {\n    \n} catch (e: Exception) {\n    println(e.message)\n}", "Postfix", "Surround with try-catch"),
+        KotlinSuggestion("todo ⇥ // TODO", "// TODO: ", "Postfix", "Insert TODO comment")
+    )
+
     private val BUILTIN_SUGGESTIONS = listOf(
         KotlinSuggestion("fun", "fun ", "Keyword", "Declare a function"),
         KotlinSuggestion("fun main()", "fun main() {\n    \n}", "Template", "Main entry point"),
@@ -194,6 +208,33 @@ object KotlinCodeEngine {
 
             if (prefixMatches && suffixMatches) {
                 val charAfterCursorInOld = oldText.getOrNull(insertedIndex)
+
+                // A0. Live IDE Postfix Abbreviation Expansion when Space is pressed after sout, psvm, fori, ifn, inn
+                if (insertedChar == ' ') {
+                    val beforeSpace = oldText.substring(0, insertedIndex)
+                    val lineStart = beforeSpace.lastIndexOf('\n') + 1
+                    val lineBeforeWord = beforeSpace.substring(lineStart)
+                    val trimmedLine = lineBeforeWord.trim()
+                    val leadingIndent = lineBeforeWord.takeWhile { it == ' ' || it == '\t' }
+                    val abbrevExpansion: Pair<String, Int>? = when (trimmedLine) {
+                        "sout" -> "println(\"\")" to 9
+                        "serr" -> "System.err.println(\"\")" to 20
+                        "psvm" -> "fun main() {\n$leadingIndent    \n$leadingIndent}" to (14 + leadingIndent.length + 4)
+                        "fori" -> "for (i in 0 until n) {\n$leadingIndent    \n$leadingIndent}" to (24 + leadingIndent.length + 4)
+                        "ifn" -> "if (value == null) {\n$leadingIndent    \n$leadingIndent}" to (22 + leadingIndent.length + 4)
+                        "inn" -> "if (value != null) {\n$leadingIndent    \n$leadingIndent}" to (22 + leadingIndent.length + 4)
+                        else -> null
+                    }
+                    if (abbrevExpansion != null) {
+                        val (replacement, cursorDelta) = abbrevExpansion
+                        val wordStart = insertedIndex - trimmedLine.length
+                        val expandedText = oldText.substring(0, wordStart) + replacement + oldText.substring(insertedIndex)
+                        return TextFieldValue(
+                            text = expandedText,
+                            selection = TextRange((wordStart + cursorDelta).coerceIn(0, expandedText.length))
+                        )
+                    }
+                }
 
                 // A. Skip-over existing closing bracket/quote
                 if (insertedChar in CLOSING_CHARS && charAfterCursorInOld == insertedChar) {
@@ -833,6 +874,72 @@ object KotlinCodeEngine {
                         )
                     )
                 }
+
+                if (trimmed == "sout" || trimmed == "serr") {
+                    val replacement = if (trimmed == "sout") "println(\"\")" else "System.err.println(\"\")"
+                    val leading = rawLine.takeWhile { it == ' ' || it == '\t' }
+                    val fixed = code.replaceRange(lineStartOffset, lineEndOffset, leading + replacement)
+                    diagnostics.add(
+                        KotlinDiagnostic(
+                            line = lineNum,
+                            startOffset = lineStartOffset,
+                            endOffset = lineEndOffset,
+                            message = "Unexpanded IDE shorthand '$trimmed' on line $lineNum (use '$replacement')",
+                            severity = DiagnosticSeverity.ERROR,
+                            quickFixLabel = "Expand to $replacement",
+                            fixedCode = fixed
+                        )
+                    )
+                }
+
+                val typoKeywordMatch = Regex("""^\s*(funn|vall|varr)\b""").find(rawLine)
+                if (typoKeywordMatch != null) {
+                    val badKw = typoKeywordMatch.groupValues[1]
+                    val rightKw = when (badKw) {
+                        "funn" -> "fun"
+                        "vall" -> "val"
+                        else -> "var"
+                    }
+                    val kwIdx = rawLine.indexOf(badKw)
+                    val badStart = lineStartOffset + kwIdx
+                    val badEnd = badStart + badKw.length
+                    val fixed = code.replaceRange(badStart, badEnd, rightKw)
+                    diagnostics.add(
+                        KotlinDiagnostic(
+                            line = lineNum,
+                            startOffset = badStart,
+                            endOffset = badEnd,
+                            message = "Unknown keyword typo '$badKw' on line $lineNum; did you mean '$rightKw'?",
+                            severity = DiagnosticSeverity.ERROR,
+                            quickFixLabel = "Fix to '$rightKw'",
+                            fixedCode = fixed
+                        )
+                    )
+                }
+
+                val typoTypeMatch = Regex("""\b(Sting|Integar|Booleen)\b""").find(rawLine)
+                if (typoTypeMatch != null) {
+                    val badType = typoTypeMatch.groupValues[1]
+                    val rightType = when (badType) {
+                        "Sting" -> "String"
+                        "Integar" -> "Int"
+                        else -> "Boolean"
+                    }
+                    val badStart = lineStartOffset + typoTypeMatch.range.first
+                    val badEnd = badStart + badType.length
+                    val fixed = code.replaceRange(badStart, badEnd, rightType)
+                    diagnostics.add(
+                        KotlinDiagnostic(
+                            line = lineNum,
+                            startOffset = badStart,
+                            endOffset = badEnd,
+                            message = "Unresolved type '$badType' on line $lineNum; did you mean '$rightType'?",
+                            severity = DiagnosticSeverity.ERROR,
+                            quickFixLabel = "Change to '$rightType'",
+                            fixedCode = fixed
+                        )
+                    )
+                }
             }
 
             lineStartOffset = lineEndOffset + 1
@@ -1031,15 +1138,18 @@ object KotlinCodeEngine {
             }
             .toList()
 
-        val combinedPool = userDeclaredSymbols + BUILTIN_SUGGESTIONS
+        val combinedPool = POSTFIX_SUGGESTIONS + userDeclaredSymbols + BUILTIN_SUGGESTIONS
 
         if (prefix.isBlank()) {
-            return "" to BUILTIN_SUGGESTIONS.take(maxResults)
+            return "" to (POSTFIX_SUGGESTIONS.take(3) + BUILTIN_SUGGESTIONS.take(maxResults - 3))
         }
 
         val matches = combinedPool.filter { suggestion ->
-            suggestion.label.startsWith(prefix, ignoreCase = true) &&
-                suggestion.label != prefix
+            val triggerToken = suggestion.label.substringBefore(" ").trim()
+            (triggerToken.startsWith(prefix, ignoreCase = true) ||
+                suggestion.label.startsWith(prefix, ignoreCase = true) ||
+                (suggestion.category == "Postfix" && suggestion.insertText.startsWith(prefix, ignoreCase = true))) &&
+                suggestion.insertText != prefix
         }.distinctBy { it.label }
             .take(maxResults)
 

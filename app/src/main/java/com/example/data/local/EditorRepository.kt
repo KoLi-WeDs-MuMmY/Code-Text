@@ -9,13 +9,15 @@ import com.example.model.TextAlignmentChoice
 import com.example.model.TextFormattingStyle
 import com.example.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 
 class EditorRepository(
     private val dao: EditorDao,
     context: Context
 ) {
-    private val prefs = context.applicationContext.getSharedPreferences(
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences(
         "ktscribe_user_prefs",
         Context.MODE_PRIVATE
     )
@@ -30,7 +32,7 @@ class EditorRepository(
                         val first = sortedSections.first()
                         first.explanationText.ifBlank { first.codeContent }.trim()
                     }
-                    else -> "Empty Kotlin note"
+                    else -> "Empty Kotlin folder"
                 }
                 val totalWords = countWords(item.document.introText) +
                     sortedSections.sumOf { countWords(it.codeContent) + countWords(it.explanationText) }
@@ -48,7 +50,7 @@ class EditorRepository(
 
                 DocumentSummaryUiModel(
                     id = item.document.id,
-                    title = item.document.title.ifBlank { "Untitled Document" },
+                    title = item.document.title.ifBlank { "Untitled Folder" },
                     previewSnippet = firstSnippet.replace("\n", " ").take(120),
                     sectionCount = sortedSections.size,
                     updatedAt = item.document.updatedAt,
@@ -57,6 +59,59 @@ class EditorRepository(
                 )
             }
         }
+
+    fun inspectVaultState(): VaultInspectionResult {
+        return VaultStorageManager.inspectVaultState(appContext)
+    }
+
+    suspend fun recoverFoldersFromHiddenVault(): Long? {
+        val recovered = VaultStorageManager.readRecoverableFolders(appContext)
+        var firstRecoveredId: Long? = null
+        val now = System.currentTimeMillis()
+        for (folder in recovered) {
+            val docId = dao.insertDocument(
+                DocumentEntity(
+                    title = folder.title.ifBlank { "Recovered Folder" },
+                    introText = folder.introText,
+                    introStyleJson = folder.introStyle.toJsonString(),
+                    createdAt = now,
+                    updatedAt = now
+                )
+            )
+            if (firstRecoveredId == null) firstRecoveredId = docId
+            val sectionEntities = folder.sections.mapIndexed { idx, sec ->
+                CodeSectionEntity(
+                    documentId = docId,
+                    orderIndex = idx,
+                    sectionTitle = sec.sectionTitle,
+                    isAiNamed = sec.isAiNamed,
+                    lastNamedHash = sec.lastNamedHash,
+                    codeContent = sec.codeContent,
+                    explanationText = sec.explanationText,
+                    explanationStyleJson = sec.explanationStyle.toJsonString(),
+                    showDivider = sec.showDivider
+                )
+            }
+            dao.insertSections(sectionEntities)
+        }
+        VaultStorageManager.markFirstLaunchGateCompleted(appContext)
+        syncAllFoldersToHiddenVault()
+        return firstRecoveredId
+    }
+
+    suspend fun initializeFreshHiddenVault(): Long? {
+        VaultStorageManager.resetCleanHiddenVault(appContext)
+        ensureSeedDocumentsIfNeeded()
+        syncAllFoldersToHiddenVault()
+        val firstDoc = dao.observeAllDocumentsWithSections().firstOrNull()?.firstOrNull()
+        return firstDoc?.document?.id
+    }
+
+    suspend fun syncAllFoldersToHiddenVault() {
+        val allRecords = dao.observeAllDocumentsWithSections().firstOrNull() ?: return
+        val details = allRecords.map { it.toDetailUiModel() }
+        VaultStorageManager.writeFoldersToHiddenVault(appContext, details)
+    }
 
     fun getShortcutLetter(): Char {
         val raw = prefs.getString(KEY_SHORTCUT_LETTER, "K") ?: "K"
@@ -69,8 +124,8 @@ class EditorRepository(
     }
 
     fun getThemeMode(): ThemeMode {
-        val raw = prefs.getString(KEY_THEME_MODE, ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
-        return ThemeMode.entries.find { it.name == raw } ?: ThemeMode.SYSTEM
+        val raw = prefs.getString(KEY_THEME_MODE, ThemeMode.DARK.name) ?: ThemeMode.DARK.name
+        return ThemeMode.entries.find { it.name == raw } ?: ThemeMode.DARK
     }
 
     fun setThemeMode(mode: ThemeMode) {
@@ -83,7 +138,7 @@ class EditorRepository(
     }
 
     suspend fun createNewDocument(
-        title: String = "Untitled Kotlin Note",
+        title: String = "New Kotlin Folder",
         withStarterSection: Boolean = true
     ): Long {
         val now = System.currentTimeMillis()
@@ -114,13 +169,14 @@ class EditorRepository(
                 )
             )
         }
+        syncAllFoldersToHiddenVault()
         return docId
     }
 
     suspend fun saveDocumentDetail(detail: DocumentDetailUiModel) {
         val docEntity = DocumentEntity(
             id = detail.id,
-            title = detail.title.ifBlank { "Untitled Kotlin Note" },
+            title = detail.title.ifBlank { "Untitled Kotlin Folder" },
             introText = detail.introText,
             introStyleJson = detail.introStyle.toJsonString(),
             updatedAt = System.currentTimeMillis()
@@ -140,6 +196,7 @@ class EditorRepository(
             )
         }
         dao.saveDocumentAndSections(docEntity, sectionEntities)
+        syncAllFoldersToHiddenVault()
     }
 
     suspend fun insertEmptySectionInDb(
@@ -163,6 +220,7 @@ class EditorRepository(
 
     suspend fun deleteDocument(documentId: Long) {
         dao.deleteDocumentById(documentId)
+        syncAllFoldersToHiddenVault()
     }
 
     suspend fun ensureSeedDocumentsIfNeeded() {
@@ -181,7 +239,7 @@ class EditorRepository(
         val doc1Id = dao.insertDocument(
             DocumentEntity(
                 title = "Kotlin Coroutines & Flow Architecture",
-                introText = "This architecture notebook documents reactive state streams in Kotlin. Press Ctrl+K (or tap + Code Block) anywhere to add a new 4-line auto-expanding Kotlin code section paired with its contextual explanation.",
+                introText = "Folder module for reactive state streams in Kotlin. Use the top macOS Dynamic Island to switch sections, open the floating Explanation window, or trigger live IDE abbreviations like sout -> println().",
                 introStyleJson = introStyle.toJsonString(),
                 createdAt = now - 3600_000L,
                 updatedAt = now - 120_000L
@@ -206,8 +264,8 @@ class EditorRepository(
                             val state: StateFlow<NoteUiState> = _state
                         }
                     """.trimIndent(),
-                    explanationText = "By modeling state with a sealed interface and exposing a read-only StateFlow, the UI layer observes deterministic state transitions without race conditions.",
-                    explanationStyleJson = serifStyle.toJsonString(),
+                    explanationText = "Concept Learned: Sealed Hierarchy\n\nBy modeling state with a sealed interface and exposing a read-only StateFlow, the UI layer observes deterministic state transitions without race conditions.",
+                    explanationStyleJson = serifStyle.copy(learnedConceptTag = "Sealed Hierarchy").toJsonString(),
                     showDivider = true
                 ),
                 CodeSectionEntity(
@@ -222,8 +280,8 @@ class EditorRepository(
                                 .map { it.trim().uppercase() }
                         }
                     """.trimIndent(),
-                    explanationText = "This helper cleans raw task titles by filtering out blank lines and normalizing casing. Add another code block below to trigger AI naming on any newly edited section!",
-                    explanationStyleJson = introStyle.toJsonString(),
+                    explanationText = "Concept Learned: Collection Pipeline\n\nThis helper cleans raw task titles by filtering out blank lines and normalizing casing. Try typing sout in the code editor to see live println() completion!",
+                    explanationStyleJson = introStyle.copy(learnedConceptTag = "Collection Pipeline").toJsonString(),
                     showDivider = true
                 )
             )
@@ -232,7 +290,7 @@ class EditorRepository(
         val doc2Id = dao.insertDocument(
             DocumentEntity(
                 title = "Kotlin Data Classes & Extension Idioms",
-                introText = "Quick reference for idiomatic Kotlin extension functions, value classes, and null-safety patterns.",
+                introText = "Folder module for idiomatic Kotlin extension functions, value classes, and null-safety patterns.",
                 introStyleJson = introStyle.copy(alignment = TextAlignmentChoice.LEFT).toJsonString(),
                 createdAt = now - 7200_000L,
                 updatedAt = now - 1800_000L
@@ -255,12 +313,13 @@ class EditorRepository(
                                 get() = lines.take(4).joinToString("\n")
                         }
                     """.trimIndent(),
-                    explanationText = "Data classes automatically generate equals, hashCode, toString, and copy while allowing lightweight computed properties like preview.",
-                    explanationStyleJson = introStyle.toJsonString(),
+                    explanationText = "Concept Learned: Immutable Data Class\n\nData classes automatically generate equals, hashCode, toString, and copy while allowing lightweight computed properties like preview.",
+                    explanationStyleJson = introStyle.copy(learnedConceptTag = "Immutable Data Class").toJsonString(),
                     showDivider = true
                 )
             )
         )
+        syncAllFoldersToHiddenVault()
     }
 
     private fun DocumentWithSections.toDetailUiModel(): DocumentDetailUiModel {

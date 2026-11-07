@@ -20,6 +20,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.components.FirstLaunchVaultRecoveryDialog
 import com.example.ui.components.ShortcutAndSettingsDialog
 import com.example.ui.screens.DocumentEditorScreen
 import com.example.ui.screens.DocumentListScreen
@@ -54,7 +55,7 @@ fun KtScribeApp(
     val documents by editorViewModel.filteredDocuments.collectAsStateWithLifecycle()
     var showSettingsDialog by remember { mutableStateOf(false) }
 
-    // Observe Activity lifecycle to immediately auto-save ongoing edits when minimizing or closing the app
+    // Observe Activity lifecycle to immediately auto-save ongoing edits and sync to Hidden Vault when minimizing or closing the app
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -94,13 +95,17 @@ fun KtScribeApp(
                     onCreateDocument = { editorViewModel.createAndOpenNewDocument() },
                     onDeleteDocument = editorViewModel::deleteDocument,
                     onCycleThemeMode = cycleThemeMode,
-                    onOpenSettings = { showSettingsDialog = true }
+                    onOpenSettings = { showSettingsDialog = true },
+                    onOpenVaultModal = editorViewModel::openVaultRecoveryDialog
                 )
             } else {
                 DocumentEditorScreen(
                     uiState = uiState,
                     document = activeDoc,
+                    allFolders = documents,
                     onCloseDocument = editorViewModel::closeActiveDocument,
+                    onSelectFolder = editorViewModel::openDocument,
+                    onCreateNewFolder = { title -> editorViewModel.createAndOpenNewDocument(title) },
                     onSaveNow = editorViewModel::saveNowManual,
                     onTitleChange = editorViewModel::updateDocumentTitle,
                     onIntroTextChange = editorViewModel::updateIntroText,
@@ -134,7 +139,25 @@ fun KtScribeApp(
                     onRedo = editorViewModel::redo,
                     onCycleThemeMode = cycleThemeMode,
                     onOpenSettings = { showSettingsDialog = true },
-                    onDismissBanner = editorViewModel::dismissBanners
+                    onDismissBanner = editorViewModel::dismissBanners,
+                    onToggleIslandDropdown = editorViewModel::toggleIslandDropdown,
+                    onCloseIslandDropdown = editorViewModel::closeIslandDropdown,
+                    onCycleExplanationWindowMode = editorViewModel::cycleExplanationWindowMode,
+                    onSetExplanationWindowMode = editorViewModel::setExplanationWindowMode,
+                    onUpdateSplitRatio = editorViewModel::updateSplitScreenRatio,
+                    onRunActiveSectionInTerminal = editorViewModel::runActiveSectionInTerminal,
+                    onOpenVaultModal = editorViewModel::openVaultRecoveryDialog
+                )
+            }
+
+            // First-Launch Storage Permission & Hidden Vault ("xyz") Recovery Dialog
+            val vaultInfo = uiState.vaultInspection
+            if (uiState.showVaultRecoveryDialog && vaultInfo != null) {
+                FirstLaunchVaultRecoveryDialog(
+                    vaultInspection = vaultInfo,
+                    onRecoverPreviousData = editorViewModel::recoverPreviousVaultData,
+                    onCreateNewVaultFolder = editorViewModel::createNewCleanVaultFolder,
+                    onDismiss = editorViewModel::dismissVaultRecoveryDialog
                 )
             }
 

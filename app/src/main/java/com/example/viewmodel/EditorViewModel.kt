@@ -10,11 +10,14 @@ import com.example.ai.SectionNamingResult
 import com.example.code.KotlinCodeEngine
 import com.example.data.local.EditorDatabase
 import com.example.data.local.EditorRepository
+import com.example.data.local.VaultInspectionResult
 import com.example.model.ActiveEditorTarget
 import com.example.model.CodeSectionUiModel
 import com.example.model.DocumentDetailUiModel
 import com.example.model.DocumentSummaryUiModel
 import com.example.model.EditorFontChoice
+import com.example.model.ExplanationWindowMode
+import com.example.model.IslandDropdownMenu
 import com.example.model.TextAlignmentChoice
 import com.example.model.TextFormattingStyle
 import com.example.ui.theme.ThemeMode
@@ -25,6 +28,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -35,19 +39,27 @@ data class EditorUiState(
     val searchQuery: String = "",
     val activeDocument: DocumentDetailUiModel? = null,
     val activeTarget: ActiveEditorTarget = ActiveEditorTarget.Intro,
-    // When true, ONLY the focused main section (Code + Explanation) is displayed so no other blocks clutter the view
-    val isFocusedSingleSectionMode: Boolean = false,
+    // Full-screen Apple cmd code editor focuses on the active section by default
+    val isFocusedSingleSectionMode: Boolean = true,
     val focusedSectionId: Long? = null,
     val newlyInsertedSectionId: Long? = null,
+    // macOS Dynamic Island & Resizable Floating/Split Windows state
+    val activeIslandDropdown: IslandDropdownMenu = IslandDropdownMenu.NONE,
+    val explanationWindowMode: ExplanationWindowMode = ExplanationWindowMode.FLOATING_WINDOW,
+    val splitScreenRatio: Float = 0.54f,
+    val terminalExecutionOutput: String? = null,
+    // First-Launch Storage Permission & Hidden Vault ("xyz") Recovery Gate
+    val showVaultRecoveryDialog: Boolean = false,
+    val vaultInspection: VaultInspectionResult? = null,
     val hasUnsavedChanges: Boolean = false,
     val secondsUntilAutoSave: Int = AUTO_SAVE_INTERVAL_SECONDS,
     val lastSavedTimestamp: Long? = null,
-    val saveStatusBanner: String = "All changes saved locally",
+    val saveStatusBanner: String = "Synced to Hidden Vault",
     val aiStatusMessage: String? = null,
     val aiErrorBanner: String? = null,
     val remainingAiRpmQuota: Int = AiSectionNamingService.FREE_TIER_SAFE_RPM_LIMIT,
     val shortcutLetter: Char = 'K',
-    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val themeMode: ThemeMode = ThemeMode.DARK,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false
 ) {
@@ -97,7 +109,8 @@ class EditorViewModel(
         } else {
             docs.filter { doc ->
                 doc.title.contains(trimmed, ignoreCase = true) ||
-                    doc.previewSnippet.contains(trimmed, ignoreCase = true)
+                    doc.previewSnippet.contains(trimmed, ignoreCase = true) ||
+                    doc.conceptTags.any { it.contains(trimmed, ignoreCase = true) }
             }
         }
     }.stateIn(
@@ -113,11 +126,26 @@ class EditorViewModel(
 
     init {
         viewModelScope.launch {
+            val vaultInfo = repository.inspectVaultState()
             repository.ensureSeedDocumentsIfNeeded()
             val quota = aiNamingService.getRemainingRpmSlots()
+            val summaries = repository.allDocumentSummaries.firstOrNull().orEmpty()
+            val initialFolderDetail = summaries.firstOrNull()?.let { repository.loadDocumentDetail(it.id) }
+            val firstSec = initialFolderDetail?.sections?.firstOrNull()
+
             _uiState.update {
                 it.copy(
                     isLoading = false,
+                    activeDocument = initialFolderDetail,
+                    focusedSectionId = firstSec?.id,
+                    isFocusedSingleSectionMode = firstSec != null,
+                    activeTarget = if (firstSec != null) {
+                        ActiveEditorTarget.SectionCode(firstSec.id, firstSec.orderIndex)
+                    } else {
+                        ActiveEditorTarget.Intro
+                    },
+                    vaultInspection = vaultInfo,
+                    showVaultRecoveryDialog = vaultInfo.isFirstLaunchGatePending,
                     remainingAiRpmQuota = quota
                 )
             }
@@ -134,17 +162,116 @@ class EditorViewModel(
                 if (current.activeDocument != null && current.hasUnsavedChanges) {
                     val nextSec = current.secondsUntilAutoSave - 1
                     if (nextSec <= 0) {
-                        persistActiveDocumentInternal(reason = "Auto-saved (30s cycle)")
+                        persistActiveDocumentInternal(reason = "Auto-saved to Hidden Vault (30s)")
                     } else {
                         _uiState.update {
                             it.copy(
                                 secondsUntilAutoSave = nextSec,
-                                saveStatusBanner = "Unsaved edits • Auto-save in ${nextSec}s"
+                                saveStatusBanner = "Auto-save in ${nextSec}s"
                             )
                         }
                     }
                 }
             }
+        }
+    }
+
+    fun openVaultRecoveryDialog() {
+        val vaultInfo = repository.inspectVaultState()
+        _uiState.update {
+            it.copy(
+                vaultInspection = vaultInfo,
+                showVaultRecoveryDialog = true
+            )
+        }
+    }
+
+    fun dismissVaultRecoveryDialog() {
+        _uiState.update { it.copy(showVaultRecoveryDialog = false) }
+    }
+
+    fun recoverPreviousVaultData() {
+        viewModelScope.launch {
+            val recoveredDocId = repository.recoverFoldersFromHiddenVault()
+            val updatedVaultInfo = repository.inspectVaultState()
+            if (recoveredDocId != null) {
+                openDocument(recoveredDocId)
+            }
+            _uiState.update {
+                it.copy(
+                    showVaultRecoveryDialog = false,
+                    vaultInspection = updatedVaultInfo,
+                    aiStatusMessage = "✓ Recovered previous folders from hidden vault (${updatedVaultInfo.vaultFolderName})"
+                )
+            }
+        }
+    }
+
+    fun createNewCleanVaultFolder() {
+        viewModelScope.launch {
+            val firstId = repository.initializeFreshHiddenVault()
+            val updatedVaultInfo = repository.inspectVaultState()
+            if (firstId != null) {
+                openDocument(firstId)
+            }
+            _uiState.update {
+                it.copy(
+                    showVaultRecoveryDialog = false,
+                    vaultInspection = updatedVaultInfo,
+                    aiStatusMessage = "✓ Initialized new hidden vault folder (.ktscribe_vault_xyz)"
+                )
+            }
+        }
+    }
+
+    fun toggleIslandDropdown(menu: IslandDropdownMenu) {
+        _uiState.update { current ->
+            val next = if (current.activeIslandDropdown == menu) IslandDropdownMenu.NONE else menu
+            current.copy(activeIslandDropdown = next)
+        }
+    }
+
+    fun closeIslandDropdown() {
+        _uiState.update { it.copy(activeIslandDropdown = IslandDropdownMenu.NONE) }
+    }
+
+    fun setExplanationWindowMode(mode: ExplanationWindowMode) {
+        _uiState.update {
+            it.copy(
+                explanationWindowMode = mode,
+                activeIslandDropdown = IslandDropdownMenu.NONE
+            )
+        }
+    }
+
+    fun cycleExplanationWindowMode() {
+        _uiState.update { current ->
+            val next = when (current.explanationWindowMode) {
+                ExplanationWindowMode.FLOATING_WINDOW -> ExplanationWindowMode.SPLIT_SCREEN
+                ExplanationWindowMode.SPLIT_SCREEN -> ExplanationWindowMode.HIDDEN
+                ExplanationWindowMode.HIDDEN -> ExplanationWindowMode.FLOATING_WINDOW
+            }
+            current.copy(explanationWindowMode = next)
+        }
+    }
+
+    fun updateSplitScreenRatio(newRatio: Float) {
+        _uiState.update {
+            it.copy(splitScreenRatio = newRatio.coerceIn(0.25f, 0.75f))
+        }
+    }
+
+    fun runActiveSectionInTerminal() {
+        val doc = _uiState.value.activeDocument ?: return
+        val activeSec = doc.sections.find { it.id == _uiState.value.focusedSectionId }
+            ?: doc.sections.firstOrNull()
+            ?: return
+        val output = KotlinCodeEngine.simulateKotlinExecution(activeSec.codeContent)
+        _uiState.update {
+            it.copy(
+                terminalExecutionOutput = output,
+                activeIslandDropdown = IslandDropdownMenu.TERMINAL_OUTPUT
+            )
         }
     }
 
@@ -172,14 +299,14 @@ class EditorViewModel(
     fun openDocument(documentId: Long) {
         viewModelScope.launch {
             if (_uiState.value.activeDocument != null && _uiState.value.hasUnsavedChanges) {
-                persistActiveDocumentInternal("Auto-saved before switching document")
+                persistActiveDocumentInternal("Auto-saved before switching folder")
             }
             val detail = repository.loadDocumentDetail(documentId) ?: return@launch
             undoStack.clear()
             redoStack.clear()
-            val initialTarget = if (detail.sections.isNotEmpty()) {
-                val lastSec = detail.sections.last()
-                ActiveEditorTarget.SectionCode(lastSec.id, lastSec.orderIndex)
+            val firstSec = detail.sections.firstOrNull()
+            val initialTarget = if (firstSec != null) {
+                ActiveEditorTarget.SectionCode(firstSec.id, firstSec.orderIndex)
             } else {
                 ActiveEditorTarget.Intro
             }
@@ -187,13 +314,14 @@ class EditorViewModel(
                 it.copy(
                     activeDocument = detail,
                     activeTarget = initialTarget,
-                    isFocusedSingleSectionMode = false,
-                    focusedSectionId = null,
+                    isFocusedSingleSectionMode = firstSec != null,
+                    focusedSectionId = firstSec?.id,
                     newlyInsertedSectionId = null,
+                    activeIslandDropdown = IslandDropdownMenu.NONE,
                     hasUnsavedChanges = false,
                     secondsUntilAutoSave = EditorUiState.AUTO_SAVE_INTERVAL_SECONDS,
                     lastSavedTimestamp = detail.updatedAt,
-                    saveStatusBanner = "Saved locally",
+                    saveStatusBanner = "Synced to Vault",
                     aiErrorBanner = null,
                     canUndo = false,
                     canRedo = false
@@ -205,10 +333,10 @@ class EditorViewModel(
     fun createAndOpenNewDocument(customTitle: String? = null) {
         viewModelScope.launch {
             if (_uiState.value.activeDocument != null && _uiState.value.hasUnsavedChanges) {
-                persistActiveDocumentInternal("Auto-saved before creating new document")
+                persistActiveDocumentInternal("Auto-saved before creating new folder")
             }
             val newDocId = repository.createNewDocument(
-                title = customTitle?.takeIf { it.isNotBlank() } ?: "Untitled Kotlin Note",
+                title = customTitle?.takeIf { it.isNotBlank() } ?: "New Kotlin Folder",
                 withStarterSection = true
             )
             openDocument(newDocId)
@@ -229,7 +357,7 @@ class EditorViewModel(
             debouncedAiNamingJobs.values.forEach { it.cancel() }
             debouncedAiNamingJobs.clear()
             if (_uiState.value.activeDocument != null && _uiState.value.hasUnsavedChanges) {
-                persistActiveDocumentInternal("Auto-saved on leaving document")
+                persistActiveDocumentInternal("Auto-saved on leaving folder")
             }
             undoStack.clear()
             redoStack.clear()
@@ -238,6 +366,7 @@ class EditorViewModel(
                     activeDocument = null,
                     isFocusedSingleSectionMode = false,
                     focusedSectionId = null,
+                    activeIslandDropdown = IslandDropdownMenu.NONE,
                     hasUnsavedChanges = false,
                     newlyInsertedSectionId = null,
                     aiErrorBanner = null,
@@ -250,21 +379,17 @@ class EditorViewModel(
     fun onAppMinimizedOrClosed() {
         viewModelScope.launch {
             if (_uiState.value.activeDocument != null && _uiState.value.hasUnsavedChanges) {
-                persistActiveDocumentInternal("Auto-saved on app minimize")
+                persistActiveDocumentInternal("Auto-saved to Hidden Vault")
             }
         }
     }
 
     fun saveNowManual() {
         viewModelScope.launch {
-            persistActiveDocumentInternal("Saved manually")
+            persistActiveDocumentInternal("Saved to Hidden Vault")
         }
     }
 
-    /**
-     * When the user clicks a section's Code Block or Explanation Block, automatically enters
-     * Focused Single-Section Mode so ONLY that main section is visible on screen (with dedicated scroll).
-     */
     fun setActiveTarget(target: ActiveEditorTarget) {
         when (target) {
             is ActiveEditorTarget.Intro -> {
@@ -324,7 +449,7 @@ class EditorViewModel(
     fun navigateFocusedSection(offset: Int) {
         val doc = _uiState.value.activeDocument ?: return
         if (doc.sections.isEmpty()) return
-        val currentId = _uiState.value.focusedSectionId ?: return
+        val currentId = _uiState.value.focusedSectionId ?: doc.sections.first().id
         val currentIdx = doc.sections.indexOfFirst { it.id == currentId }.takeIf { it >= 0 } ?: 0
         val nextIdx = (currentIdx + offset).coerceIn(0, doc.sections.lastIndex)
         val nextSec = doc.sections[nextIdx]
@@ -431,8 +556,10 @@ class EditorViewModel(
         _uiState.update { state ->
             state.copy(
                 activeTarget = ActiveEditorTarget.SectionCode(targetSec.id, targetSec.orderIndex),
+                isFocusedSingleSectionMode = true,
                 focusedSectionId = targetSec.id,
-                aiStatusMessage = "Jumped to Concept [${targetSec.effectiveLearnedConceptTag}] (Section #${targetSec.orderIndex + 1})"
+                activeIslandDropdown = IslandDropdownMenu.NONE,
+                aiStatusMessage = "Switched to §${targetSec.orderIndex + 1} [${targetSec.effectiveLearnedConceptTag}]"
             )
         }
     }
@@ -440,7 +567,7 @@ class EditorViewModel(
     fun exportActiveDocumentAsMarkdown(): String {
         val doc = _uiState.value.activeDocument ?: return ""
         return buildString {
-            appendLine("# ${doc.title.ifBlank { "Untitled Kotlin Notebook" }}")
+            appendLine("# 📁 ${doc.title.ifBlank { "Untitled Kotlin Folder" }}")
             if (doc.introText.isNotBlank()) {
                 appendLine()
                 appendLine(doc.introText.trim())
@@ -570,13 +697,14 @@ class EditorViewModel(
                     isFocusedSingleSectionMode = true,
                     focusedSectionId = newSectionId,
                     newlyInsertedSectionId = newSectionId,
+                    activeIslandDropdown = IslandDropdownMenu.NONE,
                     hasUnsavedChanges = true,
                     secondsUntilAutoSave = EditorUiState.AUTO_SAVE_INTERVAL_SECONDS,
-                    saveStatusBanner = "Added Code Block • Auto-save in ${EditorUiState.AUTO_SAVE_INTERVAL_SECONDS}s"
+                    saveStatusBanner = "Added Section • Auto-save in ${EditorUiState.AUTO_SAVE_INTERVAL_SECONDS}s"
                 )
             }
 
-            persistActiveDocumentInternal("Saved new code block section")
+            persistActiveDocumentInternal("Saved new code section to Vault")
 
             if (completedPreviousSection != null &&
                 (completedPreviousSection.codeContent.isNotBlank() || completedPreviousSection.explanationText.isNotBlank())
@@ -605,9 +733,6 @@ class EditorViewModel(
         }
     }
 
-    /**
-     * AI Studio Action: Reads the section's Kotlin code and writes a clear explanation into the explanation block.
-     */
     fun requestAiExplainForSection(sectionId: Long) {
         val doc = _uiState.value.activeDocument ?: return
         val sec = doc.sections.find { it.id == sectionId } ?: return
@@ -658,16 +783,18 @@ class EditorViewModel(
             _uiState.update {
                 it.copy(
                     aiStatusMessage = banner,
-                    remainingAiRpmQuota = quota
+                    remainingAiRpmQuota = quota,
+                    explanationWindowMode = if (it.explanationWindowMode == ExplanationWindowMode.HIDDEN) {
+                        ExplanationWindowMode.FLOATING_WINDOW
+                    } else {
+                        it.explanationWindowMode
+                    }
                 )
             }
             triggerAiNamingForSectionInternal(sectionId, forceOverwriteTitle = true)
         }
     }
 
-    /**
-     * AI Studio Action: Refactors and auto-fixes the section's Kotlin code into clean, idiomatic Kotlin.
-     */
     fun requestAiRefactorForSection(sectionId: Long) {
         val doc = _uiState.value.activeDocument ?: return
         val sec = doc.sections.find { it.id == sectionId } ?: return
@@ -711,9 +838,6 @@ class EditorViewModel(
         }
     }
 
-    /**
-     * AI Studio Action: Adds KDoc headers and inline comments to the section's Kotlin code.
-     */
     fun requestAiKDocForSection(sectionId: Long) {
         val doc = _uiState.value.activeDocument ?: return
         val sec = doc.sections.find { it.id == sectionId } ?: return
@@ -1009,7 +1133,7 @@ class EditorViewModel(
                 activeDocument = updated,
                 hasUnsavedChanges = true,
                 secondsUntilAutoSave = EditorUiState.AUTO_SAVE_INTERVAL_SECONDS,
-                saveStatusBanner = "Unsaved edits • Auto-save in ${EditorUiState.AUTO_SAVE_INTERVAL_SECONDS}s",
+                saveStatusBanner = "Auto-save in ${EditorUiState.AUTO_SAVE_INTERVAL_SECONDS}s",
                 canUndo = undoStack.isNotEmpty(),
                 canRedo = redoStack.isNotEmpty()
             )

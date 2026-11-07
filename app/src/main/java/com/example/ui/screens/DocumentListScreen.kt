@@ -23,15 +23,20 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SettingsBrightness
@@ -85,6 +90,7 @@ fun DocumentListScreen(
     onDeleteDocument: (Long) -> Unit,
     onCycleThemeMode: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenVaultModal: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val totalSections = documents.sumOf { it.sectionCount }
@@ -97,26 +103,26 @@ fun DocumentListScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(10.dp)
+                            color = Color(0xFF0A84FF).copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Terminal,
+                                    imageVector = Icons.Default.FolderSpecial,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(14.dp)
+                                    tint = Color(0xFF38BDF8),
+                                    modifier = Modifier.size(16.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = "KT",
+                                    text = "FOLDERS",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color(0xFF38BDF8)
                                 )
                             }
                         }
@@ -136,6 +142,38 @@ fun DocumentListScreen(
                     }
                 },
                 actions = {
+                    // Hidden Vault ("xyz") Recovery & Status Button
+                    Surface(
+                        color = Color(0xFF10B981).copy(alpha = 0.16f),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable(onClick = onOpenVaultModal)
+                            .testTag("home_vault_recovery_button")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "Hidden Vault Recovery",
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Vault 'xyz'",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF10B981)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
                     Surface(
                         color = MaterialTheme.colorScheme.secondaryContainer,
                         shape = RoundedCornerShape(10.dp),
@@ -189,7 +227,7 @@ fun DocumentListScreen(
                 onClick = onCreateDocument,
                 icon = {
                     Icon(
-                        imageVector = Icons.Default.Add,
+                        imageVector = Icons.Default.CreateNewFolder,
                         contentDescription = stringResource(R.string.new_document)
                     )
                 },
@@ -215,7 +253,7 @@ fun DocumentListScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 740.dp),
+                    .widthIn(max = 760.dp),
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 16.dp,
@@ -224,17 +262,17 @@ fun DocumentListScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // 1. Executive Studio Hero Banner + Telemetry Strip
+                // 1. macOS Dynamic Island & Apple cmd Workspace Banner
                 item {
                     HeroWorkspaceBanner(
                         shortcutLetter = shortcutLetter,
-                        documentCount = documents.size,
+                        folderCount = documents.size,
                         totalSections = totalSections,
                         learnedConceptsCount = allLearnedConcepts.size
                     )
                 }
 
-                // 2. Search Bar (searches titles, snippets, or learned concepts)
+                // 2. Search Bar (searches folders, Kotlin code, or learned concepts)
                 item {
                     OutlinedTextField(
                         value = searchQuery,
@@ -248,7 +286,7 @@ fun DocumentListScreen(
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Search,
-                                contentDescription = "Search Documents"
+                                contentDescription = "Search Folders"
                             )
                         },
                         trailingIcon = {
@@ -273,7 +311,7 @@ fun DocumentListScreen(
                     )
                 }
 
-                // 3. Document Cards or Empty State
+                // 3. Folder Cards or Empty State
                 if (documents.isEmpty()) {
                     item {
                         EmptyDocumentsCard(onCreateDocument = onCreateDocument)
@@ -282,11 +320,11 @@ fun DocumentListScreen(
                     items(
                         items = documents,
                         key = { it.id }
-                    ) { doc ->
-                        DocumentSummaryCard(
-                            document = doc,
-                            onClick = { onOpenDocument(doc.id) },
-                            onDelete = { onDeleteDocument(doc.id) }
+                    ) { folder ->
+                        FolderSummaryCard(
+                            folder = folder,
+                            onClick = { onOpenDocument(folder.id) },
+                            onDelete = { onDeleteDocument(folder.id) }
                         )
                     }
                 }
@@ -298,23 +336,23 @@ fun DocumentListScreen(
 @Composable
 private fun HeroWorkspaceBanner(
     shortcutLetter: Char,
-    documentCount: Int,
+    folderCount: Int,
     totalSections: Int,
     learnedConceptsCount: Int
 ) {
     Card(
-        shape = RoundedCornerShape(18.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(162.dp)
+                .height(168.dp)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.img_editor_hero_1794022926039),
-                contentDescription = "KtScribe Workspace Hero",
+                contentDescription = "KtScribe macOS Island Studio",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
@@ -324,26 +362,26 @@ private fun HeroWorkspaceBanner(
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                Color(0xF2080D14),
-                                Color(0xCC0D1522),
-                                Color(0x880D1522)
+                                Color(0xF5070A10),
+                                Color(0xD80D1522),
+                                Color(0x990D1522)
                             )
                         )
                     )
                     .padding(16.dp),
                 contentAlignment = Alignment.BottomStart
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Surface(
                             color = Color(0xFF10B981),
-                            shape = RoundedCornerShape(6.dp)
+                            shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
-                                text = "⌘ APPLE TERMINAL KOTLIN IDE",
+                                text = "● ● ●  MACOS DYNAMIC ISLAND & APPLE CMD",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.sp,
                                 color = Color(0xFF022C22),
@@ -352,11 +390,11 @@ private fun HeroWorkspaceBanner(
                             )
                         }
                         Surface(
-                            color = Color(0xFF38BDF8).copy(alpha = 0.2f),
-                            shape = RoundedCornerShape(6.dp)
+                            color = Color(0xFF38BDF8).copy(alpha = 0.22f),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
-                                text = "AI CONCEPT TAGGER",
+                                text = "sout ⇥ println()",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.sp,
                                 color = Color(0xFF38BDF8),
@@ -366,13 +404,13 @@ private fun HeroWorkspaceBanner(
                         }
                     }
                     Text(
-                        text = "Press Ctrl+$shortcutLetter for 4-Line Auto-Expanding Kotlin Blocks",
+                        text = "Full-Screen Apple cmd Kotlin Folders + Resizable Floating Windows",
                         style = MaterialTheme.typography.titleMedium,
                         color = Color.White,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "$documentCount Notebooks • $totalSections Code Sections • $learnedConceptsCount Learned Concepts • 30s Auto-Save",
+                        text = "$folderCount Folders • $totalSections Code Sections • $learnedConceptsCount Concepts • Hidden 'xyz' Vault Sync",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFCBD5E1)
                     )
@@ -383,58 +421,93 @@ private fun HeroWorkspaceBanner(
 }
 
 @Composable
-private fun DocumentSummaryCard(
-    document: DocumentSummaryUiModel,
+private fun FolderSummaryCard(
+    folder: DocumentSummaryUiModel,
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
     val dateFormat = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
-    val formattedDate = dateFormat.format(Date(document.updatedAt))
+    val formattedDate = dateFormat.format(Date(folder.updatedAt))
 
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         modifier = Modifier
             .fillMaxWidth()
             .border(
                 width = 1.dp,
                 color = MaterialTheme.colorScheme.outlineVariant,
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(18.dp)
             )
             .clickable(onClick = onClick)
-            .testTag("document_card_${document.id}")
+            .testTag("document_card_${folder.id}")
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(9.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = document.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.weight(1f)
-                )
+                ) {
+                    Surface(
+                        color = Color(0xFF0A84FF).copy(alpha = 0.16f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = Color(0xFF38BDF8),
+                            modifier = Modifier
+                                .padding(8.dp)
+                                .size(22.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Color(0xFFFF5F56)))
+                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Color(0xFFFFBD2E)))
+                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Color(0xFF27C93F)))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "FOLDER MODULE",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 9.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = folder.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
                 IconButton(
                     onClick = onDelete,
                     modifier = Modifier
                         .size(32.dp)
-                        .testTag("delete_document_${document.id}")
+                        .testTag("delete_document_${folder.id}")
                 ) {
                     Icon(
                         imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Delete Document",
+                        contentDescription = "Delete Folder",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )
@@ -442,15 +515,14 @@ private fun DocumentSummaryCard(
             }
 
             Text(
-                text = document.previewSnippet,
+                text = folder.previewSnippet,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
 
-            // Learned Concept Tags Strip on Document Summary Card
-            if (document.conceptTags.isNotEmpty()) {
+            if (folder.conceptTags.isNotEmpty()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -458,7 +530,7 @@ private fun DocumentSummaryCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    document.conceptTags.forEach { tag ->
+                    folder.conceptTags.forEach { tag ->
                         Surface(
                             color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f),
                             shape = RoundedCornerShape(6.dp)
@@ -500,14 +572,14 @@ private fun DocumentSummaryCard(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Code,
+                            imageVector = Icons.Default.Terminal,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(13.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "${document.sectionCount} Kotlin Sections",
+                            text = "${folder.sectionCount} Kotlin Sections",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -516,7 +588,7 @@ private fun DocumentSummaryCard(
                 }
 
                 Text(
-                    text = "${document.wordCount} words",
+                    text = "${folder.wordCount} words",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -524,7 +596,7 @@ private fun DocumentSummaryCard(
                 Spacer(modifier = Modifier.weight(1f))
 
                 Text(
-                    text = "Saved $formattedDate",
+                    text = "Vault synced $formattedDate",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -552,7 +624,7 @@ private fun EmptyDocumentsCard(onCreateDocument: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.Code,
+                imageVector = Icons.Default.FolderSpecial,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(40.dp)

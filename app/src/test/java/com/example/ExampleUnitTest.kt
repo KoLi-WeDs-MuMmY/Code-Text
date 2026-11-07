@@ -4,6 +4,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.example.ai.AiSectionNamingService
 import com.example.code.KotlinCodeEngine
+import com.example.data.local.VaultStorageManager
 import com.example.model.CodeSectionUiModel
 import com.example.model.EditorFontChoice
 import com.example.model.TextAlignmentChoice
@@ -11,6 +12,7 @@ import com.example.model.TextFormattingStyle
 import com.example.ui.theme.LightKotlinSyntaxColors
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -28,6 +30,40 @@ class ExampleUnitTest {
         )
         assertEquals(6, sixLineBlock.lineCount)
         assertEquals(6, sixLineBlock.visibleLineSlots)
+    }
+
+    @Test
+    fun `ide sout postfix abbreviation suggests and expands to println`() {
+        val code = "fun main() {\n    sout"
+        val (prefix, suggestions) = KotlinCodeEngine.getAutocompleteSuggestions(
+            code = code,
+            cursorPosition = code.length
+        )
+        assertEquals("sout", prefix)
+        assertTrue(suggestions.any { it.insertText == "println(\"\")" })
+
+        // Applying the sout suggestion replaces 'sout' with 'println("")' and places cursor inside quotes
+        val soutSuggestion = suggestions.first { it.insertText == "println(\"\")" }
+        val (expandedCode, cursor) = KotlinCodeEngine.applySuggestion(code, code.length, soutSuggestion)
+        assertEquals("fun main() {\n    println(\"\")", expandedCode)
+        assertEquals("fun main() {\n    println(\"".length, cursor)
+
+        // Pressing Space right after 'sout' also auto-expands to println("")
+        val beforeSpace = TextFieldValue("    sout", TextRange(8))
+        val afterSpace = TextFieldValue("    sout ", TextRange(9))
+        val autoExpanded = KotlinCodeEngine.processIdeTextEdit(beforeSpace, afterSpace)
+        assertEquals("    println(\"\")", autoExpanded.text)
+    }
+
+    @Test
+    fun `hidden vault manager obfuscates and decodes vault payload cleanly`() {
+        val sampleJson = """{"folders":[{"title":"Coroutines Lab","sections":2}]}"""
+        val encoded = VaultStorageManager.encodeVaultPayload(sampleJson)
+        assertTrue(encoded.startsWith("KTSCRIBE_VAULT_V2::"))
+        assertFalse(encoded.contains("Coroutines Lab")) // Not readable in plain text
+
+        val decoded = VaultStorageManager.decodeVaultPayload(encoded)
+        assertEquals(sampleJson, decoded)
     }
 
     @Test
@@ -102,11 +138,13 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun `ide syntax checker flags errors and provides quick fixes`() {
-        val badCode = "function greet(name: String) {\n    println(\"Hello\n}"
+    fun `ide syntax checker flags errors typos and unexpanded sout and provides quick fixes`() {
+        val badCode = "function greet(name: Sting) {\n    sout\n    println(\"Hello\n}"
         val diagnostics = KotlinCodeEngine.diagnoseKotlinSyntax(badCode)
         assertTrue(diagnostics.isNotEmpty())
         assertTrue(diagnostics.any { it.message.contains("'fun'") })
+        assertTrue(diagnostics.any { it.message.contains("String") })
+        assertTrue(diagnostics.any { it.message.contains("println(\"\")") })
         assertTrue(diagnostics.any { it.message.contains("Unclosed string literal") })
         assertNotNull(diagnostics.first().fixedCode)
     }

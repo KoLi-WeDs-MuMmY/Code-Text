@@ -1,6 +1,6 @@
 {
-  "summary": "Comprehensive implementation plan for KtScribe, a lightweight Android rich text and Kotlin code-notebook editor with auto-expanding Kotlin code blocks, paired code+explanation logical sections, rate-limited AI section naming on next-block creation, 30s + lifecycle auto-save in Room, customizable Ctrl+letter shortcuts, Dark/Light themes, and GitHub Actions CI workflow.",
-  "updatedAt": "2026-11-06T15:59:22.990285463Z",
-  "requestFeedback": true,
-  "userFacing": true
+  "summary":  "Updated implementation plan for KtScribe's macOS Dynamic Island & Floating Window makeover, including deterministic APK update signing, keep-data-on-uninstall support, first-launch hidden vault recovery, folders-only organization, full-screen Apple cmd code editor, resizable floating/split-screen explanation windows, and live IDE postfix suggestions (sout -> println()).",
+  "updatedAt":  "2026-11-07T12:14:34.478579481Z",
+  "requestFeedback":  true,
+  "userFacing":  true
 }

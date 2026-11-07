@@ -33,6 +33,40 @@ enum class TextAlignmentChoice(val displayName: String) {
     }
 }
 
+/**
+ * Controls how the paired Explanation Block is displayed relative to the full-screen Apple `cmd` Code Editor:
+ * - FLOATING_WINDOW: Draggable & resizable macOS floating window overlay (like macOS Notes).
+ * - SPLIT_SCREEN: Set aside into a two-window resizable split-screen workspace (Code Window + Explanation Window).
+ * - HIDDEN: Minimized into the top Floating Dynamic Island so the code block has 100% unobstructed screen space.
+ */
+enum class ExplanationWindowMode(val label: String) {
+    FLOATING_WINDOW("Floating Window"),
+    SPLIT_SCREEN("2-Window Split"),
+    HIDDEN("Minimized")
+}
+
+/**
+ * Controls which macOS resizable drop-down window is currently open beneath the Top Floating Dynamic Island.
+ */
+enum class IslandDropdownMenu {
+    NONE,
+    COMMAND_PALETTE,
+    FOLDER_AND_SECTIONS,
+    AI_STUDIO,
+    TERMINAL_OUTPUT
+}
+
+/**
+ * Filter categories inside the Floating Command Palette (matching the user's reference screenshot).
+ */
+enum class CommandPaletteFilter(val label: String) {
+    ALL("All"),
+    COMMANDS("Commands"),
+    FOLDERS("Folders"),
+    SYMBOLS("Symbols"),
+    CONCEPTS("Concepts")
+}
+
 data class TextFormattingStyle(
     val fontChoice: EditorFontChoice = EditorFontChoice.PLUS_JAKARTA,
     val fontSizeSp: Int = 16,
@@ -112,10 +146,6 @@ data class CodeSectionUiModel(
     val displayTitle: String
         get() = sectionTitle.ifBlank { "Section ${orderIndex + 1} • Untitled Kotlin Block" }
 
-    /**
-     * Returns the AI-generated or user-edited "Learned Concept Tag" for this code block,
-     * falling back to a smart concept tag inferred from the Kotlin code if not yet set.
-     */
     val effectiveLearnedConceptTag: String
         get() {
             val explicit = explanationStyle.learnedConceptTag.trim()
