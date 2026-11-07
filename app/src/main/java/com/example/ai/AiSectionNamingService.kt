@@ -2,6 +2,7 @@ package com.example.ai
 
 import android.util.Log
 import com.example.code.KotlinCodeEngine
+import com.example.model.CodeSectionUiModel
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.Schema
@@ -19,6 +20,7 @@ private const val TAG = "AiSectionNamingService"
 sealed interface SectionNamingResult {
     data class Success(
         val sectionTitle: String,
+        val learnedConceptTag: String,
         val contentHash: String,
         val remainingRpmQuota: Int,
         val isCloudAi: Boolean = true
@@ -27,12 +29,14 @@ sealed interface SectionNamingResult {
     data class RateLimited(
         val retryAfterSeconds: Int,
         val fallbackTitle: String,
+        val learnedConceptTag: String,
         val contentHash: String
     ) : SectionNamingResult
 
     data class Error(
         val message: String,
         val fallbackTitle: String,
+        val learnedConceptTag: String,
         val contentHash: String
     ) : SectionNamingResult
 }
@@ -41,23 +45,25 @@ sealed interface AiAssistOutput {
     data class Success(
         val outputText: String,
         val summaryBanner: String,
-        val remainingRpmQuota: Int
+        val remainingRpmQuota: Int,
+        val learnedConceptTag: String = ""
     ) : AiAssistOutput
 
     data class FallbackApplied(
         val outputText: String,
         val summaryBanner: String,
-        val remainingRpmQuota: Int
+        val remainingRpmQuota: Int,
+        val learnedConceptTag: String = ""
     ) : AiAssistOutput
 }
 
 /**
  * Stateless AI Studio Assistant for KtScribe:
- * - Zero backend data collection (all documents remain strictly in local on-device Room storage).
+ * - Strictly zero backend data collection (all documents remain 100% in local on-device Room storage).
  * - Enforces a 10 RPM sliding-window rate limiter for Google AI Studio free-tier safety.
  * - Provides 4 AI capabilities:
- *   1. Smart Section Naming (from Kotlin code + explanation)
- *   2. AI Explain Code (generates rich prose explanation for a Kotlin block)
+ *   1. Smart Section Naming + Learned Concept Tagging (from Kotlin code + explanation)
+ *   2. Thorough AI Code Explanation (3-part deep dive: Concept Learned, Step-by-Step Mechanics, Best Practices)
  *   3. AI Idiomatic Refactor & Auto-Fix (fixes syntax & refactors to idiomatic Kotlin)
  *   4. AI KDoc & Inline Comment Generator (documents Kotlin code blocks)
  */
@@ -67,12 +73,15 @@ class AiSectionNamingService(
 ) {
     private val rateLimitMutex = Mutex()
     private val requestTimestampsMs = ArrayDeque<Long>()
-    private val hashToTitleCache = ConcurrentHashMap<String, String>()
+    private val hashToTitleAndConceptCache = ConcurrentHashMap<String, Pair<String, String>>()
 
     private val sectionSchema = Schema.obj(
         properties = mapOf(
             "sectionTitle" to Schema.string(
                 description = "A concise, descriptive 3 to 6 word title summarizing the Kotlin code block and its explanation."
+            ),
+            "learnedConceptTag" to Schema.string(
+                description = "A 2 to 4 word tag naming the specific Kotlin concept or pattern learned in this code block (e.g., 'Sealed StateFlow', 'Coroutine Scope', 'Collection Pipeline', 'Data Class Copy')."
             )
         )
     )
@@ -119,19 +128,22 @@ class AiSectionNamingService(
         val trimmedExplanation = explanationText.trim()
         val contentHash = computeContentHash(trimmedCode, trimmedExplanation)
         val smartLocalTitle = deriveSmartLocalFallbackTitle(trimmedCode, trimmedExplanation, sectionNumber)
+        val smartLocalConcept = deriveLearnedConceptTag(trimmedCode, trimmedExplanation, sectionNumber)
 
         if (trimmedCode.isBlank() && trimmedExplanation.isBlank()) {
             return SectionNamingResult.Error(
-                message = "Write Kotlin code or an explanation first to name this section.",
+                message = "Write Kotlin code or an explanation first to name and tag this section.",
                 fallbackTitle = smartLocalTitle,
+                learnedConceptTag = smartLocalConcept,
                 contentHash = contentHash
             )
         }
 
-        hashToTitleCache[contentHash]?.let { cachedTitle ->
+        hashToTitleAndConceptCache[contentHash]?.let { (cachedTitle, cachedConcept) ->
             val remaining = getRemainingRpmSlots()
             return SectionNamingResult.Success(
                 sectionTitle = cachedTitle,
+                learnedConceptTag = cachedConcept,
                 contentHash = contentHash,
                 remainingRpmQuota = remaining,
                 isCloudAi = true
@@ -143,13 +155,17 @@ class AiSectionNamingService(
             return SectionNamingResult.RateLimited(
                 retryAfterSeconds = reservation.retryAfterSeconds,
                 fallbackTitle = smartLocalTitle,
+                learnedConceptTag = smartLocalConcept,
                 contentHash = contentHash
             )
         }
 
         val prompt = buildString {
-            appendLine("You are naming a logical section in a Kotlin developer notebook.")
-            appendLine("Read the Kotlin code snippet and its accompanying explanation below, and return a clear, specific 3 to 6 word section title (plain text, no quotes, no markdown).")
+            appendLine("You are naming a logical section in a Kotlin developer notebook and tagging the core concept learned.")
+            appendLine("Read the Kotlin code snippet and its accompanying explanation below.")
+            appendLine("Return JSON with:")
+            appendLine("1. sectionTitle: A clear, specific 3 to 6 word section title.")
+            appendLine("2. learnedConceptTag: A concise 2 to 4 word tag for the core Kotlin concept learned in this block (so the user can jump to this concept later).")
             appendLine()
             appendLine("Kotlin Code:")
             appendLine(trimmedCode.ifBlank { "// (No code provided)" }.take(1500))
@@ -159,21 +175,23 @@ class AiSectionNamingService(
         }
 
         return try {
-            val generatedTitle = withTimeout(35_000L) {
+            val (generatedTitle, generatedConcept) = withTimeout(35_000L) {
                 try {
                     val response = structuredModel.generateContent(prompt)
-                    parseTitleFromModelOutput(response.text.orEmpty())
+                    parseTitleAndConceptFromModelOutput(response.text.orEmpty(), smartLocalConcept)
                 } catch (inner: Exception) {
                     if (inner is CancellationException) throw inner
                     val fallbackResponse = fallbackTextModel.generateContent(prompt)
-                    parseTitleFromModelOutput(fallbackResponse.text.orEmpty())
+                    parseTitleAndConceptFromModelOutput(fallbackResponse.text.orEmpty(), smartLocalConcept)
                 }
             }
 
             val finalTitle = generatedTitle.ifBlank { smartLocalTitle }
-            hashToTitleCache[contentHash] = finalTitle
+            val finalConcept = generatedConcept.ifBlank { smartLocalConcept }
+            hashToTitleAndConceptCache[contentHash] = finalTitle to finalConcept
             SectionNamingResult.Success(
                 sectionTitle = finalTitle,
+                learnedConceptTag = finalConcept,
                 contentHash = contentHash,
                 remainingRpmQuota = reservation.remainingQuota,
                 isCloudAi = generatedTitle.isNotBlank()
@@ -181,8 +199,9 @@ class AiSectionNamingService(
         } catch (e: TimeoutCancellationException) {
             Log.e(TAG, "AI section title generation timed out", e)
             SectionNamingResult.Error(
-                message = "AI named section: \"$smartLocalTitle\"",
+                message = "Tagged [${smartLocalConcept}] • Named: \"$smartLocalTitle\"",
                 fallbackTitle = smartLocalTitle,
+                learnedConceptTag = smartLocalConcept,
                 contentHash = contentHash
             )
         } catch (e: CancellationException) {
@@ -190,27 +209,32 @@ class AiSectionNamingService(
         } catch (e: Exception) {
             Log.e(TAG, "Firebase AI section naming fallback to AST analyzer", e)
             SectionNamingResult.Error(
-                message = "AI named section: \"$smartLocalTitle\"",
+                message = "Tagged [${smartLocalConcept}] • Named: \"$smartLocalTitle\"",
                 fallbackTitle = smartLocalTitle,
+                learnedConceptTag = smartLocalConcept,
                 contentHash = contentHash
             )
         }
     }
 
     /**
-     * AI Studio Action 2: Generates a rich, clear developer explanation for the section's Kotlin code.
+     * AI Studio Action 2: Generates a thorough, structured developer explanation for the section's Kotlin code
+     * AND identifies the core "Learned Concept Tag" for instant navigation.
      */
     suspend fun generateCodeExplanation(
         codeContent: String,
-        existingExplanation: String
+        existingExplanation: String,
+        sectionNumber: Int = 1
     ): AiAssistOutput {
         val cleanCode = codeContent.trim()
+        val learnedConcept = deriveLearnedConceptTag(cleanCode, existingExplanation, sectionNumber)
         val localExplanation = synthesizeLocalCodeExplanation(cleanCode, existingExplanation)
         if (cleanCode.isBlank()) {
             return AiAssistOutput.FallbackApplied(
                 outputText = localExplanation,
-                summaryBanner = "Write Kotlin code in the terminal block above to generate an explanation.",
-                remainingRpmQuota = getRemainingRpmSlots()
+                summaryBanner = "Write Kotlin code in the terminal block above to generate a thorough explanation.",
+                remainingRpmQuota = getRemainingRpmSlots(),
+                learnedConceptTag = learnedConcept
             )
         }
 
@@ -218,16 +242,21 @@ class AiSectionNamingService(
         if (!reservation.allowed) {
             return AiAssistOutput.FallbackApplied(
                 outputText = localExplanation,
-                summaryBanner = "AI Explain applied (Free-tier RPM saver active)",
-                remainingRpmQuota = 0
+                summaryBanner = "✨ Thorough explanation & concept tag [$learnedConcept] generated (RPM saver)",
+                remainingRpmQuota = 0,
+                learnedConceptTag = learnedConcept
             )
         }
 
         val prompt = buildString {
-            appendLine("Explain the following Kotlin code concisely in 2 to 4 clear sentences for a technical notebook.")
-            appendLine("Focus on what the code does, key Kotlin idioms used, and how values flow. Do not use markdown code blocks in your response.")
+            appendLine("You are a senior Kotlin educator writing a thorough, crystal-clear explanation for a developer's learning notebook.")
+            appendLine("Analyze the Kotlin code below and write a comprehensive, structured explanation in plain text using these 3 sections:")
+            appendLine("🎯 Concept Learned: Explain the core Kotlin paradigm, syntax feature, or architectural pattern demonstrated.")
+            appendLine("⚙️ Execution & Data Flow: Walk through the code step-by-step (inputs, declarations, control flow, lambdas, and output).")
+            appendLine("💡 Idiomatic Takeaways & Best Practices: Highlight why this pattern is effective in Kotlin (type safety, immutability, performance, or edge cases).")
+            appendLine("Do not wrap your response in markdown code fences.")
             appendLine()
-            appendLine(cleanCode.take(2000))
+            appendLine(cleanCode.take(2200))
         }
 
         return try {
@@ -237,24 +266,27 @@ class AiSectionNamingService(
             if (responseText.isNotBlank()) {
                 AiAssistOutput.Success(
                     outputText = responseText,
-                    summaryBanner = "✨ AI generated explanation (${reservation.remainingQuota} RPM left)",
-                    remainingRpmQuota = reservation.remainingQuota
+                    summaryBanner = "✨ Thorough AI explanation & learned tag [$learnedConcept] ready (${reservation.remainingQuota} RPM left)",
+                    remainingRpmQuota = reservation.remainingQuota,
+                    learnedConceptTag = learnedConcept
                 )
             } else {
                 AiAssistOutput.FallbackApplied(
                     outputText = localExplanation,
-                    summaryBanner = "✨ Generated smart Kotlin explanation",
-                    remainingRpmQuota = reservation.remainingQuota
+                    summaryBanner = "✨ Thorough Kotlin explanation & learned tag [$learnedConcept] generated",
+                    remainingRpmQuota = reservation.remainingQuota,
+                    learnedConceptTag = learnedConcept
                 )
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Using local AST explanation synthesizer", e)
+            Log.w(TAG, "Using local thorough AST explanation synthesizer", e)
             AiAssistOutput.FallbackApplied(
                 outputText = localExplanation,
-                summaryBanner = "✨ Generated smart Kotlin explanation",
-                remainingRpmQuota = getRemainingRpmSlots()
+                summaryBanner = "✨ Thorough Kotlin explanation & learned tag [$learnedConcept] generated",
+                remainingRpmQuota = getRemainingRpmSlots(),
+                learnedConceptTag = learnedConcept
             )
         }
     }
@@ -264,12 +296,14 @@ class AiSectionNamingService(
      */
     suspend fun refactorAndFixKotlinCode(codeContent: String): AiAssistOutput {
         val cleanCode = codeContent.trim()
+        val learnedConcept = deriveLearnedConceptTag(cleanCode, "", 1)
         val locallyRefactored = applyLocalIdiomaticRefactor(cleanCode)
         if (cleanCode.isBlank()) {
             return AiAssistOutput.FallbackApplied(
                 outputText = codeContent,
                 summaryBanner = "Code block is empty.",
-                remainingRpmQuota = getRemainingRpmSlots()
+                remainingRpmQuota = getRemainingRpmSlots(),
+                learnedConceptTag = learnedConcept
             )
         }
 
@@ -278,7 +312,8 @@ class AiSectionNamingService(
             return AiAssistOutput.FallbackApplied(
                 outputText = locallyRefactored,
                 summaryBanner = "✨ Applied idiomatic Kotlin refactor & syntax fixes",
-                remainingRpmQuota = 0
+                remainingRpmQuota = 0,
+                learnedConceptTag = learnedConcept
             )
         }
 
@@ -295,16 +330,19 @@ class AiSectionNamingService(
             }
             val strippedCode = stripMarkdownCodeFences(rawReply)
             if (strippedCode.isNotBlank()) {
+                val formatted = KotlinCodeEngine.formatKotlinCode(strippedCode)
                 AiAssistOutput.Success(
-                    outputText = KotlinCodeEngine.formatKotlinCode(strippedCode),
+                    outputText = formatted,
                     summaryBanner = "✨ AI refactored & formatted Kotlin code (${reservation.remainingQuota} RPM left)",
-                    remainingRpmQuota = reservation.remainingQuota
+                    remainingRpmQuota = reservation.remainingQuota,
+                    learnedConceptTag = deriveLearnedConceptTag(formatted, "", 1)
                 )
             } else {
                 AiAssistOutput.FallbackApplied(
                     outputText = locallyRefactored,
                     summaryBanner = "✨ Applied idiomatic Kotlin refactor & syntax fixes",
-                    remainingRpmQuota = reservation.remainingQuota
+                    remainingRpmQuota = reservation.remainingQuota,
+                    learnedConceptTag = learnedConcept
                 )
             }
         } catch (e: CancellationException) {
@@ -314,7 +352,8 @@ class AiSectionNamingService(
             AiAssistOutput.FallbackApplied(
                 outputText = locallyRefactored,
                 summaryBanner = "✨ Applied idiomatic Kotlin refactor & syntax fixes",
-                remainingRpmQuota = getRemainingRpmSlots()
+                remainingRpmQuota = getRemainingRpmSlots(),
+                learnedConceptTag = learnedConcept
             )
         }
     }
@@ -324,12 +363,14 @@ class AiSectionNamingService(
      */
     suspend fun addKDocAndCommentsToCode(codeContent: String): AiAssistOutput {
         val cleanCode = codeContent.trim()
+        val learnedConcept = deriveLearnedConceptTag(cleanCode, "", 1)
         val locallyDocumented = synthesizeLocalKDocCode(cleanCode)
         if (cleanCode.isBlank()) {
             return AiAssistOutput.FallbackApplied(
                 outputText = codeContent,
                 summaryBanner = "Code block is empty.",
-                remainingRpmQuota = getRemainingRpmSlots()
+                remainingRpmQuota = getRemainingRpmSlots(),
+                learnedConceptTag = learnedConcept
             )
         }
 
@@ -338,7 +379,8 @@ class AiSectionNamingService(
             return AiAssistOutput.FallbackApplied(
                 outputText = locallyDocumented,
                 summaryBanner = "✨ Added KDoc & inline comments",
-                remainingRpmQuota = 0
+                remainingRpmQuota = 0,
+                learnedConceptTag = learnedConcept
             )
         }
 
@@ -358,13 +400,15 @@ class AiSectionNamingService(
                 AiAssistOutput.Success(
                     outputText = KotlinCodeEngine.formatKotlinCode(stripped),
                     summaryBanner = "✨ AI added KDoc & inline comments (${reservation.remainingQuota} RPM left)",
-                    remainingRpmQuota = reservation.remainingQuota
+                    remainingRpmQuota = reservation.remainingQuota,
+                    learnedConceptTag = learnedConcept
                 )
             } else {
                 AiAssistOutput.FallbackApplied(
                     outputText = locallyDocumented,
                     summaryBanner = "✨ Added KDoc & inline comments",
-                    remainingRpmQuota = reservation.remainingQuota
+                    remainingRpmQuota = reservation.remainingQuota,
+                    learnedConceptTag = learnedConcept
                 )
             }
         } catch (e: CancellationException) {
@@ -374,7 +418,8 @@ class AiSectionNamingService(
             AiAssistOutput.FallbackApplied(
                 outputText = locallyDocumented,
                 summaryBanner = "✨ Added KDoc & inline comments",
-                remainingRpmQuota = getRemainingRpmSlots()
+                remainingRpmQuota = getRemainingRpmSlots(),
+                learnedConceptTag = learnedConcept
             )
         }
     }
@@ -393,7 +438,6 @@ class AiSectionNamingService(
 
     fun applyLocalIdiomaticRefactor(code: String): String {
         var current = code
-        // Apply all syntax diagnostic quick-fixes iteratively
         repeat(5) {
             val diagWithFix = KotlinCodeEngine.diagnoseKotlinSyntax(current)
                 .firstOrNull { it.fixedCode != null }
@@ -406,8 +450,15 @@ class AiSectionNamingService(
         return KotlinCodeEngine.formatKotlinCode(current)
     }
 
+    /**
+     * Synthesizes a thorough, 3-part developer explanation covering:
+     * 1. 🎯 Concept Learned
+     * 2. ⚙️ Step-by-Step Execution & Data Flow
+     * 3. 💡 Idiomatic Kotlin & Best Practices
+     */
     fun synthesizeLocalCodeExplanation(code: String, existingExplanation: String): String {
         if (code.isBlank()) return existingExplanation
+        val conceptTag = deriveLearnedConceptTag(code, existingExplanation, 1)
         val functions = Regex("""\b(?:suspend\s+)?fun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)""")
             .findAll(code).map { "${it.groupValues[1]}(${it.groupValues[2].trim()})" }.toList()
         val classes = Regex("""\b(?:data\s+|sealed\s+)?(?:class|interface|object)\s+([A-Za-z_][A-Za-z0-9_]*)""")
@@ -415,30 +466,55 @@ class AiSectionNamingService(
         val properties = Regex("""\b(val|var)\s+([A-Za-z_][A-Za-z0-9_]*)""")
             .findAll(code).map { "${it.groupValues[1]} ${it.groupValues[2]}" }.toList()
         val colors = KotlinCodeEngine.detectColorCodes(code)
+        val metrics = KotlinCodeEngine.analyzeCodeMetrics(code)
 
-        val parts = mutableListOf<String>()
+        val mechanics = mutableListOf<String>()
         if (classes.isNotEmpty()) {
-            parts.add("Defines the Kotlin type structure ${classes.joinToString(", ")} to model domain state cleanly.")
+            mechanics.add("Declares the type structure ${classes.joinToString(", ")} to encapsulate domain state with compile-time type safety.")
         }
         if (functions.isNotEmpty()) {
-            parts.add("Implements ${functions.joinToString(", ")} with scoped execution and type-safe parameters.")
+            mechanics.add("Defines ${functions.joinToString(", ")} with clear parameter contracts and scoped execution.")
         }
         if (properties.isNotEmpty()) {
-            parts.add("Declares ${properties.take(4).joinToString(", ")} for clear state management.")
+            mechanics.add("Initializes ${properties.take(5).joinToString(", ")} (${metrics.immutabilityPercent}% immutable val ratio) to hold intermediate or exposed values.")
         }
         if (code.contains("Flow") || code.contains("StateFlow")) {
-            parts.add("Uses Kotlin Coroutines Flow/StateFlow to emit reactive state updates safely.")
+            mechanics.add("Streams state updates reactively using Kotlin Coroutines Flow/StateFlow so observers always receive deterministic emissions.")
         }
         if (code.contains("filter") || code.contains("map") || code.contains("forEach")) {
-            parts.add("Applies functional collection pipelines to transform elements declaratively.")
+            mechanics.add("Chains functional collection operators (.filter / .map / .forEach) to transform sequences without mutating the source collection.")
         }
         if (colors.isNotEmpty()) {
-            parts.add("Configures ${colors.size} hex color literal(s) (${colors.joinToString { it.rawToken }}) for UI styling.")
+            mechanics.add("Applies ${colors.size} hex color literal(s) (${colors.joinToString { it.rawToken }}) for visual UI styling.")
         }
-        if (parts.isEmpty()) {
-            parts.add("Executes this ${code.lines().size}-line Kotlin block and evaluates expressions sequentially.")
+        if (mechanics.isEmpty()) {
+            mechanics.add("Executes this ${code.lines().size}-line Kotlin snippet sequentially and evaluates its expressions.")
         }
-        return parts.joinToString(" ")
+
+        val takeaway = when {
+            code.contains("sealed ") ->
+                "Using sealed hierarchies enables exhaustive `when` expressions without needing a catch-all `else` branch, preventing unhandled states."
+            code.contains("data class") ->
+                "Kotlin `data class` automatically synthesizes `equals()`, `hashCode()`, `toString()`, and `copy()`, making immutable state updates concise."
+            code.contains("suspend ") || code.contains("coroutineScope") ->
+                "Structured concurrency ensures background work is automatically cancelled if the parent scope ends, preventing memory leaks."
+            metrics.varCount > 0 ->
+                "Consider replacing mutable `var` declarations with `val` where possible to maximize thread safety and predictability."
+            else ->
+                "Preferring immutable `val` bindings and small, single-responsibility functions keeps cyclomatic complexity (${metrics.complexityLabel}) easy to test and maintain."
+        }
+
+        return buildString {
+            appendLine("🎯 Concept Learned — $conceptTag:")
+            appendLine("This block demonstrates $conceptTag in Kotlin across ${code.lines().size} lines of code.")
+            appendLine()
+            appendLine("⚙️ Execution & Data Flow:")
+            mechanics.forEach { item ->
+                appendLine("• $item")
+            }
+            appendLine()
+            append("💡 Idiomatic Takeaways & Best Practices: $takeaway")
+        }
     }
 
     fun synthesizeLocalKDocCode(code: String): String {
@@ -464,20 +540,45 @@ class AiSectionNamingService(
         return result.joinToString("\n")
     }
 
-    private fun parseTitleFromModelOutput(rawOutput: String): String {
-        val trimmed = rawOutput.trim()
-        if (trimmed.isEmpty()) return ""
+    fun deriveLearnedConceptTag(
+        code: String,
+        explanation: String,
+        sectionNumber: Int
+    ): String {
+        return CodeSectionUiModel.inferSmartConceptTagFromCode(
+            code = code,
+            sectionTitle = explanation.take(28),
+            sectionNumber = sectionNumber
+        )
+    }
 
-        val jsonFieldMatch = Regex(""""sectionTitle"\s*:\s*"([^"]+)"""").find(trimmed)
-        if (jsonFieldMatch != null) {
-            return cleanTitleText(jsonFieldMatch.groupValues[1])
+    private fun parseTitleAndConceptFromModelOutput(
+        rawOutput: String,
+        defaultConcept: String
+    ): Pair<String, String> {
+        val trimmed = rawOutput.trim()
+        if (trimmed.isEmpty()) return "" to defaultConcept
+
+        val titleMatch = Regex(""""sectionTitle"\s*:\s*"([^"]+)"""").find(trimmed)
+        val conceptMatch = Regex(""""learnedConceptTag"\s*:\s*"([^"]+)"""").find(trimmed)
+
+        val parsedTitle = if (titleMatch != null) {
+            cleanTitleText(titleMatch.groupValues[1])
+        } else {
+            val firstLine = trimmed.lineSequence()
+                .map { it.trim() }
+                .firstOrNull { it.isNotBlank() && !it.startsWith("{") && !it.startsWith("}") && !it.startsWith("```") }
+                ?: ""
+            cleanTitleText(firstLine)
         }
 
-        val firstLine = trimmed.lineSequence()
-            .map { it.trim() }
-            .firstOrNull { it.isNotBlank() && !it.startsWith("{") && !it.startsWith("}") && !it.startsWith("```") }
-            ?: ""
-        return cleanTitleText(firstLine)
+        val parsedConcept = if (conceptMatch != null) {
+            cleanTitleText(conceptMatch.groupValues[1]).take(28)
+        } else {
+            defaultConcept
+        }
+
+        return parsedTitle to parsedConcept
     }
 
     private fun cleanTitleText(raw: String): String {

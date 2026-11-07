@@ -63,6 +63,25 @@ class ExampleUnitTest {
     }
 
     @Test
+    fun `ide metrics analyzer and surround-with and var-to-val refactoring work`() {
+        val code = "var count = 1\nval title = \"KtScribe\"\nfun compute(x: Int) {\n    if (x > 0) println(x)\n}"
+        val metrics = KotlinCodeEngine.analyzeCodeMetrics(code)
+        assertEquals(1, metrics.functionCount)
+        assertEquals(1, metrics.valCount)
+        assertEquals(1, metrics.varCount)
+        assertEquals(50, metrics.immutabilityPercent)
+
+        val (immutableCode, convertedCount) = KotlinCodeEngine.convertMutableVarsToVal(code)
+        assertEquals(1, convertedCount)
+        assertTrue(immutableCode.startsWith("val count = 1"))
+
+        val fieldVal = TextFieldValue("println(\" risky \")", TextRange(4))
+        val wrappedTry = KotlinCodeEngine.surroundSelectionOrLine(fieldVal, "try_catch")
+        assertTrue(wrappedTry.text.contains("try {"))
+        assertTrue(wrappedTry.text.contains("catch (e: Exception)"))
+    }
+
+    @Test
     fun `apple terminal simulator evaluates println output and syntax diagnostics`() {
         val code = """
             val user = "KtScribe"
@@ -134,7 +153,7 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun `text formatting style serializes and deserializes cleanly`() {
+    fun `text formatting style serializes and deserializes with learnedConceptTag`() {
         val style = TextFormattingStyle(
             fontChoice = EditorFontChoice.MERRIWEATHER,
             fontSizeSp = 20,
@@ -142,14 +161,16 @@ class ExampleUnitTest {
             isItalic = true,
             isUnderline = true,
             isStrikethrough = false,
-            alignment = TextAlignmentChoice.CENTER
+            alignment = TextAlignmentChoice.CENTER,
+            learnedConceptTag = "Sealed StateFlow"
         )
         val restored = TextFormattingStyle.fromJsonString(style.toJsonString())
         assertEquals(style, restored)
+        assertEquals("Sealed StateFlow", restored.learnedConceptTag)
     }
 
     @Test
-    fun `ai studio service computes titles explanations refactors and kdoc`() = runBlocking {
+    fun `ai studio service computes titles thorough explanations concept tags refactors and kdoc`() = runBlocking {
         val service = AiSectionNamingService(maxRequestsPerMinute = 10)
         val hash1 = service.computeContentHash("fun test() {}", "Explanation")
         val hash2 = service.computeContentHash("fun test() {}", "Explanation")
@@ -163,10 +184,20 @@ class ExampleUnitTest {
         )
         assertTrue(fallback.contains("Fetch User Profile"))
 
+        val conceptTag = service.deriveLearnedConceptTag(
+            code = "sealed interface UiState {\n    data object Loading : UiState\n}",
+            explanation = "",
+            sectionNumber = 1
+        )
+        assertEquals("Sealed Hierarchy", conceptTag)
+
         val localExplain = service.synthesizeLocalCodeExplanation(
             code = "suspend fun syncNotes(items: List<String>) {\n    println(items.size)\n}",
             existingExplanation = ""
         )
+        assertTrue(localExplain.contains("Concept Learned"))
+        assertTrue(localExplain.contains("Execution & Data Flow"))
+        assertTrue(localExplain.contains("Idiomatic Takeaways"))
         assertTrue(localExplain.contains("syncNotes"))
 
         val localRefactored = service.applyLocalIdiomaticRefactor(

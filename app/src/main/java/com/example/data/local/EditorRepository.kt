@@ -35,13 +35,25 @@ class EditorRepository(
                 val totalWords = countWords(item.document.introText) +
                     sortedSections.sumOf { countWords(it.codeContent) + countWords(it.explanationText) }
 
+                val conceptTags = sortedSections.map { sec ->
+                    val style = TextFormattingStyle.fromJsonString(sec.explanationStyleJson)
+                    style.learnedConceptTag.ifBlank {
+                        CodeSectionUiModel.inferSmartConceptTagFromCode(
+                            code = sec.codeContent,
+                            sectionTitle = sec.sectionTitle,
+                            sectionNumber = sec.orderIndex + 1
+                        )
+                    }
+                }.distinct().take(4)
+
                 DocumentSummaryUiModel(
                     id = item.document.id,
                     title = item.document.title.ifBlank { "Untitled Document" },
                     previewSnippet = firstSnippet.replace("\n", " ").take(120),
                     sectionCount = sortedSections.size,
                     updatedAt = item.document.updatedAt,
-                    wordCount = totalWords
+                    wordCount = totalWords,
+                    conceptTags = conceptTags
                 )
             }
         }

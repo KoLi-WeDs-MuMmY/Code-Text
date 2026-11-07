@@ -6,6 +6,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,18 +34,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloseFullscreen
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.SettingsBrightness
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,11 +58,16 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,13 +78,17 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -103,6 +117,9 @@ fun DocumentEditorScreen(
     onUpdateSectionCode: (Long, String) -> Unit,
     onUpdateSectionExplanation: (Long, String) -> Unit,
     onUpdateSectionTitle: (Long, String) -> Unit,
+    onUpdateSectionConceptTag: (Long, String) -> Unit = { _, _ -> },
+    onJumpToSectionConcept: (Long) -> Unit = {},
+    onExportMarkdown: () -> String = { "" },
     onFormatSectionCode: (Long) -> Unit,
     onRequestAiNaming: (Long) -> Unit,
     onRequestAiExplain: (Long) -> Unit = {},
@@ -130,9 +147,11 @@ fun DocumentEditorScreen(
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
+    val clipboardManager = LocalClipboardManager.current
+    val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
+    var showConceptOutlineDialog by remember { mutableStateOf(false) }
 
-    // Resolve the currently focused main block if Focused Single-Section Mode is active
     val focusedSection = if (uiState.isFocusedSingleSectionMode) {
         val targetId = uiState.focusedSectionId
             ?: (uiState.activeTarget as? ActiveEditorTarget.SectionCode)?.sectionId
@@ -142,9 +161,6 @@ fun DocumentEditorScreen(
         null
     }
 
-    // Back button behavior:
-    // If inside Focused Single-Section Mode, pressing Back returns to the All-Sections overview.
-    // Otherwise, pressing Back saves and closes the document.
     BackHandler {
         if (focusedSection != null) {
             focusManager.clearFocus()
@@ -158,7 +174,7 @@ fun DocumentEditorScreen(
     val listState = rememberLazyListState()
     val focusedSectionScrollState = rememberScrollState()
 
-    // Smoothly scroll to newly inserted code block when in All-Sections mode
+    // Smoothly scroll to newly inserted code block
     LaunchedEffect(uiState.newlyInsertedSectionId, focusedSection?.id) {
         val newId = uiState.newlyInsertedSectionId ?: return@LaunchedEffect
         if (focusedSection != null) {
@@ -177,20 +193,22 @@ fun DocumentEditorScreen(
         }
     }
 
-    // Automatic viewport angle alignment when clicking Code Block vs Explanation Block
-    // in Focused Single-Section Mode so the part chosen to write is positioned at the best angle above the keyboard.
+    // YouTube-Comment-Style Slide-Up Viewport Positioning when switching between Code and Explanation
     LaunchedEffect(uiState.activeTarget, focusedSection?.id) {
         if (focusedSection != null) {
-            delay(90)
+            delay(60)
             try {
                 when (uiState.activeTarget) {
                     is ActiveEditorTarget.SectionCode -> {
                         focusedSectionScrollState.animateScrollTo(0)
                     }
                     is ActiveEditorTarget.SectionExplanation -> {
-                        val targetScroll = (focusedSectionScrollState.maxValue * 0.65f).toInt()
-                            .coerceAtLeast(180)
-                        focusedSectionScrollState.animateScrollTo(targetScroll)
+                        // Because the code block automatically docks into a compact 3-line header when
+                        // writing an explanation, scrolling lightly brings the Explanation Block right to top eye-level!
+                        val dockOffsetPx = with(density) { 88.dp.toPx().toInt() }
+                        focusedSectionScrollState.animateScrollTo(
+                            dockOffsetPx.coerceAtMost(focusedSectionScrollState.maxValue)
+                        )
                     }
                     else -> {}
                 }
@@ -262,6 +280,8 @@ fun DocumentEditorScreen(
                                         uiState.saveStatusBanner
                                     },
                                     style = MaterialTheme.typography.labelMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     color = if (uiState.hasUnsavedChanges) {
                                         MaterialTheme.colorScheme.onSecondaryContainer
                                     } else {
@@ -272,6 +292,22 @@ fun DocumentEditorScreen(
                         }
                     },
                     actions = {
+                        // 1-Tap Copy Full Notebook as Markdown (.md)
+                        IconButton(
+                            onClick = {
+                                val md = onExportMarkdown()
+                                if (md.isNotBlank()) {
+                                    clipboardManager.setText(AnnotatedString(md))
+                                }
+                            },
+                            modifier = Modifier.testTag("export_markdown_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy Full Notebook as Markdown"
+                            )
+                        }
+
                         IconButton(
                             onClick = onSaveNow,
                             modifier = Modifier.testTag("save_now_button")
@@ -344,6 +380,124 @@ fun DocumentEditorScreen(
                     onRedo = onRedo
                 )
 
+                // =========================================================================
+                // LEARNED CONCEPT TAGS NAVIGATOR BAR (Jump directly to any learned concept!)
+                // =========================================================================
+                if (document.sections.isNotEmpty()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("learned_concepts_navigator_bar")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            // Open Concept Map Outline Dialog button
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { showConceptOutlineDialog = true }
+                                    .testTag("open_concept_map_button")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.List,
+                                        contentDescription = "Open Learned Concept Map",
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Concepts (${document.sections.size})",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+
+                            document.sections.forEachIndexed { idx, sec ->
+                                val isCurrentSection = focusedSection?.id == sec.id ||
+                                    (uiState.activeTarget as? ActiveEditorTarget.SectionCode)?.sectionId == sec.id ||
+                                    (uiState.activeTarget as? ActiveEditorTarget.SectionExplanation)?.sectionId == sec.id
+
+                                Surface(
+                                    color = if (isCurrentSection) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.surface
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .border(
+                                            width = 1.dp,
+                                            color = if (isCurrentSection) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.outlineVariant
+                                            },
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable {
+                                            onJumpToSectionConcept(sec.id)
+                                            coroutineScope.launch {
+                                                if (focusedSection != null) {
+                                                    focusedSectionScrollState.animateScrollTo(0)
+                                                } else {
+                                                    try {
+                                                        listState.animateScrollToItem(index = idx + 2)
+                                                    } catch (_: Exception) {
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        .testTag("jump_concept_chip_${sec.orderIndex}")
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.School,
+                                            contentDescription = null,
+                                            tint = if (isCurrentSection) {
+                                                MaterialTheme.colorScheme.onPrimary
+                                            } else {
+                                                MaterialTheme.colorScheme.primary
+                                            },
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "§${idx + 1} ${sec.effectiveLearnedConceptTag}",
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (isCurrentSection) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isCurrentSection) {
+                                                MaterialTheme.colorScheme.onPrimary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Single-Section Focus Navigation & Viewport Angle Bar (shown when a main block is focused)
                 AnimatedVisibility(visible = focusedSection != null) {
                     val activeSec = focusedSection
@@ -351,7 +505,7 @@ fun DocumentEditorScreen(
                         val totalSections = document.sections.size
                         val currentNumber = activeSec.orderIndex + 1
                         Surface(
-                            color = Color(0xFF1C1F26),
+                            color = Color(0xFF141923),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("focused_section_mode_bar")
@@ -365,7 +519,7 @@ fun DocumentEditorScreen(
                             ) {
                                 // Exit Focus Mode button (Show All Main Blocks)
                                 Surface(
-                                    color = Color(0xFF32D74B).copy(alpha = 0.18f),
+                                    color = Color(0xFF10B981).copy(alpha = 0.18f),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
@@ -382,7 +536,7 @@ fun DocumentEditorScreen(
                                         Icon(
                                             imageVector = Icons.Default.CloseFullscreen,
                                             contentDescription = "Show All Blocks",
-                                            tint = Color(0xFF32D74B),
+                                            tint = Color(0xFF10B981),
                                             modifier = Modifier.size(13.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
@@ -391,7 +545,7 @@ fun DocumentEditorScreen(
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF32D74B)
+                                            color = Color(0xFF10B981)
                                         )
                                     }
                                 }
@@ -405,7 +559,7 @@ fun DocumentEditorScreen(
                                     val isExpActive = uiState.activeTarget is ActiveEditorTarget.SectionExplanation
 
                                     Surface(
-                                        color = if (isCodeActive) Color(0xFF5AC8FA).copy(alpha = 0.22f) else Color.White.copy(alpha = 0.07f),
+                                        color = if (isCodeActive) Color(0xFF38BDF8).copy(alpha = 0.22f) else Color.White.copy(alpha = 0.07f),
                                         shape = RoundedCornerShape(6.dp),
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
@@ -425,21 +579,21 @@ fun DocumentEditorScreen(
                                             Icon(
                                                 imageVector = Icons.Default.Terminal,
                                                 contentDescription = null,
-                                                tint = if (isCodeActive) Color(0xFF5AC8FA) else Color(0xFF8E95A5),
+                                                tint = if (isCodeActive) Color(0xFF38BDF8) else Color(0xFF8B949E),
                                                 modifier = Modifier.size(12.dp)
                                             )
                                             Spacer(modifier = Modifier.width(3.dp))
                                             Text(
-                                                text = "Code Angle",
+                                                text = "Code View",
                                                 fontFamily = JetBrainsMonoFontFamily,
                                                 fontSize = 10.5.sp,
-                                                color = if (isCodeActive) Color(0xFF5AC8FA) else Color(0xFFE6EDF3)
+                                                color = if (isCodeActive) Color(0xFF38BDF8) else Color(0xFFE6EDF3)
                                             )
                                         }
                                     }
 
                                     Surface(
-                                        color = if (isExpActive) Color(0xFF5AC8FA).copy(alpha = 0.22f) else Color.White.copy(alpha = 0.07f),
+                                        color = if (isExpActive) Color(0xFF38BDF8).copy(alpha = 0.22f) else Color.White.copy(alpha = 0.07f),
                                         shape = RoundedCornerShape(6.dp),
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
@@ -447,10 +601,6 @@ fun DocumentEditorScreen(
                                                 onSetActiveTarget(
                                                     ActiveEditorTarget.SectionExplanation(activeSec.id, activeSec.orderIndex)
                                                 )
-                                                coroutineScope.launch {
-                                                    val target = (focusedSectionScrollState.maxValue * 0.75f).toInt().coerceAtLeast(200)
-                                                    focusedSectionScrollState.animateScrollTo(target)
-                                                }
                                             }
                                     ) {
                                         Row(
@@ -460,15 +610,15 @@ fun DocumentEditorScreen(
                                             Icon(
                                                 imageVector = Icons.Default.Description,
                                                 contentDescription = null,
-                                                tint = if (isExpActive) Color(0xFF5AC8FA) else Color(0xFF8E95A5),
+                                                tint = if (isExpActive) Color(0xFF38BDF8) else Color(0xFF8B949E),
                                                 modifier = Modifier.size(12.dp)
                                             )
                                             Spacer(modifier = Modifier.width(3.dp))
                                             Text(
-                                                text = "Explain Angle",
+                                                text = "Explain View",
                                                 fontFamily = JetBrainsMonoFontFamily,
                                                 fontSize = 10.5.sp,
-                                                color = if (isExpActive) Color(0xFF5AC8FA) else Color(0xFFE6EDF3)
+                                                color = if (isExpActive) Color(0xFF38BDF8) else Color(0xFFE6EDF3)
                                             )
                                         }
                                     }
@@ -487,7 +637,7 @@ fun DocumentEditorScreen(
                                         Icon(
                                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                                             contentDescription = "Previous Main Block",
-                                            tint = if (currentNumber > 1) Color(0xFFE6EDF3) else Color(0xFF8E95A5).copy(alpha = 0.4f),
+                                            tint = if (currentNumber > 1) Color(0xFFE6EDF3) else Color(0xFF8B949E).copy(alpha = 0.4f),
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
@@ -506,7 +656,7 @@ fun DocumentEditorScreen(
                                         Icon(
                                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                             contentDescription = "Next Main Block",
-                                            tint = if (currentNumber < totalSections) Color(0xFFE6EDF3) else Color(0xFF8E95A5).copy(alpha = 0.4f),
+                                            tint = if (currentNumber < totalSections) Color(0xFFE6EDF3) else Color(0xFF8B949E).copy(alpha = 0.4f),
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
@@ -585,11 +735,10 @@ fun DocumentEditorScreen(
         ) {
             if (focusedSection != null) {
                 // =========================================================================
-                // FOCUSED SINGLE-SECTION VIEWPORT MODE:
-                // When the user clicks on the Code Block or Explanation Block of a main section,
-                // ONLY that main block is visible on screen, with a dedicated vertical scroll
-                // container and generous bottom runway so any line can be positioned at eye-level
-                // above the on-screen keyboard.
+                // FOCUSED SINGLE-SECTION VIEWPORT MODE (YOUTUBE-STYLE SLIDE-UP & AUTO-SCROLL):
+                // Only the active main section is displayed, and as you type or add extra lines
+                // of code/explanation, `focusedSectionScrollState` automatically scrolls line-by-line
+                // so your active cursor line stays right at eye-level above the keyboard!
                 // =========================================================================
                 val isCodeActive = (uiState.activeTarget as? ActiveEditorTarget.SectionCode)?.sectionId == focusedSection.id
                 val isExplanationActive = (uiState.activeTarget as? ActiveEditorTarget.SectionExplanation)?.sectionId == focusedSection.id
@@ -603,7 +752,7 @@ fun DocumentEditorScreen(
                             start = 14.dp,
                             end = 14.dp,
                             top = 10.dp,
-                            bottom = 220.dp // Extra scroll runway so bottom lines & explanation sit high above keyboard
+                            bottom = 260.dp // Generous scroll runway so newly added lines slide up smoothly above the keyboard
                         )
                         .testTag("single_section_focused_scroll_container"),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -632,6 +781,31 @@ fun DocumentEditorScreen(
                         onCodeChange = { newCode -> onUpdateSectionCode(focusedSection.id, newCode) },
                         onExplanationChange = { newExp -> onUpdateSectionExplanation(focusedSection.id, newExp) },
                         onSectionTitleChange = { newTitle -> onUpdateSectionTitle(focusedSection.id, newTitle) },
+                        onConceptTagChange = { newTag -> onUpdateSectionConceptTag(focusedSection.id, newTag) },
+                        onActiveCodeLineChanged = { cursorLine, _ ->
+                            if (isCodeActive) {
+                                coroutineScope.launch {
+                                    // Smoothly slide the editor up by 22.dp for each line past line 3
+                                    val targetDp = ((cursorLine - 3).coerceAtLeast(0) * 22).dp
+                                    val targetPx = with(density) { targetDp.toPx().toInt() }
+                                    focusedSectionScrollState.animateScrollTo(
+                                        targetPx.coerceAtMost(focusedSectionScrollState.maxValue)
+                                    )
+                                }
+                            }
+                        },
+                        onActiveExplanationLineChanged = { expLine ->
+                            if (isExplanationActive) {
+                                coroutineScope.launch {
+                                    val baseDockDp = 88.dp
+                                    val extraLineDp = ((expLine - 2).coerceAtLeast(0) * 24).dp
+                                    val targetPx = with(density) { (baseDockDp + extraLineDp).toPx().toInt() }
+                                    focusedSectionScrollState.animateScrollTo(
+                                        targetPx.coerceAtMost(focusedSectionScrollState.maxValue)
+                                    )
+                                }
+                            }
+                        },
                         onFormatCode = { onFormatSectionCode(focusedSection.id) },
                         onRequestAiNaming = { onRequestAiNaming(focusedSection.id) },
                         onRequestAiExplain = { onRequestAiExplain(focusedSection.id) },
@@ -692,9 +866,7 @@ fun DocumentEditorScreen(
                 }
             } else {
                 // =========================================================================
-                // FULL DOCUMENT OVERVIEW MODE (All Sections + Document Title + Intro Prose)
-                // Clicking any section's Code Block or Explanation Block automatically enters
-                // Focused Single-Section Mode for distraction-free coding & explanation writing.
+                // FULL DOCUMENT OVERVIEW MODE
                 // =========================================================================
                 LazyColumn(
                     state = listState,
@@ -740,18 +912,18 @@ fun DocumentEditorScreen(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Text(
-                                    text = "${document.sections.size} Kotlin Sections",
+                                    text = "${document.sections.size} Learned Concepts",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "• ${document.totalWordCount} words • ${document.totalCharacterCount} chars",
+                                    text = "• ${document.totalCodeLines} Kotlin lines • ${document.totalWordCount} words",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = "• Local AI Studio: ${uiState.remainingAiRpmQuota}/10 RPM",
+                                    text = "• AI Quota: ${uiState.remainingAiRpmQuota}/10 RPM",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -800,8 +972,9 @@ fun DocumentEditorScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text(
-                                        text = "DOCUMENT INTRODUCTION / PROSE",
+                                        text = "NOTEBOOK OVERVIEW & SUMMARY",
                                         style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
@@ -891,6 +1064,7 @@ fun DocumentEditorScreen(
                             onCodeChange = { newCode -> onUpdateSectionCode(section.id, newCode) },
                             onExplanationChange = { newExp -> onUpdateSectionExplanation(section.id, newExp) },
                             onSectionTitleChange = { newTitle -> onUpdateSectionTitle(section.id, newTitle) },
+                            onConceptTagChange = { newTag -> onUpdateSectionConceptTag(section.id, newTag) },
                             onFormatCode = { onFormatSectionCode(section.id) },
                             onRequestAiNaming = { onRequestAiNaming(section.id) },
                             onRequestAiExplain = { onRequestAiExplain(section.id) },
@@ -928,5 +1102,142 @@ fun DocumentEditorScreen(
                 }
             }
         }
+    }
+
+    // =========================================================================
+    // LEARNED CONCEPTS & CODE OUTLINE NAVIGATION MODAL
+    // Allows jumping to any learned concept tag in Full View or Single-Section Focus Mode
+    // =========================================================================
+    if (showConceptOutlineDialog) {
+        AlertDialog(
+            onDismissRequest = { showConceptOutlineDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.School,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Column {
+                        Text(
+                            text = "Learned Concepts Navigator",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Tap any learned concept to jump directly to that part",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    document.sections.forEachIndexed { idx, sec ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    showConceptOutlineDialog = false
+                                    onJumpToSectionConcept(sec.id)
+                                    coroutineScope.launch {
+                                        if (focusedSection == null) {
+                                            try {
+                                                listState.animateScrollToItem(index = idx + 2)
+                                            } catch (_: Exception) {
+                                            }
+                                        }
+                                    }
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.primary,
+                                            shape = RoundedCornerShape(5.dp)
+                                        ) {
+                                            Text(
+                                                text = "§${idx + 1}",
+                                                fontFamily = JetBrainsMonoFontFamily,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimary,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                        Text(
+                                            text = sec.effectiveLearnedConceptTag,
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = sec.displayTitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "${sec.lineCount} lines of Kotlin • ${if (sec.explanationText.isBlank()) "No explanation yet" else "Thorough explanation ready"}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable {
+                                            showConceptOutlineDialog = false
+                                            onToggleFocusSection(sec.id)
+                                        }
+                                ) {
+                                    Text(
+                                        text = "Focus",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showConceptOutlineDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 }

@@ -27,23 +27,25 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Comment
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HorizontalRule
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -65,6 +67,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -100,19 +103,21 @@ import com.example.ui.theme.JetBrainsMonoFontFamily
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// Authentic Apple macOS Terminal (cmd / Terminal.app) palette
-private val MacTerminalChromeBg = Color(0xFF252830)
-private val MacTerminalSubBarBg = Color(0xFF1C1F26)
-private val MacTerminalCanvasBg = Color(0xFF121418)
-private val MacTerminalGutterBg = Color(0xFF171A20)
-private val MacTerminalConsoleBg = Color(0xFF0D0F12)
-private val MacTerminalBorder = Color(0xFF343844)
+// Authentic Apple macOS Terminal (cmd / Terminal.app) & Executive Studio palette
+private val MacTerminalChromeBg = Color(0xFF1E222B)
+private val MacTerminalSubBarBg = Color(0xFF161A22)
+private val MacTerminalCanvasBg = Color(0xFF0D1117)
+private val MacTerminalGutterBg = Color(0xFF121720)
+private val MacTerminalActiveLineBg = Color(0xFF192231)
+private val MacTerminalConsoleBg = Color(0xFF090C10)
+private val MacTerminalBorder = Color(0xFF2B3240)
 private val MacTrafficRed = Color(0xFFFF5F56)
 private val MacTrafficYellow = Color(0xFFFFBD2E)
 private val MacTrafficGreen = Color(0xFF27C93F)
-private val MacTerminalPromptGreen = Color(0xFF32D74B)
-private val MacTerminalCyan = Color(0xFF5AC8FA)
-private val MacTerminalMutedText = Color(0xFF8E95A5)
+private val MacTerminalPromptGreen = Color(0xFF10B981)
+private val MacTerminalCyan = Color(0xFF38BDF8)
+private val MacTerminalViolet = Color(0xFFA78BFA)
+private val MacTerminalMutedText = Color(0xFF8B949E)
 private val MacTerminalBrightText = Color(0xFFE6EDF3)
 
 private data class IdeColorPreset(
@@ -122,13 +127,13 @@ private data class IdeColorPreset(
 )
 
 private val IDE_COLOR_PRESETS = listOf(
+    IdeColorPreset("Emerald Pro", "0xFF10B981", Color(0xFF10B981)),
+    IdeColorPreset("Sky Cyan", "0xFF38BDF8", Color(0xFF38BDF8)),
     IdeColorPreset("Kotlin Violet", "0xFF7F52FF", Color(0xFF7F52FF)),
     IdeColorPreset("Apple Green", "0xFF32D74B", Color(0xFF32D74B)),
     IdeColorPreset("Coral Orange", "0xFFFF6B4A", Color(0xFFFF6B4A)),
-    IdeColorPreset("Sky Cyan", "0xFF5AC8FA", Color(0xFF5AC8FA)),
     IdeColorPreset("Warm Amber", "0xFFFFBD2E", Color(0xFFFFBD2E)),
     IdeColorPreset("Crimson Red", "0xFFFF5F56", Color(0xFFFF5F56)),
-    IdeColorPreset("Neon Rose", "0xFFFF2D55", Color(0xFFFF2D55)),
     IdeColorPreset("Pure White", "0xFFFFFFFF", Color(0xFFFFFFFF))
 )
 
@@ -149,7 +154,7 @@ private val QUICK_SYMBOL_KEYS = listOf(
     QuickSymbolKey("=", " = ", 0),
     QuickSymbolKey(":", ": ", 0),
     QuickSymbolKey(".", ".", 0),
-    QuickSymbolKey("?", "?", 0),
+    QuickSymbolKey("?:", " ?: ", 0),
     QuickSymbolKey("val", "val ", 0),
     QuickSymbolKey("fun", "fun ", 0),
     QuickSymbolKey("println", "println()", 1)
@@ -169,6 +174,9 @@ fun KotlinCodeSectionCard(
     onCodeChange: (String) -> Unit,
     onExplanationChange: (String) -> Unit,
     onSectionTitleChange: (String) -> Unit,
+    onConceptTagChange: (String) -> Unit = {},
+    onActiveCodeLineChanged: (Int, Int) -> Unit = { _, _ -> },
+    onActiveExplanationLineChanged: (Int) -> Unit = {},
     onFormatCode: () -> Unit,
     onRequestAiNaming: () -> Unit,
     onRequestAiExplain: () -> Unit = {},
@@ -179,7 +187,6 @@ fun KotlinCodeSectionCard(
     onDeleteSection: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Use Dark syntax colors inside the Apple Terminal code block so it always looks crisp like macOS Terminal
     val terminalSyntaxColors = DarkKotlinSyntaxColors
     val clipboardManager = LocalClipboardManager.current
     val density = LocalDensity.current
@@ -191,14 +198,18 @@ fun KotlinCodeSectionCard(
 
     var showColorPalettePicker by remember { mutableStateOf(false) }
     var showFindReplaceBar by remember { mutableStateOf(false) }
+    var showLiveTemplatesBar by remember { mutableStateOf(false) }
+    var showMetricsBar by remember { mutableStateOf(false) }
+    var isEditingConceptTag by remember { mutableStateOf(false) }
     var findQuery by remember { mutableStateOf("") }
     var replaceQuery by remember { mutableStateOf("") }
     var showAiStudioMenu by remember { mutableStateOf(false) }
     var terminalConsoleOutput by remember { mutableStateOf<String?>(null) }
     var isCodeFolded by remember { mutableStateOf(false) }
+    // When writing in the Explanation Block, dock the code block into a compact 3-line preview
+    // (like YouTube's docked video player when writing a comment!) unless the user explicitly expands it.
+    var userOverrodeExplainDock by remember { mutableStateOf(false) }
 
-    // Keep track of text layout results so we can bring the exact active cursor line into view
-    // at a comfortable viewing angle above the on-screen keyboard.
     var codeLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
     var explanationLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
@@ -218,6 +229,10 @@ fun KotlinCodeSectionCard(
                 selection = TextRange(section.explanationText.length)
             )
         )
+    }
+
+    var previousCodeLineCount by remember(section.id) {
+        mutableIntStateOf(section.lineCount)
     }
 
     LaunchedEffect(section.codeContent) {
@@ -240,27 +255,46 @@ fun KotlinCodeSectionCard(
         }
     }
 
-    // Automatically unfold code block when the user clicks to focus code
-    LaunchedEffect(isCodeFocused) {
-        if (isCodeFocused && isCodeFolded) {
+    // YouTube-style automatic docking:
+    // - Focusing Code unfolds the code editor so all lines are ready to edit.
+    // - Focusing Explanation resets userOverrodeExplainDock so the code block docks into a compact
+    //   3-line preview at the top and the Explanation Block slides right up above the keyboard!
+    LaunchedEffect(isCodeFocused, isExplanationFocused) {
+        if (isCodeFocused) {
             isCodeFolded = false
+            userOverrodeExplainDock = false
+        } else if (isExplanationFocused) {
+            userOverrodeExplainDock = false
         }
     }
 
+    val isDockedCompactForExplanation = isExplanationFocused && !userOverrodeExplainDock && !isCodeFolded
+
     // Keep the exact cursor line at the optimal viewing angle above the soft keyboard
-    fun bringActiveCodeLineIntoView(cursorOffset: Int) {
+    // and auto-scroll smoothly whenever a new line is added!
+    fun bringActiveCodeLineIntoView(cursorOffset: Int, currentText: String) {
+        val info = KotlinCodeEngine.getCursorPositionInfo(
+            TextFieldValue(currentText, TextRange(cursorOffset.coerceIn(0, currentText.length)))
+        )
+        onActiveCodeLineChanged(info.line, info.totalLines)
         coroutineScope.launch {
             try {
+                // Wait a frame if a new line was just added so layout updates its height first
+                if (info.totalLines != previousCodeLineCount) {
+                    previousCodeLineCount = info.totalLines
+                    delay(35)
+                }
                 val layout = codeLayoutResult
-                if (layout != null && codeFieldValue.text.isNotEmpty()) {
-                    val safeOffset = cursorOffset.coerceIn(0, codeFieldValue.text.length)
+                if (layout != null && currentText.isNotEmpty()) {
+                    val safeOffset = cursorOffset.coerceIn(0, currentText.length)
                     val cursorRect = layout.getCursorRect(safeOffset)
-                    val verticalPadPx = with(density) { 56.dp.toPx() }
+                    val topPadPx = with(density) { 48.dp.toPx() }
+                    val bottomPadPx = with(density) { 110.dp.toPx() }
                     val targetRect = Rect(
                         left = 0f,
-                        top = (cursorRect.top - verticalPadPx).coerceAtLeast(0f),
-                        right = cursorRect.right + 20f,
-                        bottom = cursorRect.bottom + verticalPadPx
+                        top = (cursorRect.top - topPadPx).coerceAtLeast(0f),
+                        right = cursorRect.right + 24f,
+                        bottom = cursorRect.bottom + bottomPadPx
                     )
                     codeBringIntoViewRequester.bringIntoView(targetRect)
                 } else {
@@ -271,19 +305,23 @@ fun KotlinCodeSectionCard(
         }
     }
 
-    fun bringActiveExplanationLineIntoView(cursorOffset: Int) {
+    fun bringActiveExplanationLineIntoView(cursorOffset: Int, currentText: String) {
+        val safeCursor = cursorOffset.coerceIn(0, currentText.length)
+        val currentLine = currentText.substring(0, safeCursor).count { it == '\n' } + 1
+        onActiveExplanationLineChanged(currentLine)
         coroutineScope.launch {
             try {
+                delay(25)
                 val layout = explanationLayoutResult
-                if (layout != null && explanationFieldValue.text.isNotEmpty()) {
-                    val safeOffset = cursorOffset.coerceIn(0, explanationFieldValue.text.length)
-                    val cursorRect = layout.getCursorRect(safeOffset)
-                    val verticalPadPx = with(density) { 56.dp.toPx() }
+                if (layout != null && currentText.isNotEmpty()) {
+                    val cursorRect = layout.getCursorRect(safeCursor)
+                    val topPadPx = with(density) { 44.dp.toPx() }
+                    val bottomPadPx = with(density) { 110.dp.toPx() }
                     val targetRect = Rect(
                         left = 0f,
-                        top = (cursorRect.top - verticalPadPx).coerceAtLeast(0f),
-                        right = cursorRect.right + 20f,
-                        bottom = cursorRect.bottom + verticalPadPx
+                        top = (cursorRect.top - topPadPx).coerceAtLeast(0f),
+                        right = cursorRect.right + 24f,
+                        bottom = cursorRect.bottom + bottomPadPx
                     )
                     explanationBringIntoViewRequester.bringIntoView(targetRect)
                 } else {
@@ -300,19 +338,22 @@ fun KotlinCodeSectionCard(
                 isCodeFolded = false
                 codeFocusRequester.requestFocus()
                 delay(120)
-                bringActiveCodeLineIntoView(codeFieldValue.selection.end)
+                bringActiveCodeLineIntoView(codeFieldValue.selection.end, codeFieldValue.text)
             } catch (_: Exception) {
             }
             onAutoFocusConsumed()
         }
     }
 
-    // Real-time IDE syntax diagnostics, detected colors, and cursor telemetry
+    // Real-time IDE syntax diagnostics, detected colors, metrics, and cursor telemetry
     val diagnostics = remember(codeFieldValue.text) {
         KotlinCodeEngine.diagnoseKotlinSyntax(codeFieldValue.text)
     }
     val detectedColors = remember(codeFieldValue.text) {
         KotlinCodeEngine.detectColorCodes(codeFieldValue.text)
+    }
+    val codeMetrics = remember(codeFieldValue.text) {
+        KotlinCodeEngine.analyzeCodeMetrics(codeFieldValue.text)
     }
     val cursorInfo = remember(codeFieldValue.text, codeFieldValue.selection.end) {
         KotlinCodeEngine.getCursorPositionInfo(codeFieldValue)
@@ -357,6 +398,7 @@ fun KotlinCodeSectionCard(
         if (section.showDivider && !isSingleSectionFocusMode) {
             SectionDividerBar(
                 sectionNumber = section.orderIndex + 1,
+                conceptTag = section.effectiveLearnedConceptTag,
                 onRemoveDivider = onToggleDivider,
                 testTag = "top_divider_section_${section.orderIndex}"
             )
@@ -387,12 +429,12 @@ fun KotlinCodeSectionCard(
 
         // 2. Main Section Card featuring Apple macOS Terminal (`cmd`) Code Window + Paired Explanation
         Card(
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface
             ),
             elevation = CardDefaults.cardElevation(
-                defaultElevation = if (isCodeFocused || isExplanationFocused) 6.dp else 3.dp
+                defaultElevation = if (isCodeFocused || isExplanationFocused) 8.dp else 3.dp
             ),
             modifier = Modifier
                 .fillMaxWidth()
@@ -404,18 +446,18 @@ fun KotlinCodeSectionCard(
                         isExplanationFocused -> MaterialTheme.colorScheme.primary
                         else -> MacTerminalBorder
                     },
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(16.dp)
                 )
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 // =========================================================================
-                // A. APPLE macOS TERMINAL (`cmd`) WINDOW TITLE BAR
+                // A. APPLE macOS TERMINAL (`cmd`) WINDOW TITLE BAR + LEARNED CONCEPT TAG
                 // =========================================================================
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(MacTerminalChromeBg)
-                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -424,7 +466,6 @@ fun KotlinCodeSectionCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
-                        // Red Traffic Light: Delete Section
                         Box(
                             modifier = Modifier
                                 .size(13.dp)
@@ -438,17 +479,19 @@ fun KotlinCodeSectionCard(
                                 text = "×",
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.Black.copy(alpha = 0.65f)
+                                color = Color.Black.copy(alpha = 0.7f)
                             )
                         }
 
-                        // Yellow Traffic Light: Minimize / Fold Code Editor (great when writing explanation!)
                         Box(
                             modifier = Modifier
                                 .size(13.dp)
                                 .clip(CircleShape)
                                 .background(MacTrafficYellow)
-                                .clickable { isCodeFolded = !isCodeFolded }
+                                .clickable {
+                                    isCodeFolded = !isCodeFolded
+                                    userOverrodeExplainDock = true
+                                }
                                 .testTag("fold_code_button_${section.orderIndex}"),
                             contentAlignment = Alignment.Center
                         ) {
@@ -456,11 +499,10 @@ fun KotlinCodeSectionCard(
                                 text = "−",
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.Black.copy(alpha = 0.65f)
+                                color = Color.Black.copy(alpha = 0.7f)
                             )
                         }
 
-                        // Green Traffic Light: Toggle Single-Section Focus Mode
                         Box(
                             modifier = Modifier
                                 .size(13.dp)
@@ -474,41 +516,49 @@ fun KotlinCodeSectionCard(
                                 text = "+",
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.Black.copy(alpha = 0.65f)
+                                color = Color.Black.copy(alpha = 0.7f)
                             )
                         }
                     }
 
-                    // Center: Apple Terminal Title (`⌘ zsh — section_X.kt — 80×N`)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
+                    // Center: Learned Concept Tag Pill (AI-generated tag of what was learned in this block!)
+                    Surface(
+                        color = MacTerminalViolet.copy(alpha = 0.18f),
+                        shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
-                            .weight(1f)
                             .padding(horizontal = 8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, MacTerminalViolet.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .clickable { isEditingConceptTag = !isEditingConceptTag }
+                            .testTag("learned_concept_badge_${section.orderIndex}")
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Terminal,
-                            contentDescription = null,
-                            tint = MacTerminalMutedText,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            text = "⌘ kotlin — section_${section.orderIndex + 1}.kt — 80×$visibleLines",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MacTerminalBrightText.copy(alpha = 0.9f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.School,
+                                contentDescription = "Learned Concept Tag",
+                                tint = MacTerminalViolet,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "Learned: ${section.effectiveLearnedConceptTag}",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MacTerminalBrightText,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
 
-                    // Right: Live Syntax Diagnostic Badge + Focus Pill
+                    // Right: Live Syntax Diagnostic Badge + Focus Mode Pill
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         val hasError = diagnostics.any { it.severity == DiagnosticSeverity.ERROR }
                         val statusColor = when {
@@ -536,7 +586,7 @@ fun KotlinCodeSectionCard(
                                 )
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text(
-                                    text = if (diagnostics.isEmpty()) "0 Err" else "${diagnostics.size} Issue",
+                                    text = if (diagnostics.isEmpty()) "OK" else "${diagnostics.size}",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 10.sp,
                                     color = statusColor,
@@ -562,7 +612,7 @@ fun KotlinCodeSectionCard(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.OpenInFull,
-                                    contentDescription = "Toggle Single-Block Focus View",
+                                    contentDescription = "Toggle Focus View",
                                     tint = if (isSingleSectionFocusMode) MacTerminalPromptGreen else MacTerminalMutedText,
                                     modifier = Modifier.size(11.dp)
                                 )
@@ -578,8 +628,79 @@ fun KotlinCodeSectionCard(
                     }
                 }
 
+                // Inline Concept Tag Editor (when user taps the Learned Concept badge to customize it)
+                AnimatedVisibility(visible = isEditingConceptTag) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MacTerminalSubBarBg)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bookmark,
+                            contentDescription = null,
+                            tint = MacTerminalViolet,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "Concept Tag:",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 11.sp,
+                            color = MacTerminalMutedText
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MacTerminalCanvasBg)
+                                .border(1.dp, MacTerminalViolet.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            BasicTextField(
+                                value = section.explanationStyle.learnedConceptTag,
+                                onValueChange = onConceptTagChange,
+                                singleLine = true,
+                                textStyle = TextStyle(
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 11.5.sp,
+                                    color = MacTerminalBrightText
+                                ),
+                                cursorBrush = SolidColor(MacTerminalViolet),
+                                decorationBox = { inner ->
+                                    if (section.explanationStyle.learnedConceptTag.isEmpty()) {
+                                        Text(
+                                            text = section.effectiveLearnedConceptTag,
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 11.5.sp,
+                                            color = MacTerminalMutedText
+                                        )
+                                    }
+                                    inner()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        Surface(
+                            color = MacTerminalViolet.copy(alpha = 0.22f),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.clickable { isEditingConceptTag = false }
+                        ) {
+                            Text(
+                                text = "Done",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MacTerminalViolet,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+
                 // =========================================================================
-                // B. SECTION TITLE & AI STUDIO + IDE TOOLBAR
+                // B. SECTION TITLE & PRO IDE + AI STUDIO TOOLBAR
                 // =========================================================================
                 Row(
                     modifier = Modifier
@@ -604,7 +725,6 @@ fun KotlinCodeSectionCard(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Editable / AI-Generated Section Title
                     Box(modifier = Modifier.weight(1f)) {
                         BasicTextField(
                             value = section.sectionTitle,
@@ -619,13 +739,15 @@ fun KotlinCodeSectionCard(
                                 if (section.sectionTitle.isBlank()) {
                                     Text(
                                         text = if (section.isNamingInProgress) {
-                                            "✨ AI Studio processing section…"
+                                            "✨ AI naming & tagging concept…"
                                         } else {
-                                            "Untitled Section #${section.orderIndex + 1} (Tap ✨ AI Studio)"
+                                            "Section #${section.orderIndex + 1} • ${section.effectiveLearnedConceptTag}"
                                         },
                                         style = MaterialTheme.typography.titleSmall,
                                         color = MacTerminalMutedText,
-                                        fontStyle = FontStyle.Italic
+                                        fontStyle = FontStyle.Italic,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                                 innerTextField()
@@ -642,7 +764,7 @@ fun KotlinCodeSectionCard(
                             terminalConsoleOutput = KotlinCodeEngine.simulateKotlinExecution(codeFieldValue.text)
                         },
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(29.dp)
                             .testTag("run_kotlin_button_${section.orderIndex}")
                     ) {
                         Icon(
@@ -653,13 +775,13 @@ fun KotlinCodeSectionCard(
                         )
                     }
 
-                    // ✨ AI Studio Dropdown Menu (Auto-Name, Explain Code, Refactor & Fix, Add KDoc)
+                    // ✨ AI Studio Dropdown Menu (Auto-Name + Concept Tag, Thorough Explain, Refactor, KDoc)
                     Box {
                         IconButton(
                             onClick = { showAiStudioMenu = true },
                             enabled = !section.isNamingInProgress,
                             modifier = Modifier
-                                .size(30.dp)
+                                .size(29.dp)
                                 .testTag("ai_name_button_${section.orderIndex}")
                         ) {
                             if (section.isNamingInProgress) {
@@ -685,9 +807,9 @@ fun KotlinCodeSectionCard(
                             DropdownMenuItem(
                                 text = {
                                     Column {
-                                        Text("✨ AI Auto-Name Section", fontWeight = FontWeight.SemiBold)
+                                        Text("✨ AI Name & Tag Learned Concept", fontWeight = FontWeight.SemiBold)
                                         Text(
-                                            "Generate semantic section title from code & explanation",
+                                            "Sets section title + Learned Concept Tag for quick jump navigation",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -702,9 +824,9 @@ fun KotlinCodeSectionCard(
                             DropdownMenuItem(
                                 text = {
                                     Column {
-                                        Text("📖 AI Explain Code → Explanation Block", fontWeight = FontWeight.SemiBold)
+                                        Text("📖 AI Thorough Deep-Dive Explanation", fontWeight = FontWeight.SemiBold)
                                         Text(
-                                            "Write a clear explanation below based on this Kotlin snippet",
+                                            "Generates Concept Learned, Step-by-Step Flow & Idiomatic Takeaways",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -721,7 +843,7 @@ fun KotlinCodeSectionCard(
                                     Column {
                                         Text("🛠 AI Refactor & Fix Syntax", fontWeight = FontWeight.SemiBold)
                                         Text(
-                                            "Fix syntax issues and upgrade to idiomatic Kotlin",
+                                            "Fixes syntax errors and upgrades to clean idiomatic Kotlin",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -738,7 +860,7 @@ fun KotlinCodeSectionCard(
                                     Column {
                                         Text("💬 AI Add KDoc & Inline Comments", fontWeight = FontWeight.SemiBold)
                                         Text(
-                                            "Insert KDoc headers and helpful code comments",
+                                            "Inserts KDoc headers and helpful code comments",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -753,18 +875,48 @@ fun KotlinCodeSectionCard(
                         }
                     }
 
+                    // ⚡ Live Kotlin Templates button
+                    IconButton(
+                        onClick = { showLiveTemplatesBar = !showLiveTemplatesBar },
+                        modifier = Modifier
+                            .size(29.dp)
+                            .testTag("live_templates_button_${section.orderIndex}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = "Insert Kotlin Live Template",
+                            tint = if (showLiveTemplatesBar) MacTrafficYellow else MacTerminalMutedText,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    // 📊 Code Metrics & Immutability Inspector button
+                    IconButton(
+                        onClick = { showMetricsBar = !showMetricsBar },
+                        modifier = Modifier
+                            .size(29.dp)
+                            .testTag("code_metrics_button_${section.orderIndex}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Analytics,
+                            contentDescription = "Inspect Code Complexity & Immutability",
+                            tint = if (showMetricsBar) MacTerminalPromptGreen else MacTerminalMutedText,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+
                     // 🔍 Find & Replace in Code button
                     IconButton(
                         onClick = { showFindReplaceBar = !showFindReplaceBar },
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(29.dp)
                             .testTag("find_replace_button_${section.orderIndex}")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = "Find and Replace in Code",
                             tint = if (showFindReplaceBar) MacTerminalCyan else MacTerminalMutedText,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     }
 
@@ -772,14 +924,14 @@ fun KotlinCodeSectionCard(
                     IconButton(
                         onClick = { showColorPalettePicker = !showColorPalettePicker },
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(29.dp)
                             .testTag("color_palette_button_${section.orderIndex}")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Palette,
                             contentDescription = "Insert or Edit Color Code",
                             tint = if (showColorPalettePicker) MacTrafficYellow else MacTerminalMutedText,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     }
 
@@ -787,14 +939,14 @@ fun KotlinCodeSectionCard(
                     IconButton(
                         onClick = onFormatCode,
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(29.dp)
                             .testTag("format_kotlin_button_${section.orderIndex}")
                     ) {
                         Icon(
                             imageVector = Icons.Default.AutoFixHigh,
                             contentDescription = "Format Kotlin Code",
                             tint = MacTrafficYellow,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     }
 
@@ -803,7 +955,7 @@ fun KotlinCodeSectionCard(
                         onClick = {
                             clipboardManager.setText(AnnotatedString(section.codeContent))
                         },
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(29.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
@@ -811,6 +963,143 @@ fun KotlinCodeSectionCard(
                             tint = MacTerminalMutedText,
                             modifier = Modifier.size(14.dp)
                         )
+                    }
+                }
+
+                // =========================================================================
+                // B2. ⚡ KOTLIN LIVE TEMPLATES STRIP (When Toggled)
+                // =========================================================================
+                AnimatedVisibility(visible = showLiveTemplatesBar) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MacTerminalChromeBg)
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Text(
+                            text = "⚡ Templates:",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MacTrafficYellow
+                        )
+                        KotlinCodeEngine.LIVE_TEMPLATES.forEach { tpl ->
+                            Surface(
+                                color = MacTerminalCanvasBg,
+                                shape = RoundedCornerShape(7.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(7.dp))
+                                    .border(1.dp, MacTerminalBorder, RoundedCornerShape(7.dp))
+                                    .clickable {
+                                        val base = codeFieldValue.text.trimEnd()
+                                        val updated = if (base.isEmpty()) tpl.snippet else "$base\n\n${tpl.snippet}"
+                                        codeFieldValue = TextFieldValue(
+                                            text = updated,
+                                            selection = TextRange(updated.length)
+                                        )
+                                        onCodeChange(updated)
+                                        showLiveTemplatesBar = false
+                                        bringActiveCodeLineIntoView(updated.length, updated)
+                                    }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Text(
+                                        text = tpl.badge,
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MacTerminalPromptGreen
+                                    )
+                                    Text(
+                                        text = "• ${tpl.title}",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 10.sp,
+                                        color = MacTerminalBrightText
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // =========================================================================
+                // B3. 📊 CODE METRICS, COMPLEXITY & IMMUTABILITY INSPECTOR (When Toggled)
+                // =========================================================================
+                AnimatedVisibility(visible = showMetricsBar) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MacTerminalChromeBg)
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "📊 Complexity: ${codeMetrics.complexityLabel}",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.5.sp,
+                            color = MacTerminalCyan,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "• Immutability: ${codeMetrics.immutabilityPercent}% (${codeMetrics.valCount} val / ${codeMetrics.varCount} var)",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.5.sp,
+                            color = if (codeMetrics.varCount == 0) MacTerminalPromptGreen else MacTrafficYellow
+                        )
+                        Text(
+                            text = "• ${codeMetrics.functionCount} fun • ${codeMetrics.typeCount} types",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.5.sp,
+                            color = MacTerminalMutedText
+                        )
+
+                        if (codeMetrics.varCount > 0) {
+                            Surface(
+                                color = MacTerminalPromptGreen.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable {
+                                        val (converted, count) = KotlinCodeEngine.convertMutableVarsToVal(codeFieldValue.text)
+                                        if (count > 0) {
+                                            codeFieldValue = TextFieldValue(
+                                                text = converted,
+                                                selection = codeFieldValue.selection
+                                            )
+                                            onCodeChange(converted)
+                                        }
+                                    }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = MacTerminalPromptGreen,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "Convert var → val",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MacTerminalPromptGreen
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -998,8 +1287,9 @@ fun KotlinCodeSectionCard(
                         .fillMaxWidth()
                         .background(MacTerminalCanvasBg)
                         .clickable {
-                            if (isCodeFolded) {
+                            if (isCodeFolded || isDockedCompactForExplanation) {
                                 isCodeFolded = false
+                                userOverrodeExplainDock = true
                             }
                         }
                         .padding(horizontal = 12.dp, vertical = 5.dp),
@@ -1007,6 +1297,13 @@ fun KotlinCodeSectionCard(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Terminal,
+                            contentDescription = null,
+                            tint = MacTerminalPromptGreen,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
                             text = "ktscribe@macbook",
                             fontFamily = JetBrainsMonoFontFamily,
@@ -1033,26 +1330,33 @@ fun KotlinCodeSectionCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        if (isCodeFolded) {
+                        if (isCodeFolded || isDockedCompactForExplanation) {
                             Surface(
-                                color = MacTrafficYellow.copy(alpha = 0.2f),
+                                color = MacTerminalCyan.copy(alpha = 0.18f),
                                 shape = RoundedCornerShape(4.dp),
-                                modifier = Modifier.clickable { isCodeFolded = false }
+                                modifier = Modifier.clickable {
+                                    isCodeFolded = false
+                                    userOverrodeExplainDock = true
+                                }
                             ) {
                                 Text(
-                                    text = "▸ Expand (${section.lineCount} lines)",
+                                    text = if (isDockedCompactForExplanation) {
+                                        "📌 Docked Preview (${section.lineCount}L) • Tap to Expand"
+                                    } else {
+                                        "▸ Expand (${section.lineCount} lines)"
+                                    },
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 10.sp,
-                                    color = MacTrafficYellow,
+                                    color = MacTerminalCyan,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
                         } else {
                             Text(
-                                text = "Ln ${cursorInfo.line}, Col ${cursorInfo.column}",
+                                text = "Ln ${cursorInfo.line}/${cursorInfo.totalLines}, Col ${cursorInfo.column}",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.5.sp,
-                                color = MacTerminalMutedText
+                                color = MacTerminalPromptGreen
                             )
                         }
                     }
@@ -1061,9 +1365,44 @@ fun KotlinCodeSectionCard(
                 HorizontalDivider(color = MacTerminalBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
 
                 // =========================================================================
-                // F. AUTO-EXPANDING 4-LINE KOTLIN CODE BLOCK EDITOR (APPLE CMD CANVAS)
+                // E2. YOUTUBE-COMMENT-STYLE DOCKED CODE PREVIEW (When Writing Explanation)
+                // Slides the large code block into a compact 3-line docked preview at the top
+                // so the Explanation Block sits right at eye level above the keyboard!
                 // =========================================================================
-                AnimatedVisibility(visible = !isCodeFolded) {
+                AnimatedVisibility(visible = isDockedCompactForExplanation) {
+                    val previewSnippet = remember(codeFieldValue.text) {
+                        codeFieldValue.text.lines().take(3).joinToString("\n")
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MacTerminalCanvasBg)
+                            .clickable {
+                                userOverrodeExplainDock = true
+                                codeFocusRequester.requestFocus()
+                            }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = previewSnippet.ifBlank { "// Empty Kotlin code block (tap to edit)" },
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 11.5.sp,
+                            lineHeight = 17.sp,
+                            color = MacTerminalBrightText.copy(alpha = 0.85f),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                // =========================================================================
+                // F. AUTO-EXPANDING 4-LINE KOTLIN CODE BLOCK EDITOR (APPLE CMD CANVAS)
+                // Auto-scrolls smoothly on every newly added line of code!
+                // =========================================================================
+                AnimatedVisibility(visible = !isCodeFolded && !isDockedCompactForExplanation) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1073,19 +1412,28 @@ fun KotlinCodeSectionCard(
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.Top
                     ) {
-                        // Line Numbers Gutter with per-line error/warning dot indicator
+                        // Line Numbers Gutter with active line highlight & error/warning dot indicator
                         Column(
                             modifier = Modifier
-                                .width(44.dp)
-                                .background(MacTerminalGutterBg.copy(alpha = 0.45f))
-                                .padding(start = 6.dp, end = 6.dp),
+                                .width(46.dp)
+                                .background(MacTerminalGutterBg.copy(alpha = 0.55f))
+                                .padding(start = 4.dp, end = 6.dp),
                             horizontalAlignment = Alignment.End
                         ) {
                             for (lineNum in 1..visibleLines) {
                                 val lineDiag = diagnostics.firstOrNull { it.line == lineNum }
                                 val isCurrentCursorLine = isCodeFocused && cursorInfo.line == lineNum
                                 Row(
-                                    modifier = Modifier.height(lineHeightDp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(lineHeightDp)
+                                        .background(
+                                            if (isCurrentCursorLine) {
+                                                MacTerminalActiveLineBg
+                                            } else {
+                                                Color.Transparent
+                                            }
+                                        ),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.End
                                 ) {
@@ -1103,6 +1451,14 @@ fun KotlinCodeSectionCard(
                                                 )
                                         )
                                         Spacer(modifier = Modifier.width(3.dp))
+                                    } else if (isCurrentCursorLine) {
+                                        Text(
+                                            text = "▸",
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 10.sp,
+                                            color = MacTerminalPromptGreen
+                                        )
+                                        Spacer(modifier = Modifier.width(2.dp))
                                     }
                                     Text(
                                         text = lineNum.toString(),
@@ -1128,7 +1484,7 @@ fun KotlinCodeSectionCard(
                                 .background(MacTerminalBorder)
                         )
 
-                        // Kotlin Code Input with Live Syntax Highlighting, Auto-Closing Pairs & Smart Angle Tracking
+                        // Kotlin Code Input with Live Syntax Highlighting, Auto-Closing Pairs & Real-Time Line Auto-Scroll
                         BasicTextField(
                             value = codeFieldValue,
                             onValueChange = { incomingValue ->
@@ -1138,7 +1494,7 @@ fun KotlinCodeSectionCard(
                                 )
                                 codeFieldValue = processed
                                 onCodeChange(processed.text)
-                                bringActiveCodeLineIntoView(processed.selection.end)
+                                bringActiveCodeLineIntoView(processed.selection.end, processed.text)
                             },
                             onTextLayout = { layoutResult ->
                                 codeLayoutResult = layoutResult
@@ -1160,7 +1516,7 @@ fun KotlinCodeSectionCard(
                                 ) {
                                     if (codeFieldValue.text.isEmpty()) {
                                         Text(
-                                            text = "// Apple Terminal Kotlin IDE (4 lines min, auto-expands)\nfun main() {\n    println(\"Hello from KtScribe!\")\n}",
+                                            text = "// Apple Terminal Kotlin IDE (starts at 4 lines, auto-scrolls as you add lines)\nfun main() {\n    println(\"Hello from KtScribe!\")\n}",
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 13.sp,
                                             lineHeight = 22.sp,
@@ -1177,8 +1533,11 @@ fun KotlinCodeSectionCard(
                                     onCodeFocusChanged(focusState.isFocused)
                                     if (focusState.isFocused) {
                                         coroutineScope.launch {
-                                            delay(120)
-                                            bringActiveCodeLineIntoView(codeFieldValue.selection.end)
+                                            delay(100)
+                                            bringActiveCodeLineIntoView(
+                                                codeFieldValue.selection.end,
+                                                codeFieldValue.text
+                                            )
                                         }
                                     }
                                 }
@@ -1246,7 +1605,7 @@ fun KotlinCodeSectionCard(
                 // =========================================================================
                 // H. INLINE DETECTED COLOR SWATCH BAR
                 // =========================================================================
-                AnimatedVisibility(visible = detectedColors.isNotEmpty()) {
+                AnimatedVisibility(visible = detectedColors.isNotEmpty() && !isDockedCompactForExplanation) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1401,15 +1760,15 @@ fun KotlinCodeSectionCard(
                 }
 
                 // =========================================================================
-                // J. IDE QUICK-ACTIONS, SYMBOL STRIP & AUTOCOMPLETE (When Code Focused)
+                // J. IDE QUICK-ACTIONS, SURROUND REFACTORING, SYMBOL STRIP & AUTOCOMPLETE
                 // =========================================================================
-                AnimatedVisibility(visible = isCodeFocused && !isCodeFolded) {
+                AnimatedVisibility(visible = isCodeFocused && !isCodeFolded && !isDockedCompactForExplanation) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(MacTerminalChromeBg)
                     ) {
-                        // 1. IDE Line Operations + Quick Symbol Strip
+                        // 1. IDE Line Operations + Surround With + Quick Symbol Strip
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1418,7 +1777,6 @@ fun KotlinCodeSectionCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
-                            // ⌘/ Toggle Line Comment chip
                             IdeActionChip(
                                 label = "⌘/ Comment",
                                 accentColor = MacTerminalCyan,
@@ -1429,7 +1787,6 @@ fun KotlinCodeSectionCard(
                                 }
                             )
 
-                            // ⌘D Duplicate Line chip
                             IdeActionChip(
                                 label = "⌘D Dup Line",
                                 accentColor = MacTerminalPromptGreen,
@@ -1437,10 +1794,10 @@ fun KotlinCodeSectionCard(
                                     val updated = KotlinCodeEngine.duplicateLineAtCursor(codeFieldValue)
                                     codeFieldValue = updated
                                     onCodeChange(updated.text)
+                                    bringActiveCodeLineIntoView(updated.selection.end, updated.text)
                                 }
                             )
 
-                            // ▲ Move Line Up
                             IdeActionChip(
                                 label = "▲ Line",
                                 accentColor = MacTrafficYellow,
@@ -1448,10 +1805,10 @@ fun KotlinCodeSectionCard(
                                     val updated = KotlinCodeEngine.moveLineVertically(codeFieldValue, moveUp = true)
                                     codeFieldValue = updated
                                     onCodeChange(updated.text)
+                                    bringActiveCodeLineIntoView(updated.selection.end, updated.text)
                                 }
                             )
 
-                            // ▼ Move Line Down
                             IdeActionChip(
                                 label = "▼ Line",
                                 accentColor = MacTrafficYellow,
@@ -1459,10 +1816,38 @@ fun KotlinCodeSectionCard(
                                     val updated = KotlinCodeEngine.moveLineVertically(codeFieldValue, moveUp = false)
                                     codeFieldValue = updated
                                     onCodeChange(updated.text)
+                                    bringActiveCodeLineIntoView(updated.selection.end, updated.text)
                                 }
                             )
 
-                            // Quick Symbol Keys
+                            IdeActionChip(
+                                label = "Wrap try/catch",
+                                accentColor = MacTerminalViolet,
+                                onClick = {
+                                    val updated = KotlinCodeEngine.surroundSelectionOrLine(
+                                        fieldValue = codeFieldValue,
+                                        wrapperType = "try_catch"
+                                    )
+                                    codeFieldValue = updated
+                                    onCodeChange(updated.text)
+                                    bringActiveCodeLineIntoView(updated.selection.end, updated.text)
+                                }
+                            )
+
+                            IdeActionChip(
+                                label = "Wrap if {}",
+                                accentColor = MacTerminalViolet,
+                                onClick = {
+                                    val updated = KotlinCodeEngine.surroundSelectionOrLine(
+                                        fieldValue = codeFieldValue,
+                                        wrapperType = "if_block"
+                                    )
+                                    codeFieldValue = updated
+                                    onCodeChange(updated.text)
+                                    bringActiveCodeLineIntoView(updated.selection.end, updated.text)
+                                }
+                            )
+
                             QUICK_SYMBOL_KEYS.forEach { sym ->
                                 Surface(
                                     color = MacTerminalCanvasBg,
@@ -1486,7 +1871,7 @@ fun KotlinCodeSectionCard(
                                                 selection = TextRange(nextCur)
                                             )
                                             onCodeChange(updated)
-                                            bringActiveCodeLineIntoView(nextCur)
+                                            bringActiveCodeLineIntoView(nextCur, updated)
                                         }
                                 ) {
                                     Text(
@@ -1531,7 +1916,7 @@ fun KotlinCodeSectionCard(
                                                 selection = TextRange(newCursor)
                                             )
                                             onCodeChange(newCode)
-                                            bringActiveCodeLineIntoView(newCursor)
+                                            bringActiveCodeLineIntoView(newCursor, newCode)
                                         },
                                         label = {
                                             Text(
@@ -1555,14 +1940,14 @@ fun KotlinCodeSectionCard(
                 HorizontalDivider(color = MacTerminalBorder, thickness = 1.dp)
 
                 // =========================================================================
-                // K. PAIRED EXPLANATION RICH TEXT EDITOR (WITH ANGLE-CORRECT SCROLLING & AI)
+                // K. PAIRED EXPLANATION RICH TEXT EDITOR (WITH YOUTUBE-STYLE SLIDE-UP & AI DEEP DIVE)
                 // =========================================================================
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.surface)
                         .bringIntoViewRequester(explanationBringIntoViewRequester)
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                        .padding(horizontal = 14.dp, vertical = 12.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -1580,10 +1965,12 @@ fun KotlinCodeSectionCard(
                                 modifier = Modifier.size(14.dp)
                             )
                             Text(
-                                text = "EXPLANATION • SECTION #${section.orderIndex + 1}",
+                                text = "EXPLANATION & NOTES • ${section.effectiveLearnedConceptTag.uppercase()}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
@@ -1591,7 +1978,7 @@ fun KotlinCodeSectionCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            // 1-tap AI Explain button directly on the Explanation Block header
+                            // 1-tap Thorough AI Deep-Dive Explain button
                             Surface(
                                 color = MaterialTheme.colorScheme.primaryContainer,
                                 shape = RoundedCornerShape(6.dp),
@@ -1605,62 +1992,63 @@ fun KotlinCodeSectionCard(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.AutoAwesome,
-                                        contentDescription = "AI Explain Code",
+                                        contentDescription = "AI Deep-Dive Explain",
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.size(11.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "AI Explain",
+                                        text = "AI Deep Explain",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        fontWeight = FontWeight.SemiBold
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
 
-                            // Fold/Unfold Code above button when writing explanation so the explanation sits at top eye-level
+                            // Dock / Expand Code toggle
                             Surface(
                                 color = MaterialTheme.colorScheme.surfaceVariant,
                                 shape = RoundedCornerShape(6.dp),
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
-                                    .clickable { isCodeFolded = !isCodeFolded }
+                                    .clickable {
+                                        if (isDockedCompactForExplanation || isCodeFolded) {
+                                            isCodeFolded = false
+                                            userOverrodeExplainDock = true
+                                        } else {
+                                            isCodeFolded = true
+                                        }
+                                    }
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                 ) {
                                     Icon(
-                                        imageVector = if (isCodeFolded) {
+                                        imageVector = if (isCodeFolded || isDockedCompactForExplanation) {
                                             Icons.Default.KeyboardArrowDown
                                         } else {
                                             Icons.Default.KeyboardArrowUp
                                         },
-                                        contentDescription = "Toggle Code Visibility for Better Explanation Angle",
+                                        contentDescription = "Toggle Code Dock",
                                         modifier = Modifier.size(12.dp)
                                     )
                                     Spacer(modifier = Modifier.width(2.dp))
                                     Text(
-                                        text = if (isCodeFolded) "Show Code" else "Fold Code",
+                                        text = if (isCodeFolded || isDockedCompactForExplanation) "Full Code" else "Dock Code",
                                         style = MaterialTheme.typography.labelSmall
                                     )
                                 }
                             }
-
-                            Text(
-                                text = "${section.explanationStyle.fontChoice.badge} • ${section.explanationStyle.fontSizeSp}sp",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     val expStyle = section.explanationStyle
                     val textDecorations = buildList {
@@ -1678,7 +2066,7 @@ fun KotlinCodeSectionCard(
                         onValueChange = { updatedValue ->
                             explanationFieldValue = updatedValue
                             onExplanationChange(updatedValue.text)
-                            bringActiveExplanationLineIntoView(updatedValue.selection.end)
+                            bringActiveExplanationLineIntoView(updatedValue.selection.end, updatedValue.text)
                         },
                         onTextLayout = { layoutResult ->
                             explanationLayoutResult = layoutResult
@@ -1686,7 +2074,7 @@ fun KotlinCodeSectionCard(
                         textStyle = TextStyle(
                             fontFamily = expStyle.fontChoice.toComposeFontFamily(),
                             fontSize = expStyle.fontSizeSp.sp,
-                            lineHeight = (expStyle.fontSizeSp * 1.45f).sp,
+                            lineHeight = (expStyle.fontSizeSp * 1.48f).sp,
                             fontWeight = if (expStyle.isBold) FontWeight.Bold else FontWeight.Normal,
                             fontStyle = if (expStyle.isItalic) FontStyle.Italic else FontStyle.Normal,
                             textDecoration = combinedDecoration,
@@ -1698,11 +2086,11 @@ fun KotlinCodeSectionCard(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 56.dp)
+                                    .heightIn(min = 64.dp)
                             ) {
                                 if (explanationFieldValue.text.isEmpty()) {
                                     Text(
-                                        text = "Explain how this Kotlin snippet works, or tap '✨ AI Explain' to auto-generate… (Bound to Section #${section.orderIndex + 1})",
+                                        text = "Write your explanation of what you learned in Section #${section.orderIndex + 1}, or tap '✨ AI Deep Explain' for a thorough 3-part breakdown…",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
                                     )
@@ -1717,8 +2105,11 @@ fun KotlinCodeSectionCard(
                                 onExplanationFocusChanged(focusState.isFocused)
                                 if (focusState.isFocused) {
                                     coroutineScope.launch {
-                                        delay(120)
-                                        bringActiveExplanationLineIntoView(explanationFieldValue.selection.end)
+                                        delay(100)
+                                        bringActiveExplanationLineIntoView(
+                                            explanationFieldValue.selection.end,
+                                            explanationFieldValue.text
+                                        )
                                     }
                                 }
                             }
@@ -1768,6 +2159,7 @@ private fun IdeActionChip(
 @Composable
 private fun SectionDividerBar(
     sectionNumber: Int,
+    conceptTag: String,
     onRemoveDivider: () -> Unit,
     testTag: String
 ) {
@@ -1786,17 +2178,18 @@ private fun SectionDividerBar(
             modifier = Modifier
                 .padding(horizontal = 8.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
                 .clickable(onClick = onRemoveDivider)
-                .padding(horizontal = 8.dp, vertical = 3.dp),
+                .padding(horizontal = 10.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Section #$sectionNumber Boundary",
+                text = "§$sectionNumber • $conceptTag",
                 style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.width(5.dp))
             Icon(
                 imageVector = Icons.Default.VisibilityOff,
                 contentDescription = "Remove Divider",

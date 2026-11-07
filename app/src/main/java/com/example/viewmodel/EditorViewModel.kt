@@ -407,6 +407,60 @@ class EditorViewModel(
         }
     }
 
+    fun updateSectionConceptTagManual(sectionId: Long, newConceptTag: String) {
+        mutateActiveDocument(recordUndo = true) { doc ->
+            doc.copy(
+                sections = doc.sections.map { sec ->
+                    if (sec.id == sectionId) {
+                        sec.copy(
+                            explanationStyle = sec.explanationStyle.copy(
+                                learnedConceptTag = newConceptTag
+                            )
+                        )
+                    } else {
+                        sec
+                    }
+                }
+            )
+        }
+    }
+
+    fun jumpToSectionConcept(sectionId: Long) {
+        val doc = _uiState.value.activeDocument ?: return
+        val targetSec = doc.sections.find { it.id == sectionId } ?: return
+        _uiState.update { state ->
+            state.copy(
+                activeTarget = ActiveEditorTarget.SectionCode(targetSec.id, targetSec.orderIndex),
+                focusedSectionId = targetSec.id,
+                aiStatusMessage = "Jumped to Concept [${targetSec.effectiveLearnedConceptTag}] (Section #${targetSec.orderIndex + 1})"
+            )
+        }
+    }
+
+    fun exportActiveDocumentAsMarkdown(): String {
+        val doc = _uiState.value.activeDocument ?: return ""
+        return buildString {
+            appendLine("# ${doc.title.ifBlank { "Untitled Kotlin Notebook" }}")
+            if (doc.introText.isNotBlank()) {
+                appendLine()
+                appendLine(doc.introText.trim())
+            }
+            doc.sections.forEach { sec ->
+                appendLine()
+                appendLine("## §${sec.orderIndex + 1}. ${sec.displayTitle}")
+                appendLine("**Learned Concept Tag:** `${sec.effectiveLearnedConceptTag}`")
+                appendLine()
+                appendLine("```kotlin")
+                appendLine(sec.codeContent.trim())
+                appendLine("```")
+                if (sec.explanationText.isNotBlank()) {
+                    appendLine()
+                    appendLine(sec.explanationText.trim())
+                }
+            }
+        }
+    }
+
     fun toggleSectionDivider(sectionId: Long) {
         mutateActiveDocument(recordUndo = true) { doc ->
             doc.copy(
@@ -571,11 +625,16 @@ class EditorViewModel(
             }
             val result = aiNamingService.generateCodeExplanation(
                 codeContent = sec.codeContent,
-                existingExplanation = sec.explanationText
+                existingExplanation = sec.explanationText,
+                sectionNumber = sec.orderIndex + 1
             )
             val (generatedExp, banner, quota) = when (result) {
                 is AiAssistOutput.Success -> Triple(result.outputText, result.summaryBanner, result.remainingRpmQuota)
                 is AiAssistOutput.FallbackApplied -> Triple(result.outputText, result.summaryBanner, result.remainingRpmQuota)
+            }
+            val learnedTag = when (result) {
+                is AiAssistOutput.Success -> result.learnedConceptTag
+                is AiAssistOutput.FallbackApplied -> result.learnedConceptTag
             }
             mutateActiveDocument(recordUndo = true) { curDoc ->
                 curDoc.copy(
@@ -583,6 +642,11 @@ class EditorViewModel(
                         if (it.id == sectionId) {
                             it.copy(
                                 explanationText = generatedExp,
+                                explanationStyle = if (learnedTag.isNotBlank()) {
+                                    it.explanationStyle.copy(learnedConceptTag = learnedTag)
+                                } else {
+                                    it.explanationStyle
+                                },
                                 isNamingInProgress = false
                             )
                         } else {
@@ -729,6 +793,11 @@ class EditorViewModel(
                                 if (sec.id == sectionId) {
                                     sec.copy(
                                         sectionTitle = result.sectionTitle,
+                                        explanationStyle = if (result.learnedConceptTag.isNotBlank()) {
+                                            sec.explanationStyle.copy(learnedConceptTag = result.learnedConceptTag)
+                                        } else {
+                                            sec.explanationStyle
+                                        },
                                         isAiNamed = true,
                                         isNamingInProgress = false,
                                         lastNamedHash = result.contentHash
@@ -739,12 +808,12 @@ class EditorViewModel(
                             }
                         ),
                         remainingAiRpmQuota = result.remainingRpmQuota,
-                        aiStatusMessage = "Section #${targetSection.orderIndex + 1} named: \"${result.sectionTitle}\" (${result.remainingRpmQuota} RPM left)",
+                        aiStatusMessage = "Section #${targetSection.orderIndex + 1} • Concept [${result.learnedConceptTag}] • \"${result.sectionTitle}\"",
                         aiErrorBanner = null,
                         hasUnsavedChanges = true
                     )
                 }
-                persistActiveDocumentInternal("Saved AI section name")
+                persistActiveDocumentInternal("Saved AI section name & concept tag")
             }
 
             is SectionNamingResult.RateLimited -> {
@@ -762,6 +831,11 @@ class EditorViewModel(
                                     }
                                     sec.copy(
                                         sectionTitle = updatedTitle,
+                                        explanationStyle = if (result.learnedConceptTag.isNotBlank()) {
+                                            sec.explanationStyle.copy(learnedConceptTag = result.learnedConceptTag)
+                                        } else {
+                                            sec.explanationStyle
+                                        },
                                         isAiNamed = true,
                                         isNamingInProgress = false,
                                         lastNamedHash = result.contentHash
@@ -772,12 +846,12 @@ class EditorViewModel(
                             }
                         ),
                         remainingAiRpmQuota = quota,
-                        aiStatusMessage = "Free-tier RPM limit (10/min) reached • Named: \"${result.fallbackTitle}\"",
+                        aiStatusMessage = "Tagged [${result.learnedConceptTag}] • Named: \"${result.fallbackTitle}\"",
                         aiErrorBanner = null,
                         hasUnsavedChanges = true
                     )
                 }
-                persistActiveDocumentInternal("Saved smart fallback section name")
+                persistActiveDocumentInternal("Saved smart fallback section name & concept tag")
             }
 
             is SectionNamingResult.Error -> {
@@ -795,6 +869,11 @@ class EditorViewModel(
                                     }
                                     sec.copy(
                                         sectionTitle = updatedTitle,
+                                        explanationStyle = if (result.learnedConceptTag.isNotBlank()) {
+                                            sec.explanationStyle.copy(learnedConceptTag = result.learnedConceptTag)
+                                        } else {
+                                            sec.explanationStyle
+                                        },
                                         isAiNamed = true,
                                         isNamingInProgress = false,
                                         lastNamedHash = result.contentHash
@@ -810,7 +889,7 @@ class EditorViewModel(
                         hasUnsavedChanges = true
                     )
                 }
-                persistActiveDocumentInternal("Saved section name")
+                persistActiveDocumentInternal("Saved section name & concept tag")
             }
         }
     }

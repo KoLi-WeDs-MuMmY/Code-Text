@@ -51,6 +51,23 @@ data class CursorPositionInfo(
     val totalLines: Int
 )
 
+data class KotlinCodeMetrics(
+    val functionCount: Int,
+    val typeCount: Int,
+    val valCount: Int,
+    val varCount: Int,
+    val cyclomaticComplexity: Int,
+    val complexityLabel: String,
+    val immutabilityPercent: Int
+)
+
+data class KotlinLiveTemplate(
+    val id: String,
+    val badge: String,
+    val title: String,
+    val snippet: String
+)
+
 object KotlinCodeEngine {
 
     val KOTLIN_KEYWORDS = setOf(
@@ -1125,5 +1142,156 @@ object KotlinCodeEngine {
             i++
         }
         return sb.toString()
+    }
+
+    val LIVE_TEMPLATES: List<KotlinLiveTemplate> = listOf(
+        KotlinLiveTemplate(
+            id = "main_fn",
+            badge = "fun main",
+            title = "Entry Point",
+            snippet = "fun main() {\n    val message = \"Hello, Kotlin!\"\n    println(message)\n}"
+        ),
+        KotlinLiveTemplate(
+            id = "data_class",
+            badge = "data class",
+            title = "Immutable Model",
+            snippet = "data class UserProfile(\n    val id: Long,\n    val name: String,\n    val isActive: Boolean = true\n)"
+        ),
+        KotlinLiveTemplate(
+            id = "sealed_ui",
+            badge = "sealed UI",
+            title = "Sealed State",
+            snippet = "sealed interface ScreenState {\n    data object Loading : ScreenState\n    data class Success(val items: List<String>) : ScreenState\n    data class Error(val reason: String) : ScreenState\n}"
+        ),
+        KotlinLiveTemplate(
+            id = "state_flow",
+            badge = "StateFlow",
+            title = "Reactive StateHolder",
+            snippet = "private val _uiState = MutableStateFlow(\"Ready\")\nval uiState: StateFlow<String> = _uiState.asStateFlow()"
+        ),
+        KotlinLiveTemplate(
+            id = "suspend_try",
+            badge = "suspend",
+            title = "Safe Coroutine Call",
+            snippet = "suspend fun fetchItems(): Result<List<String>> = runCatching {\n    listOf(\"Alpha\", \"Beta\", \"Gamma\")\n}"
+        ),
+        KotlinLiveTemplate(
+            id = "collection_pipe",
+            badge = "pipeline",
+            title = "Filter & Map",
+            snippet = "val processed = rawItems\n    .filter { it.isNotBlank() }\n    .map { it.trim().uppercase() }\n    .distinct()"
+        ),
+        KotlinLiveTemplate(
+            id = "when_expr",
+            badge = "when {}",
+            title = "Exhaustive When",
+            snippet = "val statusLabel = when (code) {\n    200 -> \"OK\"\n    404 -> \"Not Found\"\n    else -> \"Unknown (\$code)\"\n}"
+        )
+    )
+
+    /**
+     * Computes live IDE code quality & complexity metrics for the current Kotlin block.
+     */
+    fun analyzeCodeMetrics(code: String): KotlinCodeMetrics {
+        if (code.isBlank()) {
+            return KotlinCodeMetrics(
+                functionCount = 0,
+                typeCount = 0,
+                valCount = 0,
+                varCount = 0,
+                cyclomaticComplexity = 1,
+                complexityLabel = "O(1) Clean",
+                immutabilityPercent = 100
+            )
+        }
+        val fnCount = Regex("""\bfun\s+[A-Za-z_][A-Za-z0-9_]*""").findAll(code).count()
+        val typeCount = Regex("""\b(?:class|interface|object)\s+[A-Za-z_][A-Za-z0-9_]*""").findAll(code).count()
+        val valCount = Regex("""\bval\s+[A-Za-z_][A-Za-z0-9_]*""").findAll(code).count()
+        val varCount = Regex("""\bvar\s+[A-Za-z_][A-Za-z0-9_]*""").findAll(code).count()
+        val branchCount = Regex("""\b(?:if|else\s+if|when|for|while|catch)\b|&&|\|\||\?:""").findAll(code).count()
+        val complexity = 1 + branchCount
+        val complexityLabel = when {
+            complexity <= 2 -> "Low ($complexity)"
+            complexity <= 5 -> "Moderate ($complexity)"
+            else -> "High ($complexity)"
+        }
+        val totalProps = valCount + varCount
+        val immutability = if (totalProps == 0) 100 else ((valCount * 100f) / totalProps).toInt()
+        return KotlinCodeMetrics(
+            functionCount = fnCount,
+            typeCount = typeCount,
+            valCount = valCount,
+            varCount = varCount,
+            cyclomaticComplexity = complexity,
+            complexityLabel = complexityLabel,
+            immutabilityPercent = immutability
+        )
+    }
+
+    /**
+     * IDE Refactoring: Surrounds the current selection (or current line if collapsed) with a Kotlin construct.
+     */
+    fun surroundSelectionOrLine(
+        fieldValue: TextFieldValue,
+        wrapperType: String
+    ): TextFieldValue {
+        val text = fieldValue.text
+        val start: Int
+        val end: Int
+        if (!fieldValue.selection.collapsed) {
+            start = fieldValue.selection.min.coerceIn(0, text.length)
+            end = fieldValue.selection.max.coerceIn(start, text.length)
+        } else {
+            val cur = fieldValue.selection.end.coerceIn(0, text.length)
+            start = text.lastIndexOf('\n', (cur - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+            end = text.indexOf('\n', cur).let { if (it < 0) text.length else it }
+        }
+        val targetBlock = text.substring(start, end)
+        val baseIndent = targetBlock.takeWhile { it == ' ' || it == '\t' }
+        val indentedBody = targetBlock.lines().joinToString("\n") { line ->
+            if (line.isBlank()) line else "    $line"
+        }
+
+        val wrapped = when (wrapperType) {
+            "try_catch" -> buildString {
+                append(baseIndent).appendLine("try {")
+                appendLine(indentedBody)
+                append(baseIndent).appendLine("} catch (e: Exception) {")
+                append(baseIndent).appendLine("    println(\"Error: \${e.message}\")")
+                append(baseIndent).append("}")
+            }
+            "if_block" -> buildString {
+                append(baseIndent).appendLine("if (isValid) {")
+                appendLine(indentedBody)
+                append(baseIndent).append("}")
+            }
+            "coroutine" -> buildString {
+                append(baseIndent).appendLine("coroutineScope {")
+                appendLine(indentedBody)
+                append(baseIndent).append("}")
+            }
+            else -> buildString {
+                append(baseIndent).appendLine("{")
+                appendLine(indentedBody)
+                append(baseIndent).append("}")
+            }
+        }
+
+        val updated = text.replaceRange(start, end, wrapped)
+        return TextFieldValue(
+            text = updated,
+            selection = TextRange((start + wrapped.length).coerceIn(0, updated.length))
+        )
+    }
+
+    /**
+     * IDE Immutability Refactoring: Converts mutable `var` declarations into immutable `val`.
+     */
+    fun convertMutableVarsToVal(code: String): Pair<String, Int> {
+        val regex = Regex("""\bvar(\s+[A-Za-z_][A-Za-z0-9_]*)""")
+        val count = regex.findAll(code).count()
+        if (count == 0) return code to 0
+        val updated = regex.replace(code, "val$1")
+        return updated to count
     }
 }

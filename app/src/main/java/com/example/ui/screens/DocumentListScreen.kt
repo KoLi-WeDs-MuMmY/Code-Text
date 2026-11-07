@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -30,8 +32,10 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SettingsBrightness
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,6 +63,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.model.DocumentSummaryUiModel
 import com.example.ui.theme.JetBrainsMonoFontFamily
@@ -82,6 +87,9 @@ fun DocumentListScreen(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val totalSections = documents.sumOf { it.sectionCount }
+    val allLearnedConcepts = documents.flatMap { it.conceptTags }.distinct()
+
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
@@ -90,16 +98,27 @@ fun DocumentListScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text(
-                                text = "{KT}",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Terminal,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "KT",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
@@ -117,7 +136,6 @@ fun DocumentListScreen(
                     }
                 },
                 actions = {
-                    // Shortcut badge button
                     Surface(
                         color = MaterialTheme.colorScheme.secondaryContainer,
                         shape = RoundedCornerShape(10.dp),
@@ -147,7 +165,6 @@ fun DocumentListScreen(
                         }
                     }
 
-                    // Theme mode toggle button
                     IconButton(
                         onClick = onCycleThemeMode,
                         modifier = Modifier.testTag("home_theme_toggle_button")
@@ -179,7 +196,7 @@ fun DocumentListScreen(
                 text = {
                     Text(
                         text = stringResource(R.string.new_document),
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.Bold
                     )
                 },
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -198,7 +215,7 @@ fun DocumentListScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 720.dp),
+                    .widthIn(max = 740.dp),
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 16.dp,
@@ -207,15 +224,17 @@ fun DocumentListScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // 1. Hero Banner Card
+                // 1. Executive Studio Hero Banner + Telemetry Strip
                 item {
                     HeroWorkspaceBanner(
                         shortcutLetter = shortcutLetter,
-                        documentCount = documents.size
+                        documentCount = documents.size,
+                        totalSections = totalSections,
+                        learnedConceptsCount = allLearnedConcepts.size
                     )
                 }
 
-                // 2. Search Bar
+                // 2. Search Bar (searches titles, snippets, or learned concepts)
                 item {
                     OutlinedTextField(
                         value = searchQuery,
@@ -279,17 +298,19 @@ fun DocumentListScreen(
 @Composable
 private fun HeroWorkspaceBanner(
     shortcutLetter: Char,
-    documentCount: Int
+    documentCount: Int,
+    totalSections: Int,
+    learnedConceptsCount: Int
 ) {
     Card(
         shape = RoundedCornerShape(18.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(148.dp)
+                .height(162.dp)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.img_editor_hero_1794022926039),
@@ -303,27 +324,46 @@ private fun HeroWorkspaceBanner(
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                Color(0xE610131C),
-                                Color(0xB310131C),
-                                Color(0x6610131C)
+                                Color(0xF2080D14),
+                                Color(0xCC0D1522),
+                                Color(0x880D1522)
                             )
                         )
                     )
                     .padding(16.dp),
                 contentAlignment = Alignment.BottomStart
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Surface(
-                        color = Color(0xFF7F52FF),
-                        shape = RoundedCornerShape(6.dp)
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = "KOTLIN CODE + EXPLANATION STUDIO",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
+                        Surface(
+                            color = Color(0xFF10B981),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "⌘ APPLE TERMINAL KOTLIN IDE",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.sp,
+                                color = Color(0xFF022C22),
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                        Surface(
+                            color = Color(0xFF38BDF8).copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "AI CONCEPT TAGGER",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.sp,
+                                color = Color(0xFF38BDF8),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
                     }
                     Text(
                         text = "Press Ctrl+$shortcutLetter for 4-Line Auto-Expanding Kotlin Blocks",
@@ -332,9 +372,9 @@ private fun HeroWorkspaceBanner(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "$documentCount local notebooks • 30s & exit auto-save • AI section naming",
+                        text = "$documentCount Notebooks • $totalSections Code Sections • $learnedConceptsCount Learned Concepts • 30s Auto-Save",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFD1D5DB)
+                        color = Color(0xFFCBD5E1)
                     )
                 }
             }
@@ -352,17 +392,17 @@ private fun DocumentSummaryCard(
     val formattedDate = dateFormat.format(Date(document.updatedAt))
 
     Card(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier
             .fillMaxWidth()
             .border(
                 width = 1.dp,
                 color = MaterialTheme.colorScheme.outlineVariant,
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(16.dp)
             )
             .clickable(onClick = onClick)
             .testTag("document_card_${document.id}")
@@ -409,6 +449,44 @@ private fun DocumentSummaryCard(
                 overflow = TextOverflow.Ellipsis
             )
 
+            // Learned Concept Tags Strip on Document Summary Card
+            if (document.conceptTags.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    document.conceptTags.forEach { tag ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.School,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = tag,
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -431,6 +509,7 @@ private fun DocumentSummaryCard(
                         Text(
                             text = "${document.sectionCount} Kotlin Sections",
                             style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
