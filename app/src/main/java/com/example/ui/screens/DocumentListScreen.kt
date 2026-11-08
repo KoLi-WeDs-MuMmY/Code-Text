@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material.icons.filled.Keyboard
@@ -56,6 +57,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,6 +93,7 @@ fun DocumentListScreen(
     onOpenDocument: (Long) -> Unit,
     onCreateDocument: () -> Unit,
     onDeleteDocument: (Long) -> Unit,
+    onRenameDocument: (Long, String) -> Unit = { _, _ -> },
     onCycleThemeMode: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenVaultModal: () -> Unit = {},
@@ -324,7 +330,8 @@ fun DocumentListScreen(
                         FolderSummaryCard(
                             folder = folder,
                             onClick = { onOpenDocument(folder.id) },
-                            onDelete = { onDeleteDocument(folder.id) }
+                            onDelete = { onDeleteDocument(folder.id) },
+                            onRename = { newTitle -> onRenameDocument(folder.id, newTitle) }
                         )
                     }
                 }
@@ -424,10 +431,13 @@ private fun HeroWorkspaceBanner(
 private fun FolderSummaryCard(
     folder: DocumentSummaryUiModel,
     onClick: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onRename: (String) -> Unit
 ) {
     val dateFormat = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
     val formattedDate = dateFormat.format(Date(folder.updatedAt))
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renameText by remember(folder.title) { mutableStateOf(folder.title) }
 
     Card(
         shape = RoundedCornerShape(18.dp),
@@ -499,19 +509,78 @@ private fun FolderSummaryCard(
                         )
                     }
                 }
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .testTag("delete_document_${folder.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Delete Folder",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = {
+                            renameText = folder.title
+                            showRenameDialog = true
+                        },
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("rename_document_${folder.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Rename Folder",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("delete_document_${folder.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Delete Folder",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
+            }
+
+            if (showRenameDialog) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showRenameDialog = false },
+                    title = {
+                        Text(
+                            text = "Rename Folder",
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = JetBrainsMonoFontFamily
+                        )
+                    },
+                    text = {
+                        OutlinedTextField(
+                            value = renameText,
+                            onValueChange = { renameText = it },
+                            label = { Text("Folder Name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                if (renameText.isNotBlank()) {
+                                    onRename(renameText.trim())
+                                }
+                                showRenameDialog = false
+                            }
+                        ) {
+                            Text("Rename", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = { showRenameDialog = false }
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
 
             Text(

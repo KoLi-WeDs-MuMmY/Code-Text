@@ -172,6 +172,74 @@ data class TextFormattingStyle(
     }
 }
 
+enum class LanguageType(
+    val id: String,
+    val displayName: String,
+    val extension: String,
+    val badgeLabel: String,
+    val defaultFileName: String,
+    val runCommandPrefix: String,
+    val starterCode: String
+) {
+    KOTLIN(
+        id = "kotlin",
+        displayName = "Kotlin",
+        extension = ".ktscribe",
+        badgeLabel = "KT",
+        defaultFileName = "Main.ktscribe",
+        runCommandPrefix = "kotlinc",
+        starterCode = "fun main() {\n    println(\"Hello KtScribe!\")\n}"
+    ),
+    JAVA(
+        id = "java",
+        displayName = "Java",
+        extension = ".java",
+        badgeLabel = "JAVA",
+        defaultFileName = "Main.java",
+        runCommandPrefix = "javac",
+        starterCode = "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello Java!\");\n    }\n}"
+    ),
+    PYTHON(
+        id = "python",
+        displayName = "Python",
+        extension = ".py",
+        badgeLabel = "PY",
+        defaultFileName = "main.py",
+        runCommandPrefix = "python3",
+        starterCode = "def main():\n    print(\"Hello Python!\")\n\nif __name__ == '__main__':\n    main()"
+    ),
+    DART(
+        id = "dart",
+        displayName = "Dart",
+        extension = ".dart",
+        badgeLabel = "DART",
+        defaultFileName = "main.dart",
+        runCommandPrefix = "dart",
+        starterCode = "void main() {\n    print('Hello Dart!');\n}"
+    );
+
+    val shortLabel: String get() = badgeLabel
+
+    val badgeColor: androidx.compose.ui.graphics.Color get() = when (this) {
+        KOTLIN -> androidx.compose.ui.graphics.Color(0xFFD4883A)
+        JAVA -> androidx.compose.ui.graphics.Color(0xFFE76F51)
+        PYTHON -> androidx.compose.ui.graphics.Color(0xFF457B9D)
+        DART -> androidx.compose.ui.graphics.Color(0xFF2A9D8F)
+    }
+
+    companion object {
+        fun fromExtensionOrName(name: String): LanguageType {
+            val lower = name.lowercase().trim()
+            return when {
+                lower.endsWith(".java") -> JAVA
+                lower.endsWith(".py") -> PYTHON
+                lower.endsWith(".dart") -> DART
+                else -> KOTLIN
+            }
+        }
+    }
+}
+
 data class CodeSectionUiModel(
     val id: Long = 0L,
     val documentId: Long = 0L,
@@ -183,16 +251,24 @@ data class CodeSectionUiModel(
     val codeContent: String = "",
     val explanationText: String = "",
     val explanationStyle: TextFormattingStyle = TextFormattingStyle(),
-    val showDivider: Boolean = true
+    val showDivider: Boolean = true,
+    val language: LanguageType = LanguageType.fromExtensionOrName(sectionTitle),
+    val themeOverride: com.example.ui.theme.AppThemeId? = null
 ) {
     /**
-     * Canonical `.ktscribe` file name for this single-code-block file inside its parent Folder.
-     * Enforces the `1 .ktscribe file = 1 code block + bundled notes` workspace model.
+     * Canonical file name for this code block inside its parent Folder.
+     * Respects user-defined extensions (.ktscribe, .java, .py, .dart) or defaults to the section's language.
      */
     val ktScribeFileName: String
         get() {
             val raw = sectionTitle.trim()
-            if (raw.endsWith(".ktscribe", ignoreCase = true)) return raw
+            val hasKnownExt = raw.endsWith(".ktscribe", ignoreCase = true) ||
+                raw.endsWith(".kt", ignoreCase = true) ||
+                raw.endsWith(".java", ignoreCase = true) ||
+                raw.endsWith(".py", ignoreCase = true) ||
+                raw.endsWith(".dart", ignoreCase = true)
+            if (hasKnownExt) return raw
+
             val cleaned = raw
                 .replace(Regex("^Section\\s*\\d+\\s*[•\\-:]?\\s*", RegexOption.IGNORE_CASE), "")
                 .replace(Regex("[^A-Za-z0-9_\\-]"), "")
@@ -200,13 +276,13 @@ data class CodeSectionUiModel(
             val stem = when {
                 cleaned.isNotBlank() -> cleaned.replaceFirstChar { it.uppercase() }
                 else -> {
-                    val decl = Regex("""\b(?:class|interface|object|fun)\s+([A-Za-z_][A-Za-z0-9_]*)""")
+                    val decl = Regex("""\b(?:class|interface|object|fun|def)\s+([A-Za-z_][A-Za-z0-9_]*)""")
                         .find(codeContent)?.groupValues?.getOrNull(1)
                     if (!decl.isNullOrBlank()) decl.replaceFirstChar { it.uppercase() }
                     else "File${orderIndex + 1}"
                 }
             }
-            return "$stem.ktscribe"
+            return "$stem${language.extension}"
         }
 
     val displayTitle: String

@@ -61,7 +61,8 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun KtScribeTheme(
-    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    themeMode: ThemeMode = ThemeMode.DARK,
+    activeTheme: AppThemeId = AppThemeId.DARCULA_ESPRESSO,
     content: @Composable () -> Unit
 ) {
     val useDarkTheme = when (themeMode) {
@@ -70,8 +71,16 @@ fun KtScribeTheme(
         ThemeMode.DARK -> true
     }
 
-    val colorScheme = if (useDarkTheme) DarkColorScheme else LightColorScheme
-    val syntaxColors = if (useDarkTheme) DarkKotlinSyntaxColors else LightKotlinSyntaxColors
+    val colorScheme = if (!useDarkTheme) {
+        LightColorScheme
+    } else {
+        activeTheme.toColorScheme()
+    }
+    val syntaxColors = if (!useDarkTheme) {
+        LightKotlinSyntaxColors
+    } else {
+        activeTheme.toSyntaxColors()
+    }
 
     CompositionLocalProvider(LocalKotlinSyntaxColors provides syntaxColors) {
         MaterialTheme(

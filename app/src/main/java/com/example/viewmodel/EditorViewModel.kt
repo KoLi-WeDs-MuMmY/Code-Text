@@ -68,6 +68,7 @@ data class EditorUiState(
     val remainingAiRpmQuota: Int = AiSectionNamingService.FREE_TIER_SAFE_RPM_LIMIT,
     val shortcutLetter: Char = 'K',
     val themeMode: ThemeMode = ThemeMode.DARK,
+    val activeAppTheme: com.example.ui.theme.AppThemeId = com.example.ui.theme.AppThemeId.DARCULA_ESPRESSO,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false
 ) {
@@ -177,7 +178,8 @@ class EditorViewModel(
     private val _uiState = MutableStateFlow(
         EditorUiState(
             shortcutLetter = repository.getShortcutLetter(),
-            themeMode = repository.getThemeMode()
+            themeMode = repository.getThemeMode(),
+            activeAppTheme = repository.getActiveAppTheme()
         )
     )
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
@@ -722,13 +724,73 @@ class EditorViewModel(
             doc.copy(
                 sections = doc.sections.map { sec ->
                     if (sec.id == sectionId) {
-                        sec.copy(sectionTitle = newTitle, isAiNamed = false)
+                        val inferredLang = com.example.model.LanguageType.fromExtensionOrName(newTitle)
+                        sec.copy(
+                            sectionTitle = newTitle,
+                            isAiNamed = false,
+                            language = inferredLang
+                        )
                     } else {
                         sec
                     }
                 }
             )
         }
+    }
+
+    fun updateSectionLanguage(sectionId: Long, language: com.example.model.LanguageType) {
+        mutateActiveDocument(recordUndo = true) { doc ->
+            doc.copy(
+                sections = doc.sections.map { sec ->
+                    if (sec.id == sectionId) {
+                        val currentExt = sec.language.extension
+                        val baseName = sec.sectionTitle.removeSuffix(currentExt).ifBlank { "Main" }
+                        val newTitle = "$baseName${language.extension}"
+                        sec.copy(
+                            language = language,
+                            sectionTitle = newTitle,
+                            codeContent = if (sec.codeContent.isBlank()) language.starterCode else sec.codeContent
+                        )
+                    } else {
+                        sec
+                    }
+                }
+            )
+        }
+    }
+
+    fun updateSectionThemeOverride(sectionId: Long, theme: com.example.ui.theme.AppThemeId?) {
+        mutateActiveDocument(recordUndo = true) { doc ->
+            doc.copy(
+                sections = doc.sections.map { sec ->
+                    if (sec.id == sectionId) {
+                        sec.copy(themeOverride = theme)
+                    } else {
+                        sec
+                    }
+                }
+            )
+        }
+    }
+
+    fun renameFolderById(documentId: Long, newTitle: String) {
+        viewModelScope.launch {
+            val trimmed = newTitle.trim().ifBlank { "Untitled Folder" }
+            if (_uiState.value.activeDocument?.id == documentId) {
+                updateDocumentTitle(trimmed)
+                persistActiveDocumentInternal("Renamed active folder")
+            } else {
+                val doc = repository.loadDocumentDetail(documentId)
+                if (doc != null) {
+                    repository.saveDocumentDetail(doc.copy(title = trimmed))
+                }
+            }
+        }
+    }
+
+    fun setActiveAppTheme(theme: com.example.ui.theme.AppThemeId) {
+        repository.setActiveAppTheme(theme)
+        _uiState.update { it.copy(activeAppTheme = theme) }
     }
 
     fun updateSectionConceptTagManual(sectionId: Long, newConceptTag: String) {

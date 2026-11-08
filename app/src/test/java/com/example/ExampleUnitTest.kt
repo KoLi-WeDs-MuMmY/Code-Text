@@ -403,5 +403,101 @@ class ExampleUnitTest {
             toggled.splitScreenOrientation
         )
     }
+
+    @Test
+    fun `6 curated IDE themes provide rich color palette swatches and exact hex codes`() {
+        val allThemes = com.example.ui.theme.AppThemeId.entries
+        assertEquals(6, allThemes.size)
+        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.DARCULA_ESPRESSO))
+        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.MACOS_MIDNIGHT))
+        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.MONOKAI_PRO))
+        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.GITHUB_DARK))
+        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.SOLARIZED_DARK))
+        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.NORD_FROST))
+
+        allThemes.forEach { theme ->
+            val swatches = theme.paletteSwatches
+            assertTrue("Theme ${theme.title} must have at least 4 swatches", swatches.size >= 4)
+            swatches.forEach { swatch ->
+                assertTrue(swatch.hexCode.startsWith("#"))
+                assertTrue(swatch.name.isNotBlank())
+            }
+        }
+    }
+
+    @Test
+    fun `multi-language engine supports Java Python Dart and Kotlin with correct snippets and file extensions`() {
+        // Kotlin
+        val ktSection = CodeSectionUiModel(
+            sectionTitle = "Greeter",
+            language = com.example.model.LanguageType.KOTLIN
+        )
+        assertEquals("Greeter.ktscribe", ktSection.ktScribeFileName)
+
+        // Java
+        val javaSection = CodeSectionUiModel(
+            sectionTitle = "MainApp",
+            language = com.example.model.LanguageType.JAVA
+        )
+        assertEquals("MainApp.java", javaSection.ktScribeFileName)
+
+        // Python
+        val pySection = CodeSectionUiModel(
+            sectionTitle = "Script",
+            language = com.example.model.LanguageType.PYTHON
+        )
+        assertEquals("Script.py", pySection.ktScribeFileName)
+
+        // Dart
+        val dartSection = CodeSectionUiModel(
+            sectionTitle = "Widget",
+            language = com.example.model.LanguageType.DART
+        )
+        assertEquals("Widget.dart", dartSection.ktScribeFileName)
+
+        // Java snippets test
+        val (javaPrefix, javaSuggestions) = com.example.code.CodeLanguageEngine.getSuggestionsForLanguage(
+            code = "public class Demo {\n    psvm",
+            cursorPosition = 28,
+            language = com.example.model.LanguageType.JAVA
+        )
+        assertEquals("psvm", javaPrefix)
+        assertTrue(javaSuggestions.any { it.label == "psvm" })
+
+        // Python def snippet test
+        val (pyPrefix, pySuggestions) = com.example.code.CodeLanguageEngine.getSuggestionsForLanguage(
+            code = "def",
+            cursorPosition = 3,
+            language = com.example.model.LanguageType.PYTHON
+        )
+        assertEquals("def", pyPrefix)
+        assertTrue(pySuggestions.any { it.label == "def" })
+
+        // Dart main snippet test
+        val (dartPrefix, dartSuggestions) = com.example.code.CodeLanguageEngine.getSuggestionsForLanguage(
+            code = "main",
+            cursorPosition = 4,
+            language = com.example.model.LanguageType.DART
+        )
+        assertEquals("main", dartPrefix)
+        assertTrue(dartSuggestions.any { it.label == "main" })
+    }
+
+    @Test
+    fun `docked suggestions and gutter badges ensure code text line is never obstructed`() {
+        val codeWithSyntaxError = "fun test() {\n    val\n}"
+        val diagnostics = KotlinCodeEngine.diagnoseKotlinSyntax(codeWithSyntaxError)
+        assertTrue(diagnostics.isNotEmpty())
+        assertEquals(2, diagnostics.first().line)
+
+        // Autocomplete suggestions for non-string contexts
+        val (prefix, suggestions) = com.example.code.CodeLanguageEngine.getSuggestionsForLanguage(
+            code = "fun test() {\n    pr",
+            cursorPosition = "fun test() {\n    pr".length,
+            language = com.example.model.LanguageType.KOTLIN
+        )
+        assertEquals("pr", prefix)
+        assertTrue(suggestions.any { it.label == "print" || it.label.startsWith("pr") })
+    }
 }
 

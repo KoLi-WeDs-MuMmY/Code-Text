@@ -166,6 +166,8 @@ fun DocumentEditorScreen(
     onToggleSplitScreenOrientation: () -> Unit = {},
     onRunActiveSectionInTerminal: () -> Unit = {},
     onOpenVaultModal: () -> Unit = {},
+    onUpdateSectionLanguage: (Long, com.example.model.LanguageType) -> Unit = { _, _ -> },
+    onUpdateSectionThemeOverride: (Long, com.example.ui.theme.AppThemeId?) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
@@ -738,7 +740,9 @@ fun DocumentEditorScreen(
                                     onRequestAiRefactor = onRequestAiRefactor,
                                     onRequestAiKDoc = onRequestAiKDoc,
                                     onToggleSectionDivider = onToggleSectionDivider,
-                                    onDeleteSection = onDeleteSection
+                                    onDeleteSection = onDeleteSection,
+                                    onSelectLanguage = { lang -> onUpdateSectionLanguage(activeSection.id, lang) },
+                                    onSelectThemeOverride = { theme -> onUpdateSectionThemeOverride(activeSection.id, theme) }
                                 )
                             }
                         }
@@ -1350,7 +1354,9 @@ private fun FullScreenAppleCmdSectionEditor(
     onRequestAiRefactor: (Long) -> Unit,
     onRequestAiKDoc: (Long) -> Unit,
     onToggleSectionDivider: (Long) -> Unit,
-    onDeleteSection: (Long) -> Unit
+    onDeleteSection: (Long) -> Unit,
+    onSelectLanguage: (com.example.model.LanguageType) -> Unit = {},
+    onSelectThemeOverride: (com.example.ui.theme.AppThemeId?) -> Unit = {}
 ) {
     KotlinCodeSectionCard(
         section = section,
@@ -1390,6 +1396,8 @@ private fun FullScreenAppleCmdSectionEditor(
         onRequestAiKDoc = { onRequestAiKDoc(section.id) },
         onToggleFocusMode = {},
         onToggleDivider = { onToggleSectionDivider(section.id) },
-        onDeleteSection = { onDeleteSection(section.id) }
+        onDeleteSection = { onDeleteSection(section.id) },
+        onSelectLanguage = onSelectLanguage,
+        onSelectThemeOverride = onSelectThemeOverride
     )
 }

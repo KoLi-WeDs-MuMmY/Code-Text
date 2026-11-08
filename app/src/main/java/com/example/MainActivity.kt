@@ -78,7 +78,10 @@ fun KtScribeApp(
         editorViewModel.setThemeMode(next)
     }
 
-    KtScribeTheme(themeMode = uiState.themeMode) {
+    KtScribeTheme(
+        themeMode = uiState.themeMode,
+        activeTheme = uiState.activeAppTheme
+    ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
@@ -94,6 +97,7 @@ fun KtScribeApp(
                     onOpenDocument = editorViewModel::openDocument,
                     onCreateDocument = { editorViewModel.createAndOpenNewDocument() },
                     onDeleteDocument = editorViewModel::deleteDocument,
+                    onRenameDocument = editorViewModel::renameFolderById,
                     onCycleThemeMode = cycleThemeMode,
                     onOpenSettings = { showSettingsDialog = true },
                     onOpenVaultModal = editorViewModel::openVaultRecoveryDialog
@@ -153,7 +157,9 @@ fun KtScribeApp(
                     onOpenVaultModal = editorViewModel::openVaultRecoveryDialog,
                     onToggleFloatingWindow = editorViewModel::toggleFloatingWindow,
                     onCloseFloatingWindow = editorViewModel::closeFloatingWindow,
-                    onFocusFloatingWindow = editorViewModel::focusFloatingWindow
+                    onFocusFloatingWindow = editorViewModel::focusFloatingWindow,
+                    onUpdateSectionLanguage = editorViewModel::updateSectionLanguage,
+                    onUpdateSectionThemeOverride = editorViewModel::updateSectionThemeOverride
                 )
             }
 
@@ -172,9 +178,11 @@ fun KtScribeApp(
                 ShortcutAndSettingsDialog(
                     currentShortcutLetter = uiState.shortcutLetter,
                     currentThemeMode = uiState.themeMode,
+                    currentAppTheme = uiState.activeAppTheme,
                     remainingAiQuota = uiState.remainingAiRpmQuota,
                     onSelectShortcutLetter = editorViewModel::setShortcutLetter,
                     onSelectThemeMode = editorViewModel::setThemeMode,
+                    onSelectAppTheme = editorViewModel::setActiveAppTheme,
                     onDismiss = { showSettingsDialog = false }
                 )
             }

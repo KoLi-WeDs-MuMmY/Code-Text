@@ -19,6 +19,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -943,12 +944,12 @@ fun MacDraggableFloatingWindow(
 
                     HorizontalDivider(color = Color(0xFF1A1816), thickness = 1.dp)
 
-                    // 2. Window Body Content
+                    // 2. Window Body Content with Proportional Scaling
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .padding(10.dp)
+                            .padding(8.dp)
                     ) {
                         content()
                     }
@@ -1538,17 +1539,36 @@ fun FolderAndSectionsDropdownContent(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                color = sec.language.badgeColor.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(4.dp),
+                                modifier = Modifier.border(0.5.dp, sec.language.badgeColor, RoundedCornerShape(4.dp))
+                            ) {
+                                Text(
+                                    text = sec.language.shortLabel,
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = sec.language.badgeColor,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                            Text(
+                                text = sec.ktScribeFileName,
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = WarmCreamText,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                         Text(
-                            text = "📄 ${sec.ktScribeFileName}",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = WarmCreamText,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "1 Code Block (${sec.lineCount}L) + Notes • [${sec.effectiveLearnedConceptTag}]",
+                            text = "${sec.language.displayName} (${sec.lineCount}L) • [${sec.effectiveLearnedConceptTag}]",
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 10.sp,
                             color = MutedSageAccent
@@ -1561,7 +1581,7 @@ fun FolderAndSectionsDropdownContent(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DeleteOutline,
-                                contentDescription = "Delete .ktscribe File",
+                                contentDescription = "Delete File",
                                 tint = MutedTaupeText,
                                 modifier = Modifier.size(15.dp)
                             )

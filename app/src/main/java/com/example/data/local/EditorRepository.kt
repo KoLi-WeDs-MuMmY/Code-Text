@@ -132,6 +132,17 @@ class EditorRepository(
         prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
     }
 
+    fun getActiveAppTheme(): com.example.ui.theme.AppThemeId {
+        val raw = prefs.getString(KEY_APP_THEME_ID, com.example.ui.theme.AppThemeId.DARCULA_ESPRESSO.name)
+            ?: com.example.ui.theme.AppThemeId.DARCULA_ESPRESSO.name
+        return com.example.ui.theme.AppThemeId.entries.find { it.name == raw }
+            ?: com.example.ui.theme.AppThemeId.DARCULA_ESPRESSO
+    }
+
+    fun setActiveAppTheme(theme: com.example.ui.theme.AppThemeId) {
+        prefs.edit().putString(KEY_APP_THEME_ID, theme.name).apply()
+    }
+
     suspend fun loadDocumentDetail(documentId: Long): DocumentDetailUiModel? {
         val record = dao.getDocumentWithSectionsOnce(documentId) ?: return null
         return record.toDetailUiModel()
@@ -356,5 +367,6 @@ class EditorRepository(
     companion object {
         private const val KEY_SHORTCUT_LETTER = "shortcut_letter"
         private const val KEY_THEME_MODE = "theme_mode"
+        private const val KEY_APP_THEME_ID = "app_theme_id"
     }
 }
