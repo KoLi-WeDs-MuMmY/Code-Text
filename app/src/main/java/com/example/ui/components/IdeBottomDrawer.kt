@@ -625,7 +625,7 @@ private fun ProblemsTabContent(
                                     text = diag.quickFixLabel,
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 9.sp,
-                                    color = Color(0xFF06B6D4),
+                                     color = Color(0xFF06B6D4),
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
@@ -637,3 +637,177 @@ private fun ProblemsTabContent(
         }
     }
 }
+
+/**
+ * Desktop IDE Status Bar along the bottom of the editor window.
+ * Shows active language, problems summary, terminal, and debugger buttons.
+ */
+@Composable
+fun IdeBottomStatusBar(
+    activeSection: CodeSectionUiModel?,
+    isDrawerOpen: Boolean,
+    activeTab: BottomDrawerTab,
+    onToggleDrawer: (BottomDrawerTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val diagnostics = remember(activeSection?.codeContent, activeSection?.language) {
+        if (activeSection == null) emptyList()
+        else CodeLanguageEngine.getDiagnosticsForLanguage(activeSection.codeContent, activeSection.language)
+    }
+    val errCount = diagnostics.count { it.severity == DiagnosticSeverity.ERROR }
+    val warnCount = diagnostics.count { it.severity == DiagnosticSeverity.WARNING }
+
+    Surface(
+        color = Color(0xFF141210),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF262320)),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(28.dp)
+            .testTag("ide_bottom_status_bar")
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Left: Active file and language
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (activeSection != null) {
+                    val langColor = activeSection.language.badgeColor
+                    Surface(
+                        color = langColor.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(3.dp)
+                    ) {
+                        Text(
+                            text = activeSection.language.badgeLabel,
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = langColor,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                    Text(
+                        text = activeSection.nativeFileName,
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 10.sp,
+                        color = Color(0xFFE6E1DC),
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "•",
+                        fontSize = 10.sp,
+                        color = Color(0xFF6B6560)
+                    )
+                    Text(
+                        text = activeSection.containerFileName,
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 9.5.sp,
+                        color = Color(0xFFA39C93)
+                    )
+                }
+            }
+
+            // Right: Interactive Drawer Tabs (Problems, Terminal, Debugger)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Problems
+                Surface(
+                    color = if (isDrawerOpen && activeTab == BottomDrawerTab.PROBLEMS) Color(0xFF2B241E) else Color.Transparent,
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { onToggleDrawer(BottomDrawerTab.PROBLEMS) }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "✕ $errCount",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (errCount > 0) Color(0xFFFF5F56) else Color(0xFFA39C93)
+                        )
+                        Text(
+                            text = "▲ $warnCount",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (warnCount > 0) Color(0xFFFFBD2E) else Color(0xFFA39C93)
+                        )
+                    }
+                }
+
+                // Terminal
+                Surface(
+                    color = if (isDrawerOpen && activeTab == BottomDrawerTab.TERMINAL) Color(0xFF2B241E) else Color.Transparent,
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { onToggleDrawer(BottomDrawerTab.TERMINAL) }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = ">_ Terminal",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isDrawerOpen && activeTab == BottomDrawerTab.TERMINAL) Color(0xFF68D391) else Color(0xFFA39C93)
+                        )
+                    }
+                }
+
+                // Debugger
+                Surface(
+                    color = if (isDrawerOpen && activeTab == BottomDrawerTab.DEBUGGER) Color(0xFF2B241E) else Color.Transparent,
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { onToggleDrawer(BottomDrawerTab.DEBUGGER) }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "🪲 Debug",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isDrawerOpen && activeTab == BottomDrawerTab.DEBUGGER) Color(0xFFBD93F9) else Color(0xFFA39C93)
+                        )
+                    }
+                }
+
+                // Drawer Expand / Collapse Indicator
+                IconButton(
+                    onClick = { onToggleDrawer(activeTab) },
+                    modifier = Modifier.size(20.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isDrawerOpen) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                        contentDescription = "Toggle IDE Drawer",
+                        tint = Color(0xFFA39C93),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+

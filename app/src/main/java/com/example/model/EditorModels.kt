@@ -428,7 +428,9 @@ data class CodeSectionUiModel(
      */
     fun toKtScribeFilePayload(folderTitle: String = "Workspace"): String = buildString {
         appendLine("// ============================================================================")
-        appendLine("// @ktscribe-file: $ktScribeFileName")
+        appendLine("// @code-file: $nativeFileName")
+        appendLine("// @bundle-container: $containerFileName")
+        appendLine("// @explanation-file: $explanationFileName")
         appendLine("// @folder: ${folderTitle.ifBlank { "DefaultFolder" }}")
         appendLine("// @concept: $effectiveLearnedConceptTag")
         appendLine("// @notes-start")

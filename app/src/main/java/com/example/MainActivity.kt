@@ -165,7 +165,13 @@ fun KtScribeApp(
                     onFocusFloatingWindow = editorViewModel::focusFloatingWindow,
                     onUpdateSectionLanguage = editorViewModel::updateSectionLanguage,
                     onUpdateSectionThemeOverride = editorViewModel::updateSectionThemeOverride,
-                    onInsertLanguageCodeBlock = editorViewModel::insertCodeBlockAtActivePosition
+                    onInsertLanguageCodeBlock = editorViewModel::insertCodeBlockAtActivePosition,
+                    onToggleBottomDrawer = editorViewModel::toggleBottomDrawer,
+                    onCloseBottomDrawer = editorViewModel::closeBottomDrawer,
+                    onSetBottomDrawerTab = editorViewModel::setBottomDrawerTab,
+                    onSetBottomDrawerHeightFraction = editorViewModel::setBottomDrawerHeightFraction,
+                    onClearTerminal = editorViewModel::clearTerminalOutput,
+                    onDismissExtensionRenameWarning = editorViewModel::dismissExtensionRenameWarning
                 )
             }
 

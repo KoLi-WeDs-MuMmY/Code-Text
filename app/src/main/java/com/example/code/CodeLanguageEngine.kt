@@ -251,7 +251,7 @@ object CodeLanguageEngine {
      */
     fun getDiagnosticsForLanguage(code: String, language: LanguageType): List<KotlinDiagnostic> {
         if (language == LanguageType.KOTLIN) {
-            return KotlinCodeEngine.getDiagnostics(code)
+            return KotlinCodeEngine.diagnoseKotlinSyntax(code)
         }
 
         val lines = code.split('\n')
@@ -410,7 +410,7 @@ object CodeLanguageEngine {
                 }
                 LanguageType.KOTLIN -> Unit
             }
-        })
+        }
 
         if (braceCount > 0) {
             diagnostics.add(

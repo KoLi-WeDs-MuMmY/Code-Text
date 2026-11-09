@@ -14,6 +14,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -371,9 +372,12 @@ class ExampleUnitTest {
             explanationText = "Explains Dispatchers.IO usage",
             explanationStyle = TextFormattingStyle(learnedConceptTag = "Coroutines")
         )
-        assertEquals("CoroutineDispatcherLab.ktscribe", section.ktScribeFileName)
+        assertEquals("CoroutineDispatcherLab.kt", section.nativeFileName)
+        assertEquals("CoroutineDispatcherLab.ktscribe", section.containerFileName)
+        assertEquals("explanation.txt", section.explanationFileName)
         val payload = section.toKtScribeFilePayload("Concurrency Folder")
-        assertTrue(payload.contains("// @ktscribe-file: CoroutineDispatcherLab.ktscribe"))
+        assertTrue(payload.contains("// @code-file: CoroutineDispatcherLab.kt"))
+        assertTrue(payload.contains("// @bundle-container: CoroutineDispatcherLab.ktscribe"))
         assertTrue(payload.contains("// @folder: Concurrency Folder"))
         assertTrue(payload.contains("Explains Dispatchers.IO usage"))
     }
@@ -432,28 +436,32 @@ class ExampleUnitTest {
             sectionTitle = "Greeter",
             language = com.example.model.LanguageType.KOTLIN
         )
-        assertEquals("Greeter.ktscribe", ktSection.ktScribeFileName)
+        assertEquals("Greeter.kt", ktSection.nativeFileName)
+        assertEquals("Greeter.ktscribe", ktSection.containerFileName)
 
         // Java
         val javaSection = CodeSectionUiModel(
             sectionTitle = "MainApp",
             language = com.example.model.LanguageType.JAVA
         )
-        assertEquals("MainApp.java", javaSection.ktScribeFileName)
+        assertEquals("MainApp.java", javaSection.nativeFileName)
+        assertEquals("MainApp.javascribe", javaSection.containerFileName)
 
         // Python
         val pySection = CodeSectionUiModel(
             sectionTitle = "Script",
             language = com.example.model.LanguageType.PYTHON
         )
-        assertEquals("Script.py", pySection.ktScribeFileName)
+        assertEquals("Script.py", pySection.nativeFileName)
+        assertEquals("Script.pyscribe", pySection.containerFileName)
 
         // Dart
         val dartSection = CodeSectionUiModel(
             sectionTitle = "Widget",
             language = com.example.model.LanguageType.DART
         )
-        assertEquals("Widget.dart", dartSection.ktScribeFileName)
+        assertEquals("Widget.dart", dartSection.nativeFileName)
+        assertEquals("Widget.dartscribe", dartSection.containerFileName)
 
         // Java snippets test
         val (javaPrefix, javaSuggestions) = com.example.code.CodeLanguageEngine.getSuggestionsForLanguage(
@@ -498,6 +506,39 @@ class ExampleUnitTest {
         )
         assertEquals("pr", prefix)
         assertTrue(suggestions.any { it.label == "print" || it.label.startsWith("pr") })
+    }
+
+    @Test
+    fun `file extension rename guard prevents accidental language change and produces warning`() {
+        val ktSection = CodeSectionUiModel(
+            sectionTitle = "Calculator.kt",
+            language = com.example.model.LanguageType.KOTLIN
+        )
+        // Renaming stem without changing language is valid (returns null error)
+        val validWarning = CodeSectionUiModel.validateFileExtensionRename(
+            currentFileName = "Calculator.kt",
+            newFileName = "AdvancedCalculator.kt",
+            language = ktSection.language
+        )
+        assertNull(validWarning)
+
+        // Attempting to rename extension from .kt to .py triggers warning
+        val invalidWarning = CodeSectionUiModel.validateFileExtensionRename(
+            currentFileName = "Calculator.kt",
+            newFileName = "Calculator.py",
+            language = ktSection.language
+        )
+        assertNotNull(invalidWarning)
+        assertTrue(invalidWarning!!.contains("syntax and runtime language differ"))
+    }
+
+    @Test
+    fun `floating window preset tiers support portrait and landscape dimensions`() {
+        val windowType = com.example.model.FloatingWindowType.FOLDERS
+        assertEquals(340f, windowType.getTierWidthDp(com.example.model.WindowPresetTier.PORTRAIT), 0.01f)
+        assertEquals(520f, windowType.getTierHeightDp(com.example.model.WindowPresetTier.PORTRAIT), 0.01f)
+        assertEquals(560f, windowType.getTierWidthDp(com.example.model.WindowPresetTier.LANDSCAPE), 0.01f)
+        assertEquals(360f, windowType.getTierHeightDp(com.example.model.WindowPresetTier.LANDSCAPE), 0.01f)
     }
 }
 

@@ -46,6 +46,8 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.VerticalSplit
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -85,6 +87,7 @@ import androidx.compose.ui.unit.sp
 import com.example.code.DiagnosticSeverity
 import com.example.code.KotlinCodeEngine
 import com.example.model.ActiveEditorTarget
+import com.example.model.BottomDrawerTab
 import com.example.model.CodeSectionUiModel
 import com.example.model.DocumentDetailUiModel
 import com.example.model.DocumentSummaryUiModel
@@ -98,6 +101,8 @@ import com.example.model.TextAlignmentChoice
 import com.example.ui.components.CommandPaletteDropdownContent
 import com.example.ui.components.ExplanationWindowBodyContent
 import com.example.ui.components.FolderAndSectionsDropdownContent
+import com.example.ui.components.IdeBottomDrawer
+import com.example.ui.components.IdeBottomStatusBar
 import com.example.ui.components.KotlinCodeSectionCard
 import com.example.ui.components.FileSettingsDialog
 import com.example.ui.components.LeftRailIdeTool
@@ -172,6 +177,12 @@ fun DocumentEditorScreen(
     onUpdateSectionLanguage: (Long, com.example.model.LanguageType) -> Unit = { _, _ -> },
     onUpdateSectionThemeOverride: (Long, com.example.ui.theme.AppThemeId?) -> Unit = { _, _ -> },
     onInsertLanguageCodeBlock: (com.example.model.LanguageType) -> Unit = {},
+    onToggleBottomDrawer: (BottomDrawerTab) -> Unit = {},
+    onCloseBottomDrawer: () -> Unit = {},
+    onSetBottomDrawerTab: (BottomDrawerTab) -> Unit = {},
+    onSetBottomDrawerHeightFraction: (Float) -> Unit = {},
+    onClearTerminal: () -> Unit = {},
+    onDismissExtensionRenameWarning: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
@@ -204,7 +215,11 @@ fun DocumentEditorScreen(
         }
 
     BackHandler {
-        if (uiState.activeIslandDropdown != IslandDropdownMenu.NONE) {
+        if (uiState.extensionRenameWarningDialog != null) {
+            onDismissExtensionRenameWarning()
+        } else if (uiState.isBottomDrawerOpen) {
+            onCloseBottomDrawer()
+        } else if (uiState.activeIslandDropdown != IslandDropdownMenu.NONE) {
             onCloseIslandDropdown()
         } else if (uiState.openFloatingWindows.isNotEmpty()) {
             onCloseFloatingWindow(uiState.openFloatingWindows.last())
@@ -281,15 +296,22 @@ fun DocumentEditorScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Description,
-                                        contentDescription = null,
-                                        tint = if (isCurrent) langColor else Color(0xFFA39C93),
-                                        modifier = Modifier.size(11.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Surface(
+                                        color = langColor.copy(alpha = 0.25f),
+                                        shape = RoundedCornerShape(3.dp),
+                                        modifier = Modifier.padding(end = 5.dp)
+                                    ) {
+                                        Text(
+                                            text = sec.language.badgeLabel,
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = langColor,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                        )
+                                    }
                                     Text(
-                                        text = "${sec.ktScribeFileName} • ${sec.effectiveLearnedConceptTag}",
+                                        text = "${sec.nativeFileName} (${sec.containerFileName}) • ${sec.effectiveLearnedConceptTag}",
                                         fontFamily = JetBrainsMonoFontFamily,
                                         fontSize = 10.sp,
                                         fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
@@ -409,6 +431,14 @@ fun DocumentEditorScreen(
                     }
                 }
             }
+        },
+        bottomBar = {
+            IdeBottomStatusBar(
+                activeSection = activeSection,
+                isDrawerOpen = uiState.isBottomDrawerOpen,
+                activeTab = uiState.activeBottomDrawerTab,
+                onToggleDrawer = onToggleBottomDrawer
+            )
         },
         modifier = modifier
             .fillMaxSize()
@@ -970,6 +1000,21 @@ fun DocumentEditorScreen(
                     }
                 }
             }
+
+            // Desktop-IDE Sliding Bottom Drawer (Terminal, Debugger, Problems)
+            IdeBottomDrawer(
+                isOpen = uiState.isBottomDrawerOpen,
+                activeTab = uiState.activeBottomDrawerTab,
+                activeSection = activeSection,
+                executionOutput = uiState.terminalExecutionOutput,
+                heightFraction = uiState.bottomDrawerHeightFraction,
+                onTabSelected = onSetBottomDrawerTab,
+                onHeightFractionChange = onSetBottomDrawerHeightFraction,
+                onRunCode = onRunActiveSectionInTerminal,
+                onClearTerminal = onClearTerminal,
+                onCloseDrawer = onCloseBottomDrawer,
+                onJumpToLine = { /* Line jumping */ }
+            )
         }
     }
 
@@ -995,6 +1040,50 @@ fun DocumentEditorScreen(
             onRequestAiExplain = { onRequestAiExplain(activeSection.id) },
             onOpenStudioSettings = onOpenSettings,
             onDismiss = { showFileSettingsDialog = false }
+        )
+    }
+
+    // Extension Rename Warning Dialog (prevents altering language extension)
+    uiState.extensionRenameWarningDialog?.let { warningMsg ->
+        AlertDialog(
+            onDismissRequest = onDismissExtensionRenameWarning,
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = Color(0xFFFFB86C),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Language Extension Locked",
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFF1FA8C),
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 15.sp
+                    )
+                }
+            },
+            text = {
+                Text(
+                    text = warningMsg,
+                    color = Color(0xFFE6E1DC),
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 12.5.sp,
+                    lineHeight = 18.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = onDismissExtensionRenameWarning,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5555))
+                ) {
+                    Text("Acknowledge", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = Color(0xFF1E1E1E),
+            tonalElevation = 8.dp
         )
     }
 }
