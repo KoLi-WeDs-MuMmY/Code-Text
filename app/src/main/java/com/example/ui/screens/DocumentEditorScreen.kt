@@ -53,6 +53,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -91,12 +92,14 @@ import com.example.model.EditorFontChoice
 import com.example.model.ExplanationWindowMode
 import com.example.model.FloatingWindowType
 import com.example.model.IslandDropdownMenu
+import com.example.model.LanguageType
 import com.example.model.SplitScreenOrientation
 import com.example.model.TextAlignmentChoice
 import com.example.ui.components.CommandPaletteDropdownContent
 import com.example.ui.components.ExplanationWindowBodyContent
 import com.example.ui.components.FolderAndSectionsDropdownContent
 import com.example.ui.components.KotlinCodeSectionCard
+import com.example.ui.components.FileSettingsDialog
 import com.example.ui.components.LeftRailIdeTool
 import com.example.ui.components.MacDraggableFloatingWindow
 import com.example.ui.components.ResizableIslandDropdownWindow
@@ -168,12 +171,14 @@ fun DocumentEditorScreen(
     onOpenVaultModal: () -> Unit = {},
     onUpdateSectionLanguage: (Long, com.example.model.LanguageType) -> Unit = { _, _ -> },
     onUpdateSectionThemeOverride: (Long, com.example.ui.theme.AppThemeId?) -> Unit = { _, _ -> },
+    onInsertLanguageCodeBlock: (com.example.model.LanguageType) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
     val clipboardManager = LocalClipboardManager.current
     val density = LocalDensity.current
     var activeLeftRailTool by remember { mutableStateOf(LeftRailIdeTool.NONE) }
+    var showFileSettingsDialog by remember { mutableStateOf(false) }
 
     val activeSection = remember(document.sections, uiState.focusedSectionId, uiState.activeTarget) {
         val targetId = uiState.focusedSectionId
@@ -217,12 +222,12 @@ fun DocumentEditorScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets.systemBars,
-        containerColor = Tier0OuterTrenchBg,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Tier0OuterTrenchBg)
+                    .background(MaterialTheme.colorScheme.background)
             ) {
                 // 1. Bezel-Safe Top Frame Bar:
                 // Left back arrow `←` + `.ktscribe` file badge + Top-Right 4 horizontal oval pills
@@ -240,7 +245,7 @@ fun DocumentEditorScreen(
                         onToggleIslandDropdown(IslandDropdownMenu.COMMAND_PALETTE)
                     },
                     onOpenVaultModal = onOpenVaultModal,
-                    onOpenSettings = onOpenSettings
+                    onOpenSettings = { showFileSettingsDialog = true }
                 )
 
                 // 2. `.ktscribe` File Switcher Strip (1 File = 1 Code Block inside Folder)
@@ -424,7 +429,7 @@ fun DocumentEditorScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .imePadding()
-                .background(Tier0OuterTrenchBg)
+                .background(MaterialTheme.colorScheme.background)
         ) {
             val totalHeightPx = with(density) { maxHeight.toPx().coerceAtLeast(1f) }
             val totalWidthPx = with(density) { maxWidth.toPx().coerceAtLeast(1f) }
@@ -527,28 +532,60 @@ fun DocumentEditorScreen(
                                         )
                                     }
 
-                                    // Vertical Draggable Split Handle
-                                    Box(
+                                    // Vertical Draggable Split Handle (Clamped between 25% and 75%)
+                                    Column(
                                         modifier = Modifier
                                             .fillMaxHeight()
-                                            .width(16.dp)
+                                            .width(22.dp)
+                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                                             .pointerInput(totalWidthPx) {
                                                 detectDragGestures { change, dragAmount ->
                                                     change.consume()
                                                     val deltaRatio = dragAmount.x / totalWidthPx
-                                                    onUpdateSplitRatio(uiState.splitScreenRatio + deltaRatio)
+                                                    onUpdateSplitRatio((uiState.splitScreenRatio + deltaRatio).coerceIn(0.25f, 0.75f))
                                                 }
                                             }
                                             .testTag("split_screen_resize_handle"),
-                                        contentAlignment = Alignment.Center
+                                        verticalArrangement = Arrangement.Center,
+                                        horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
+                                        Surface(
+                                            color = if (uiState.splitScreenRatio <= 0.35f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                            shape = RoundedCornerShape(3.dp),
+                                            modifier = Modifier.clickable { onUpdateSplitRatio(0.30f) }
+                                        ) {
+                                            Text(
+                                                text = "30",
+                                                fontSize = 7.5.sp,
+                                                fontFamily = JetBrainsMonoFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (uiState.splitScreenRatio <= 0.35f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
                                         Box(
                                             modifier = Modifier
                                                 .width(4.dp)
-                                                .height(54.dp)
+                                                .height(44.dp)
                                                 .clip(RoundedCornerShape(4.dp))
-                                                .background(Color(0xFFD4883A))
+                                                .background(MaterialTheme.colorScheme.primary)
                                         )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Surface(
+                                            color = if (uiState.splitScreenRatio >= 0.65f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                            shape = RoundedCornerShape(3.dp),
+                                            modifier = Modifier.clickable { onUpdateSplitRatio(0.70f) }
+                                        ) {
+                                            Text(
+                                                text = "70",
+                                                fontSize = 7.5.sp,
+                                                fontFamily = JetBrainsMonoFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (uiState.splitScreenRatio >= 0.65f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)
+                                            )
+                                        }
                                     }
 
                                     Box(
@@ -584,7 +621,8 @@ fun DocumentEditorScreen(
                                             onRequestAiRefactor = onRequestAiRefactor,
                                             onRequestAiNaming = onRequestAiNaming,
                                             onRequestAiKDoc = onRequestAiKDoc,
-                                            onRunActiveSectionInTerminal = onRunActiveSectionInTerminal
+                                            onRunActiveSectionInTerminal = onRunActiveSectionInTerminal,
+                                            onInsertLanguageCodeBlock = onInsertLanguageCodeBlock
                                         )
                                     }
                                 }
@@ -627,16 +665,17 @@ fun DocumentEditorScreen(
                                         )
                                     }
 
-                                    // Horizontal Draggable Split Handle
+                                    // Horizontal Draggable Split Handle (Clamped between 25% and 75%)
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(18.dp)
+                                            .height(28.dp)
+                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                                             .pointerInput(totalHeightPx) {
                                                 detectDragGestures { change, dragAmount ->
                                                     change.consume()
                                                     val deltaRatio = dragAmount.y / totalHeightPx
-                                                    onUpdateSplitRatio(uiState.splitScreenRatio + deltaRatio)
+                                                    onUpdateSplitRatio((uiState.splitScreenRatio + deltaRatio).coerceIn(0.25f, 0.75f))
                                                 }
                                             }
                                             .testTag("split_screen_resize_handle"),
@@ -644,26 +683,45 @@ fun DocumentEditorScreen(
                                         horizontalArrangement = Arrangement.Center
                                     ) {
                                         Surface(
-                                            color = Color(0xFF23201E),
-                                            shape = RoundedCornerShape(8.dp)
+                                            color = MaterialTheme.colorScheme.surface,
+                                            shape = RoundedCornerShape(8.dp),
+                                            border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
                                         ) {
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Default.DragHandle,
                                                     contentDescription = "Drag to resize split windows",
-                                                    tint = Color(0xFFD4883A),
+                                                    tint = MaterialTheme.colorScheme.primary,
                                                     modifier = Modifier.size(14.dp)
                                                 )
-                                                Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    text = "Drag Split (${(uiState.splitScreenRatio * 100).toInt()}% / ${((1f - uiState.splitScreenRatio) * 100).toInt()}%)",
+                                                    text = "${(uiState.splitScreenRatio * 100).toInt()}% / ${((1f - uiState.splitScreenRatio) * 100).toInt()}%",
                                                     fontFamily = JetBrainsMonoFontFamily,
-                                                    fontSize = 9.5.sp,
-                                                    color = Color(0xFFA39C93)
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface
                                                 )
+                                                listOf(0.30f to "30%", 0.50f to "50%", 0.70f to "70%").forEach { (ratio, label) ->
+                                                    val isSelected = kotlin.math.abs(uiState.splitScreenRatio - ratio) < 0.08f
+                                                    Surface(
+                                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        modifier = Modifier.clickable { onUpdateSplitRatio(ratio) }
+                                                    ) {
+                                                        Text(
+                                                            text = label,
+                                                            fontSize = 8.5.sp,
+                                                            fontFamily = JetBrainsMonoFontFamily,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -701,7 +759,8 @@ fun DocumentEditorScreen(
                                             onRequestAiRefactor = onRequestAiRefactor,
                                             onRequestAiNaming = onRequestAiNaming,
                                             onRequestAiKDoc = onRequestAiKDoc,
-                                            onRunActiveSectionInTerminal = onRunActiveSectionInTerminal
+                                            onRunActiveSectionInTerminal = onRunActiveSectionInTerminal,
+                                            onInsertLanguageCodeBlock = onInsertLanguageCodeBlock
                                         )
                                     }
                                 }
@@ -845,7 +904,8 @@ fun DocumentEditorScreen(
                                         onRequestAiRefactor = onRequestAiRefactor,
                                         onRequestAiNaming = onRequestAiNaming,
                                         onRequestAiKDoc = onRequestAiKDoc,
-                                        onRunActiveSectionInTerminal = onRunActiveSectionInTerminal
+                                        onRunActiveSectionInTerminal = onRunActiveSectionInTerminal,
+                                        onInsertLanguageCodeBlock = onInsertLanguageCodeBlock
                                     )
                                 }
                             }
@@ -911,6 +971,31 @@ fun DocumentEditorScreen(
             }
         }
     }
+
+    if (showFileSettingsDialog && activeSection != null) {
+        FileSettingsDialog(
+            activeSection = activeSection,
+            folderTitle = document.title,
+            onUpdateLanguage = { lang -> onUpdateSectionLanguage(activeSection.id, lang) },
+            onUpdateThemeOverride = { theme -> onUpdateSectionThemeOverride(activeSection.id, theme) },
+            onUpdateFileName = { name -> onUpdateSectionTitle(activeSection.id, name) },
+            onCopyFileBundle = {
+                val payload = activeSection.toKtScribeFilePayload(document.title)
+                clipboardManager.setText(AnnotatedString(payload))
+            },
+            onCopyRawCode = {
+                clipboardManager.setText(AnnotatedString(activeSection.codeContent))
+            },
+            onCopyFolderMarkdown = {
+                val md = onExportMarkdown()
+                clipboardManager.setText(AnnotatedString(md))
+            },
+            onRequestAiNaming = { onRequestAiNaming(activeSection.id) },
+            onRequestAiExplain = { onRequestAiExplain(activeSection.id) },
+            onOpenStudioSettings = onOpenSettings,
+            onDismiss = { showFileSettingsDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -942,23 +1027,24 @@ private fun DockedSplitWindowContainer(
     onRequestAiRefactor: (Long) -> Unit,
     onRequestAiNaming: (Long) -> Unit,
     onRequestAiKDoc: (Long) -> Unit,
-    onRunActiveSectionInTerminal: () -> Unit
+    onRunActiveSectionInTerminal: () -> Unit,
+    onInsertLanguageCodeBlock: (LanguageType) -> Unit = {}
 ) {
     Card(
         modifier = Modifier
             .fillMaxSize()
             .shadow(14.dp, RoundedCornerShape(18.dp))
-            .border(1.5.dp, Tier3FloatingWindowActiveBevel, RoundedCornerShape(18.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp))
             .testTag("docked_split_window_${windowType.name.lowercase()}"),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Tier3FloatingWindowActiveBg)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Split Window Header with Traffic Lights, Orientation Switch (Side / Bottom), Float, and Close
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Tier3FloatingWindowActiveHeader)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(horizontal = 10.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -1126,7 +1212,8 @@ private fun DockedSplitWindowContainer(
                     onRequestAiRefactor = onRequestAiRefactor,
                     onRequestAiNaming = onRequestAiNaming,
                     onRequestAiKDoc = onRequestAiKDoc,
-                    onRunActiveSectionInTerminal = onRunActiveSectionInTerminal
+                    onRunActiveSectionInTerminal = onRunActiveSectionInTerminal,
+                    onInsertLanguageCodeBlock = onInsertLanguageCodeBlock
                 )
             }
         }
@@ -1157,7 +1244,8 @@ private fun FloatingOrSplitWindowContentBody(
     onRequestAiRefactor: (Long) -> Unit,
     onRequestAiNaming: (Long) -> Unit,
     onRequestAiKDoc: (Long) -> Unit,
-    onRunActiveSectionInTerminal: () -> Unit
+    onRunActiveSectionInTerminal: () -> Unit,
+    onInsertLanguageCodeBlock: (LanguageType) -> Unit = {}
 ) {
     when (windowType) {
         FloatingWindowType.EXPLANATION -> {
@@ -1184,6 +1272,7 @@ private fun FloatingOrSplitWindowContentBody(
                 onOpenAllFoldersGrid = onCloseWindowAndExit,
                 onSelectSection = onJumpToSectionConcept,
                 onInsertNewSection = onInsertCodeBlock,
+                onInsertNewLanguageSection = onInsertLanguageCodeBlock,
                 onDeleteSection = onDeleteSection
             )
         }
@@ -1306,20 +1395,20 @@ private fun FloatingOrSplitWindowContentBody(
                     }
                 }
                 Surface(
-                    color = Color(0xFF141312),
+                    color = MaterialTheme.colorScheme.surface,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .border(1.dp, Color(0xFF36312C), RoundedCornerShape(10.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
                 ) {
                     Text(
                         text = uiState.terminalExecutionOutput
-                            ?: KotlinCodeEngine.simulateKotlinExecution(activeSection.codeContent),
+                            ?: com.example.code.CodeLanguageEngine.simulateExecutionForLanguage(activeSection.codeContent, activeSection.language),
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 11.5.sp,
                         lineHeight = 17.sp,
-                        color = Color(0xFFE6E1DC),
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())

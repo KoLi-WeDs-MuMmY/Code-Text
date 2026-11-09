@@ -124,22 +124,22 @@ import com.example.ui.theme.Tier2CompletionSelectedBg
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// Matte JetBrains Darcula & Espresso IDE Tokens (Zero Neon)
-private val DarculaChromeBg = Tier1CodeHeaderBg
-private val DarculaSubBarBg = Color(0xFF1E1C1A)
-private val DarculaCanvasBg = Tier1CodeCanvasBg
-private val DarculaGutterBg = Tier1CodeGutterBg
-private val DarculaActiveLineBg = Color(0xFF262320)
-private val DarculaConsoleBg = Color(0xFF141312)
-private val DarculaBorder = Color(0xFF36322E)
+// Dynamic Theme IDE Tokens (Reacts instantly to active theme selection)
+private val DarculaChromeBg: Color @Composable get() = com.example.ui.theme.LocalKotlinSyntaxColors.current.codeHeaderBackground
+private val DarculaSubBarBg: Color @Composable get() = com.example.ui.theme.LocalKotlinSyntaxColors.current.codeHeaderBackground.copy(alpha = 0.75f)
+private val DarculaCanvasBg: Color @Composable get() = com.example.ui.theme.LocalKotlinSyntaxColors.current.codeBackground
+private val DarculaGutterBg: Color @Composable get() = com.example.ui.theme.LocalKotlinSyntaxColors.current.codeHeaderBackground.copy(alpha = 0.55f)
+private val DarculaActiveLineBg: Color @Composable get() = com.example.ui.theme.LocalKotlinSyntaxColors.current.codeHeaderBackground.copy(alpha = 0.85f)
+private val DarculaConsoleBg: Color @Composable get() = com.example.ui.theme.LocalKotlinSyntaxColors.current.codeBackground
+private val DarculaBorder: Color @Composable get() = com.example.ui.theme.LocalKotlinSyntaxColors.current.codeBorder
 private val MacTrafficRed = Color(0xFFD9534F)
 private val MacTrafficYellow = Color(0xFFD49B35)
 private val MacTrafficGreen = Color(0xFF6A9955)
-private val DarculaWarmAmber = Color(0xFFD4883A)
-private val DarculaSageGreen = Color(0xFF8AA87B)
-private val DarculaSteelBlue = Color(0xFF8CA6B8)
-private val DarculaMutedText = Color(0xFF8C857B)
-private val DarculaBrightText = Color(0xFFE6E1DC)
+private val DarculaWarmAmber: Color @Composable get() = com.example.ui.theme.LocalKotlinSyntaxColors.current.keyword
+private val DarculaSageGreen: Color @Composable get() = com.example.ui.theme.LocalKotlinSyntaxColors.current.stringLiteral
+private val DarculaSteelBlue: Color @Composable get() = com.example.ui.theme.LocalKotlinSyntaxColors.current.functionName
+private val DarculaMutedText: Color @Composable get() = com.example.ui.theme.LocalKotlinSyntaxColors.current.lineNumber
+private val DarculaBrightText: Color @Composable get() = com.example.ui.theme.LocalKotlinSyntaxColors.current.plainText
 
 enum class LeftRailIdeTool {
     NONE,
@@ -199,7 +199,8 @@ fun KotlinCodeSectionCard(
     onSelectThemeOverride: (com.example.ui.theme.AppThemeId?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val activeSyntaxColors = (section.themeOverride ?: com.example.ui.theme.AppThemeId.DARCULA_ESPRESSO).toSyntaxColors()
+    val defaultSyntaxColors = com.example.ui.theme.LocalKotlinSyntaxColors.current
+    val activeSyntaxColors = section.themeOverride?.toSyntaxColors() ?: defaultSyntaxColors
     val terminalSyntaxColors = activeSyntaxColors
     val clipboardManager = LocalClipboardManager.current
     val density = LocalDensity.current
@@ -435,13 +436,16 @@ fun KotlinCodeSectionCard(
     val lineHeightDp = 22.dp
     val minCodeEditorHeight = (visibleLines * 22 + 24).dp
 
-    Column(
-        modifier = modifier
-            .then(
-                if (isSingleSectionFocusMode) Modifier.fillMaxSize() else Modifier.fillMaxWidth()
-            )
-            .testTag("section_container_${section.orderIndex}")
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.example.ui.theme.LocalKotlinSyntaxColors provides activeSyntaxColors
     ) {
+        Column(
+            modifier = modifier
+                .then(
+                    if (isSingleSectionFocusMode) Modifier.fillMaxSize() else Modifier.fillMaxWidth()
+                )
+                .testTag("section_container_${section.orderIndex}")
+        ) {
         // 1. Optional/Removable Top Section Divider (only in multi-section view)
         if (section.showDivider && !isSingleSectionFocusMode) {
             SectionDividerBar(
@@ -2445,6 +2449,7 @@ fun KotlinCodeSectionCard(
             )
         }
     }
+}
 }
 
 /**

@@ -69,6 +69,7 @@ data class EditorUiState(
     val shortcutLetter: Char = 'K',
     val themeMode: ThemeMode = ThemeMode.DARK,
     val activeAppTheme: com.example.ui.theme.AppThemeId = com.example.ui.theme.AppThemeId.DARCULA_ESPRESSO,
+    val defaultLanguageForNewFiles: com.example.model.LanguageType = com.example.model.LanguageType.KOTLIN,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false
 ) {
@@ -793,6 +794,10 @@ class EditorViewModel(
         _uiState.update { it.copy(activeAppTheme = theme) }
     }
 
+    fun setDefaultLanguageForNewFiles(lang: com.example.model.LanguageType) {
+        _uiState.update { it.copy(defaultLanguageForNewFiles = lang) }
+    }
+
     fun updateSectionConceptTagManual(sectionId: Long, newConceptTag: String) {
         mutateActiveDocument(recordUndo = true) { doc ->
             doc.copy(
@@ -897,7 +902,8 @@ class EditorViewModel(
         }
     }
 
-    fun insertCodeBlockAtActivePosition() {
+    fun insertCodeBlockAtActivePosition(language: com.example.model.LanguageType? = null) {
+        val effectiveLanguage = language ?: _uiState.value.defaultLanguageForNewFiles
         val currentDoc = _uiState.value.activeDocument ?: return
         viewModelScope.launch {
             recordUndoSnapshot(currentDoc)
@@ -930,16 +936,20 @@ class EditorViewModel(
                 defaultStyle = inheritedStyle
             )
 
+            val baseStem = if (effectiveLanguage == com.example.model.LanguageType.PYTHON || effectiveLanguage == com.example.model.LanguageType.DART) "main" else "Main"
+            val fileTitle = if (newOrderIndex == 0) "$baseStem${effectiveLanguage.extension}" else "${baseStem}${newOrderIndex + 1}${effectiveLanguage.extension}"
+
             val newSection = CodeSectionUiModel(
                 id = newSectionId,
                 documentId = currentDoc.id,
                 orderIndex = newOrderIndex,
-                sectionTitle = "",
+                sectionTitle = fileTitle,
                 isAiNamed = false,
-                codeContent = "",
+                codeContent = effectiveLanguage.starterCode,
                 explanationText = "",
                 explanationStyle = inheritedStyle,
-                showDivider = true
+                showDivider = true,
+                language = effectiveLanguage
             )
 
             val updatedList = currentSections.toMutableList().apply {

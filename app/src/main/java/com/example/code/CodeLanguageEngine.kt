@@ -33,6 +33,23 @@ object CodeLanguageEngine {
         "super", "switch", "sync", "this", "throw", "true", "try", "typedef", "var", "void", "while", "with", "yield"
     )
 
+    private val CPP_KEYWORDS = setOf(
+        "auto", "break", "case", "catch", "char", "class", "const", "constexpr", "continue", "default",
+        "delete", "do", "double", "else", "enum", "explicit", "export", "extern", "false", "float",
+        "for", "friend", "goto", "if", "inline", "int", "long", "mutable", "namespace", "new",
+        "noexcept", "nullptr", "operator", "private", "protected", "public", "register", "reinterpret_cast",
+        "return", "short", "signed", "sizeof", "static", "static_assert", "static_cast", "struct", "switch",
+        "template", "this", "throw", "true", "try", "typedef", "typeid", "typename", "union", "unsigned",
+        "using", "virtual", "void", "volatile", "while"
+    )
+
+    private val RUST_KEYWORDS = setOf(
+        "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum",
+        "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match",
+        "mod", "move", "mut", "pub", "ref", "return", "self", "Self", "static", "struct",
+        "super", "trait", "true", "type", "unsafe", "use", "where", "while"
+    )
+
     private val JAVA_SUGGESTIONS = listOf(
         KotlinSuggestion("psvm", "public static void main(String[] args) {\n    \n}", "Snippet", "Main method declaration", "psvm", "{}"),
         KotlinSuggestion("sout", "System.out.println(\"\");", "Snippet", "Print to standard output", "System.out.println()", "{}"),
@@ -73,6 +90,29 @@ object CodeLanguageEngine {
         KotlinSuggestion("BuildContext", "BuildContext context", "Type", "Flutter BuildContext", "(flutter)", "C")
     )
 
+    private val CPP_SUGGESTIONS = listOf(
+        KotlinSuggestion("cout", "std::cout << \"\" << std::endl;", "Snippet", "Print to standard output", "std::cout", "{}"),
+        KotlinSuggestion("main", "int main() {\n    \n    return 0;\n}", "Snippet", "C++ main entry point", "int main()", "{}"),
+        KotlinSuggestion("for", "for (int i = 0; i < n; ++i) {\n    \n}", "Snippet", "For loop iteration", "for ()", "{}"),
+        KotlinSuggestion("vector", "std::vector<int>", "Type", "STL vector container", "(std)", "C"),
+        KotlinSuggestion("string", "std::string", "Type", "STL string type", "(std)", "C"),
+        KotlinSuggestion("class", "class ClassName {\npublic:\n    \n};", "Keyword", "Class declaration", "class Name", "C"),
+        KotlinSuggestion("inc", "#include <iostream>\n", "Snippet", "Include header", "#include", "kw"),
+        KotlinSuggestion("struct", "struct StructName {\n    \n};", "Keyword", "Struct definition", "struct Name", "C")
+    )
+
+    private val RUST_SUGGESTIONS = listOf(
+        KotlinSuggestion("pr", "println!(\"\");", "Snippet", "Print formatted line", "println!()", "{}"),
+        KotlinSuggestion("main", "fn main() {\n    println!(\"Hello Rust!\");\n}", "Snippet", "Rust entry point", "fn main()", "{}"),
+        KotlinSuggestion("fn", "fn function_name() {\n    \n}", "Snippet", "Function definition", "fn name()", "fn"),
+        KotlinSuggestion("struct", "struct Name {\n    \n}", "Keyword", "Struct definition", "struct Name", "C"),
+        KotlinSuggestion("impl", "impl Name {\n    \n}", "Keyword", "Implement methods", "impl Name", "C"),
+        KotlinSuggestion("match", "match value {\n    _ => (),\n}", "Snippet", "Pattern match", "match val", "{}"),
+        KotlinSuggestion("let", "let mut ", "Keyword", "Mutable variable binding", "let mut", "kw"),
+        KotlinSuggestion("Vec", "Vec::new()", "Type", "Growable vector", "(std::vec)", "C"),
+        KotlinSuggestion("String", "String::from(\"\")", "Type", "Allocated UTF-8 string", "(std::string)", "C")
+    )
+
     private val JAVA_TOKEN_REGEX = Regex(
         """(//[^\n]*|/\*[\s\S]*?\*/)|("(?:\\.|[^"\\])*")|('(?:\\.|[^'\\])*')|(\b(?:abstract|assert|boolean|break|byte|case|catch|char|class|const|continue|default|do|double|else|enum|extends|final|finally|float|for|goto|if|implements|import|instanceof|int|interface|long|native|new|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while|record|sealed|permits|var)\b)|(\b[A-Z][A-Za-z0-9_]*\b)|(\b\d+(?:\.\d+)?(?:[fFLdD])?\b)|(@[A-Za-z0-9_]+)"""
     )
@@ -83,6 +123,14 @@ object CodeLanguageEngine {
 
     private val DART_TOKEN_REGEX = Regex(
         """(//[^\n]*|/\*[\s\S]*?\*/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b(?:abstract|as|assert|async|await|break|case|catch|class|const|continue|covariant|default|deferred|do|dynamic|else|enum|export|extends|extension|external|factory|false|final|finally|for|Function|get|hide|if|implements|import|in|interface|is|late|library|mixin|new|null|on|operator|part|required|rethrow|return|set|show|static|super|switch|sync|this|throw|true|try|typedef|var|void|while|with|yield)\b)|(\b[A-Z][A-Za-z0-9_]*\b)|(\b\d+(?:\.\d+)?\b)|(@[A-Za-z0-9_]+)"""
+    )
+
+    private val CPP_TOKEN_REGEX = Regex(
+        """(//[^\n]*|/\*[\s\S]*?\*/)|("(?:\\.|[^"\\])*")|('(?:\\.|[^'\\])*')|(\b(?:auto|break|case|catch|char|class|const|constexpr|continue|default|delete|do|double|else|enum|explicit|export|extern|false|float|for|friend|goto|if|inline|int|long|mutable|namespace|new|noexcept|nullptr|operator|private|protected|public|register|reinterpret_cast|return|short|signed|sizeof|static|static_assert|static_cast|struct|switch|template|this|throw|true|try|typedef|typeid|typename|union|unsigned|using|virtual|void|volatile|while)\b)|(\b[A-Z][A-Za-z0-9_]*\b)|(\b\d+(?:\.\d+)?\b)|(#[A-Za-z0-9_]+)"""
+    )
+
+    private val RUST_TOKEN_REGEX = Regex(
+        """(//[^\n]*|/\*[\s\S]*?\*/)|("(?:\\.|[^"\\])*")|('(?:\\.|[^'\\])*')|(\b(?:as|async|await|break|const|continue|crate|dyn|else|enum|extern|false|fn|for|if|impl|in|let|loop|match|mod|move|mut|pub|ref|return|self|Self|static|struct|super|trait|true|type|unsafe|use|where|while)\b)|(\b[A-Z][A-Za-z0-9_]*\b)|(\b\d+(?:\.\d+)?\b)|(#[A-Za-z0-9_!]+)"""
     )
 
     /**
@@ -102,6 +150,8 @@ object CodeLanguageEngine {
             LanguageType.JAVA -> JAVA_TOKEN_REGEX
             LanguageType.PYTHON -> PYTHON_TOKEN_REGEX
             LanguageType.DART -> DART_TOKEN_REGEX
+            LanguageType.CPP -> CPP_TOKEN_REGEX
+            LanguageType.RUST -> RUST_TOKEN_REGEX
             LanguageType.KOTLIN -> JAVA_TOKEN_REGEX
         }
 
@@ -161,6 +211,8 @@ object CodeLanguageEngine {
             LanguageType.JAVA -> JAVA_SUGGESTIONS
             LanguageType.PYTHON -> PYTHON_SUGGESTIONS
             LanguageType.DART -> DART_SUGGESTIONS
+            LanguageType.CPP -> CPP_SUGGESTIONS
+            LanguageType.RUST -> RUST_SUGGESTIONS
             LanguageType.KOTLIN -> emptyList()
         }
 
@@ -230,6 +282,33 @@ object CodeLanguageEngine {
                     appendLine("$ dart run main.dart")
                     if (outputs.isEmpty()) {
                         appendLine("(Dart program exited cleanly)")
+                    } else {
+                        outputs.forEach { appendLine(it) }
+                    }
+                    append("\nProcess finished with exit code 0")
+                }
+            }
+            LanguageType.CPP -> {
+                val printMatches = Regex("""(?:std::)?cout\s*<<\s*([^;<]+)""").findAll(trimmed)
+                val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }
+                    .filter { it != "std::endl" && it != "endl" }.toList()
+                buildString {
+                    appendLine("$ g++ main.cpp -o main && ./main")
+                    if (outputs.isEmpty()) {
+                        appendLine("(Binary executed successfully with no output)")
+                    } else {
+                        outputs.forEach { appendLine(it) }
+                    }
+                    append("\nProcess finished with exit code 0")
+                }
+            }
+            LanguageType.RUST -> {
+                val printMatches = Regex("""println!\s*\(([^)]*)\)""").findAll(trimmed)
+                val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }.toList()
+                buildString {
+                    appendLine("$ rustc main.rs && ./main")
+                    if (outputs.isEmpty()) {
+                        appendLine("(Rust binary exited cleanly)")
                     } else {
                         outputs.forEach { appendLine(it) }
                     }

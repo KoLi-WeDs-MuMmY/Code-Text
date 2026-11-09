@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SettingsBrightness
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Card
@@ -134,11 +135,29 @@ fun DocumentListScreen(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Text(
-                                text = stringResource(R.string.app_name),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.app_name),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = "v2.1",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
                             Text(
                                 text = stringResource(R.string.subtitle_tagline),
                                 style = MaterialTheme.typography.labelSmall,
@@ -222,6 +241,17 @@ fun DocumentListScreen(
                             contentDescription = "Switch Theme (${themeMode.label})"
                         )
                     }
+
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier.testTag("home_main_settings_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Studio Settings (Theme, Mode, Language)",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
@@ -256,6 +286,11 @@ fun DocumentListScreen(
                 .padding(innerPadding),
             contentAlignment = Alignment.TopCenter
         ) {
+            // High-tech modern floating mesh particles background with subtle gradient pulse
+            com.example.ui.components.ModernFloatingMeshBackground(
+                modifier = Modifier.fillMaxSize()
+            )
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -369,9 +404,9 @@ private fun HeroWorkspaceBanner(
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                Color(0xF5070A10),
-                                Color(0xD80D1522),
-                                Color(0x990D1522)
+                                MaterialTheme.colorScheme.background.copy(alpha = 0.94f),
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                MaterialTheme.colorScheme.background.copy(alpha = 0.65f)
                             )
                         )
                     )
@@ -384,14 +419,14 @@ private fun HeroWorkspaceBanner(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Surface(
-                            color = Color(0xFF75420E),
+                            color = MaterialTheme.colorScheme.primaryContainer,
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
-                                text = "● ● ●  MATTE DARCULA IDE & DUAL 3D WINDOWS",
+                                text = "● ● ●  MULTI-LANGUAGE FLOATING WINDOWS",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.sp,
-                                color = Color(0xFFFFD8A8),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 fontWeight = FontWeight.ExtraBold,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )

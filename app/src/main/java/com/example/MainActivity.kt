@@ -78,9 +78,14 @@ fun KtScribeApp(
         editorViewModel.setThemeMode(next)
     }
 
+    val effectiveTheme = uiState.activeDocument?.let { doc ->
+        val targetId = uiState.focusedSectionId ?: doc.sections.firstOrNull()?.id
+        doc.sections.find { it.id == targetId }?.themeOverride
+    } ?: uiState.activeAppTheme
+
     KtScribeTheme(
         themeMode = uiState.themeMode,
-        activeTheme = uiState.activeAppTheme
+        activeTheme = effectiveTheme
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -159,7 +164,8 @@ fun KtScribeApp(
                     onCloseFloatingWindow = editorViewModel::closeFloatingWindow,
                     onFocusFloatingWindow = editorViewModel::focusFloatingWindow,
                     onUpdateSectionLanguage = editorViewModel::updateSectionLanguage,
-                    onUpdateSectionThemeOverride = editorViewModel::updateSectionThemeOverride
+                    onUpdateSectionThemeOverride = editorViewModel::updateSectionThemeOverride,
+                    onInsertLanguageCodeBlock = editorViewModel::insertCodeBlockAtActivePosition
                 )
             }
 
@@ -180,6 +186,8 @@ fun KtScribeApp(
                     currentThemeMode = uiState.themeMode,
                     currentAppTheme = uiState.activeAppTheme,
                     remainingAiQuota = uiState.remainingAiRpmQuota,
+                    defaultLanguage = uiState.defaultLanguageForNewFiles,
+                    onSelectDefaultLanguage = editorViewModel::setDefaultLanguageForNewFiles,
                     onSelectShortcutLetter = editorViewModel::setShortcutLetter,
                     onSelectThemeMode = editorViewModel::setThemeMode,
                     onSelectAppTheme = editorViewModel::setActiveAppTheme,

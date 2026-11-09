@@ -63,28 +63,61 @@ enum class SplitScreenOrientation(val label: String, val badge: String) {
 enum class FloatingWindowType(
     val pillLabel: String,
     val windowTitle: String,
-    val windowSubtitle: String
+    val windowSubtitle: String,
+    val minWidthDp: Float,
+    val minHeightDp: Float,
+    val defaultHorizontalWidthDp: Float,
+    val defaultHorizontalHeightDp: Float,
+    val defaultVerticalWidthDp: Float,
+    val defaultVerticalHeightDp: Float
 ) {
     EXPLANATION(
         pillLabel = "Explain",
-        windowTitle = "Explanation & .ktscribe Notes",
-        windowSubtitle = "Bundled inside active .ktscribe file • Float or Split"
+        windowTitle = "Explanation & Notes",
+        windowSubtitle = "Bundled inside file • Float or Split",
+        minWidthDp = 270f,
+        minHeightDp = 220f,
+        defaultHorizontalWidthDp = 370f,
+        defaultHorizontalHeightDp = 290f,
+        defaultVerticalWidthDp = 320f,
+        defaultVerticalHeightDp = 420f
     ),
     FOLDERS(
         pillLabel = "Files",
-        windowTitle = "Folders & .ktscribe Files",
-        windowSubtitle = "1 .ktscribe file = 1 code block • Switch or create"
+        windowTitle = "Folders & Language Files",
+        windowSubtitle = "Directories & files • 1 File = 1 Code Block",
+        minWidthDp = 270f,
+        minHeightDp = 240f,
+        defaultHorizontalWidthDp = 370f,
+        defaultHorizontalHeightDp = 310f,
+        defaultVerticalWidthDp = 320f,
+        defaultVerticalHeightDp = 440f
     ),
     AI_STUDIO(
         pillLabel = "AI Guide",
-        windowTitle = "AI Concept & Kotlin Studio",
-        windowSubtitle = "Deep-dive explanation, syntax fix & KDoc"
+        windowTitle = "AI Concept & Multi-Language Studio",
+        windowSubtitle = "Deep-dive explanation, syntax fix & KDoc",
+        minWidthDp = 280f,
+        minHeightDp = 250f,
+        defaultHorizontalWidthDp = 390f,
+        defaultHorizontalHeightDp = 330f,
+        defaultVerticalWidthDp = 330f,
+        defaultVerticalHeightDp = 460f
     ),
     RUN_OUTPUT(
         pillLabel = "Run ▶",
-        windowTitle = "kotlinc — Apple cmd Output",
-        windowSubtitle = "Live script evaluation & compiler diagnostics"
-    )
+        windowTitle = "Terminal Output & Console",
+        windowSubtitle = "Compiler diagnostics & script evaluation",
+        minWidthDp = 270f,
+        minHeightDp = 200f,
+        defaultHorizontalWidthDp = 380f,
+        defaultHorizontalHeightDp = 260f,
+        defaultVerticalWidthDp = 320f,
+        defaultVerticalHeightDp = 380f
+    );
+
+    val defaultWidthDp: Float get() = defaultHorizontalWidthDp
+    val defaultHeightDp: Float get() = defaultHorizontalHeightDp
 }
 
 /**
@@ -178,6 +211,7 @@ enum class LanguageType(
     val extension: String,
     val badgeLabel: String,
     val defaultFileName: String,
+    val directoryPath: String,
     val runCommandPrefix: String,
     val starterCode: String
 ) {
@@ -187,6 +221,7 @@ enum class LanguageType(
         extension = ".ktscribe",
         badgeLabel = "KT",
         defaultFileName = "Main.ktscribe",
+        directoryPath = "src/kotlin/",
         runCommandPrefix = "kotlinc",
         starterCode = "fun main() {\n    println(\"Hello KtScribe!\")\n}"
     ),
@@ -196,6 +231,7 @@ enum class LanguageType(
         extension = ".java",
         badgeLabel = "JAVA",
         defaultFileName = "Main.java",
+        directoryPath = "src/java/",
         runCommandPrefix = "javac",
         starterCode = "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello Java!\");\n    }\n}"
     ),
@@ -205,6 +241,7 @@ enum class LanguageType(
         extension = ".py",
         badgeLabel = "PY",
         defaultFileName = "main.py",
+        directoryPath = "src/python/",
         runCommandPrefix = "python3",
         starterCode = "def main():\n    print(\"Hello Python!\")\n\nif __name__ == '__main__':\n    main()"
     ),
@@ -214,8 +251,29 @@ enum class LanguageType(
         extension = ".dart",
         badgeLabel = "DART",
         defaultFileName = "main.dart",
+        directoryPath = "src/dart/",
         runCommandPrefix = "dart",
         starterCode = "void main() {\n    print('Hello Dart!');\n}"
+    ),
+    CPP(
+        id = "cpp",
+        displayName = "C++",
+        extension = ".cpp",
+        badgeLabel = "C++",
+        defaultFileName = "main.cpp",
+        directoryPath = "src/cpp/",
+        runCommandPrefix = "g++",
+        starterCode = "#include <iostream>\n\nint main() {\n    std::cout << \"Hello C++!\" << std::endl;\n    return 0;\n}"
+    ),
+    RUST(
+        id = "rust",
+        displayName = "Rust",
+        extension = ".rs",
+        badgeLabel = "RS",
+        defaultFileName = "main.rs",
+        directoryPath = "src/rust/",
+        runCommandPrefix = "rustc",
+        starterCode = "fn main() {\n    println!(\"Hello Rust!\");\n}"
     );
 
     val shortLabel: String get() = badgeLabel
@@ -225,6 +283,8 @@ enum class LanguageType(
         JAVA -> androidx.compose.ui.graphics.Color(0xFFE76F51)
         PYTHON -> androidx.compose.ui.graphics.Color(0xFF457B9D)
         DART -> androidx.compose.ui.graphics.Color(0xFF2A9D8F)
+        CPP -> androidx.compose.ui.graphics.Color(0xFF8338EC)
+        RUST -> androidx.compose.ui.graphics.Color(0xFFE63946)
     }
 
     companion object {
@@ -234,6 +294,8 @@ enum class LanguageType(
                 lower.endsWith(".java") -> JAVA
                 lower.endsWith(".py") -> PYTHON
                 lower.endsWith(".dart") -> DART
+                lower.endsWith(".cpp") || lower.endsWith(".cc") || lower.endsWith(".cxx") -> CPP
+                lower.endsWith(".rs") -> RUST
                 else -> KOTLIN
             }
         }
@@ -257,7 +319,7 @@ data class CodeSectionUiModel(
 ) {
     /**
      * Canonical file name for this code block inside its parent Folder.
-     * Respects user-defined extensions (.ktscribe, .java, .py, .dart) or defaults to the section's language.
+     * Respects user-defined extensions (.ktscribe, .java, .py, .dart, .cpp, .rs) or defaults to the section's language.
      */
     val ktScribeFileName: String
         get() {
@@ -266,7 +328,9 @@ data class CodeSectionUiModel(
                 raw.endsWith(".kt", ignoreCase = true) ||
                 raw.endsWith(".java", ignoreCase = true) ||
                 raw.endsWith(".py", ignoreCase = true) ||
-                raw.endsWith(".dart", ignoreCase = true)
+                raw.endsWith(".dart", ignoreCase = true) ||
+                raw.endsWith(".cpp", ignoreCase = true) ||
+                raw.endsWith(".rs", ignoreCase = true)
             if (hasKnownExt) return raw
 
             val cleaned = raw
@@ -284,6 +348,9 @@ data class CodeSectionUiModel(
             }
             return "$stem${language.extension}"
         }
+
+    val fullFilePath: String
+        get() = "${language.directoryPath}$ktScribeFileName"
 
     val displayTitle: String
         get() = ktScribeFileName

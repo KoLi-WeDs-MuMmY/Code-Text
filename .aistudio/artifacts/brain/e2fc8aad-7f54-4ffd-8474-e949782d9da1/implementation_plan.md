@@ -1,150 +1,168 @@
-# KtScribe IDE — Multi-Language Studio, Docked Non-Colliding Completion, 6 Aesthetic Themes & Window Reflow
+# KtScribe IDE: Dynamic Themes, Multi-Language File Types, Dual Settings, Floating Window Presets & Clamped Split Screen
 
-This update addresses all 6 core enhancements requested by the user, incorporating the three confirmed design choices from Phase 1:
-- **No-Collision Code Suggestions & Syntax Errors**: Suggestions dock directly into a dedicated bar above the bottom 8-key shortcut bar, and syntax errors appear as clickable gutter badges and a docked status pill, ensuring the active typing line is never covered.
-- **Proportional Zoom & Responsive Reflow for Floating Windows**: Floating windows smoothly reflow their internal content with proportional font scaling so that every control, chip, and code preview remains legible and accessible regardless of window size.
-- **Main Screen Settings with 6 IDE Themes & Color Code Palettes**: A dedicated settings dialog accessible directly from the home screen featuring 6 rich, non-neon themes with live color swatch palettes and per-file theme overrides.
-- **Folder and File Renaming**: In-place renaming for both workspace folders and individual code files.
-- **Multi-Language Architecture**: Native support for **Kotlin (`.kt` / `.ktscribe`)**, **Java (`.java`)**, **Python (`.py`)**, and **Dart (`.dart`)**, with dedicated tokenizers, syntax highlighters, snippets (`sout`, `psvm`, `def`, `class`), and simulation runners.
+Comprehensive implementation plan to resolve theme application across all UI components, add support for Kotlin, Java, Python, Dart, C++, and Rust with unique file extensions and distinctive color badges, implement separate Main Settings vs. Intra-File Settings, introduce dual default dimensions (horizontal and vertical) with interactive corner resizing and minimum size protection for floating windows, and enable variable split-screen resizing clamped between 25% and 75%.
 
 ---
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> The three design clarifications confirmed by the user have been prioritized:
-
-- **Confirmed Decision 1 — Non-Colliding Suggestion & Error UI**:
-  - *Chosen Approach*: Suggestions are docked in a sleek horizontal prediction bar situated immediately above the constant 8-key bottom bar. Syntax errors are displayed as gutter indicators (`•` / `✕`) next to the affected line number and a compact status pill in the pinned header.
-  - *Why*: Eliminates popups covering the active code line while preserving instant tap access.
-- **Confirmed Decision 2 — Floating Window Resizing & Proportional Reflow**:
-  - *Chosen Approach*: Floating windows use container-based responsive scaling (`BoxWithConstraints`) with dynamic font sizing (`10.sp`–`13.sp`) and wrapped flow layouts so text and buttons never get clipped, squeezed, or hidden.
-- **Confirmed Decision 3 — 6 Themes with Palettes & File Overrides**:
-  - *Chosen Approach*: A theme studio in the main screen Settings providing 6 themes:
-    1. **Darcula Espresso** (Default warm matte amber/brown)
-    2. **macOS Midnight** (Deep space blue & frosted steel)
-    3. **Monokai Pro** (Muted charcoal with warm pastel accents)
-    4. **GitHub Dark High-Contrast** (Obsidian with slate & blue)
-    5. **Solarized Dark** (Deep teal-cyan with warm ochre)
-    6. **Nord Frost** (Arctic night blue-grey with polar accents)
-    Each theme shows its hex color palette codes, and individual files can override the active theme.
+> User requirements and choices confirmed during clarification:
+> - **Programming Languages & Extensions**: Expand beyond Kotlin (`.ktscribe` / `.kt`), Java (`.java`), Python (`.py`), and Dart (`.dart`) to also include **C++ (`.cpp`)** and **Rust (`.rs`)**, each with distinct file extension badges, directory paths (`src/cpp/`, `src/rust/`), unique accent color codes, and dedicated syntax engines and snippets.
+> - **Dual Settings Architecture**:
+>   - **Main Page Settings**: Global studio theme (Darcula Espresso, macOS Midnight, Monokai Pro, GitHub Dark, Solarized Dark, Nord Frost), dark/light/system mode toggle, default new file language, code block keyboard shortcut (`Ctrl + [Letter]`), and API/quota monitoring.
+>   - **Intra-File Settings**: File-specific theme override (can inherit or override studio theme), file name & extension customization, target directory assignment, AI naming & explanation triggers, tab indent configuration (2 vs 4 spaces), line numbers toggle, and file export actions (.ktscribe bundle, clean raw code, or markdown).
+> - **Floating Window Sizing & Drag Interaction**:
+>   - Every floating window has **2 default size presets**: **Horizontal (Wide Landscape)** and **Vertical (Tall Portrait)** with strict minimum width and height limits (preventing content cutoff).
+>   - Corner and edge drag interaction allows fluid resizing above default minimums, and dragging dynamically snaps/adjusts to horizontal or vertical orientation based on whether width > height.
+> - **Variable Split-Screen Ratio**:
+>   - Replace static 50:50 split with a variable split-screen divider clamped strictly between **25% (0.25f)** and **75% (0.75f)**, featuring a macOS-inspired tactile drag handle bar with quick ratio snaps (25%, 50%, 75%).
 
 ---
 
-## 1. Aesthetic Enhancements (What Will Change First)
+## 1. Overview & Core Concept
 
-Before code changes, we establish the refined visual system:
-1. **Pristine Apple cmd / Terminal Matte Hierarchy**:
-   - Complete removal of remaining high-contrast borders and neon tints.
-   - Refined 3-dot macOS window headers (`#FF5F56`, `#FFBD2E`, `#27C93F`) with subtle embossed rims.
-   - Clean micro-beveled borders (`1.dp` solid `#2E2A27` or theme-specific border tokens).
-2. **Unified Typography & Metrics**:
-   - `JetBrains Mono` as the primary code font paired with `Plus Jakarta Sans` for UI labels.
-   - Distinctive color-coded badges for languages: `[KT]` Amber, `[JAVA]` Crimson/Coral, `[PY]` Emerald/Teal, `[DART]` Sky Blue.
-3. **Breathing Room & Ergonomics**:
-   - Generous margins between the left rail, the code editor canvas, and floating windows.
-   - Floating window drag handles and close buttons enlarged to standard 48dp touch targets while visually maintaining a compact, elegant footprint.
+**KtScribe** is a lightweight, high-aesthetic developer environment designed with macOS floating island and floating window aesthetics. Each file represents a single code block with an associated explanation/concept block, AI-assisted naming, and real-time execution preview.
 
----
-
-## 2. Multi-Language & File Type Engine
-
-We expand `LanguageType` enum and engine support:
-- **Languages Supported**:
-  - **Kotlin (`.kt` / `.ktscribe`)**: Full existing support + coroutines, sealed classes, and `sout` expansion.
-  - **Java (`.java`)**: Keywords (`public`, `class`, `static`, `void`, `int`, `boolean`, `import`), snippets (`psvm` $\rightarrow$ `public static void main`, `sout` $\rightarrow$ `System.out.println()`).
-  - **Python (`.py`)**: Keywords (`def`, `class`, `import`, `from`, `if`, `elif`, `else`, `return`, `None`, `True`, `False`), snippets (`pr` $\rightarrow$ `print()`, `def` $\rightarrow$ `def func():`, `main` $\rightarrow$ `if __name__ == '__main__':`).
-  - **Dart (`.dart`)**: Keywords (`void`, `main`, `class`, `Widget`, `build`, `async`, `await`, `final`, `const`), snippets (`pr` $\rightarrow$ `print()`, `stless` $\rightarrow$ StatelessWidget skeleton).
-- **Per-Language Syntax Highlighting & Diagnostics**:
-  - Extensible tokenizer in `CodeLanguageEngine` providing language-specific keywords, comments, string literals, and type identifiers.
-  - File extension badges and icons displayed in the file tabs, switcher bar, and folder cards.
+### Core Capabilities:
+1. **Dynamic Theme Application**: Full reactive integration of 6 curated studio color schemes (`DARCULA_ESPRESSO`, `MACOS_MIDNIGHT`, `MONOKAI_PRO`, `GITHUB_DARK`, `SOLARIZED_DARK`, `NORD_FROST`) across all floating windows, backgrounds, cards, dividers, and typography, removing hardcoded espresso hex values.
+2. **Multi-Language Architecture**: 6 first-class programming languages with unique file extensions, syntax highlighting tokens, language-specific directory structures, autocomplete suggestions, and execution output simulation:
+   - **Kotlin**: `.ktscribe` / `.kt` (`src/kotlin/`) — Amber/Orange (`#D4883A`)
+   - **Java**: `.java` (`src/java/`) — Coral/Terracotta (`#E76F51`)
+   - **Python**: `.py` (`src/python/`) — Steel Blue (`#457B9D`)
+   - **Dart**: `.dart` (`src/dart/`) — Teal Emerald (`#2A9D8F`)
+   - **C++**: `.cpp` (`src/cpp/`) — Royal Violet (`#8338EC`)
+   - **Rust**: `.rs` (`src/rust/`) — Rust Crimson (`#E63946`)
+3. **Dedicated Main Page Settings vs. Intra-File Settings**: Clear separation of concerns between global studio configuration and intra-file actions.
+4. **Adaptive Floating Windows with 2 Default Presets**:
+   - **Horizontal Preset (Wide)**: Optimized for code reading and terminal output (e.g. 380dp x 280dp).
+   - **Vertical Preset (Tall)**: Optimized for file browsing and explanation note-taking (e.g. 320dp x 420dp).
+   - Interactive bottom-right and corner drag handles with minimum bounds preventing element cutoff.
+5. **Clamped Variable Split-Screen**: Draggable divider smoothly clamped between 25% and 75% for custom code-to-notes or code-to-terminal ratios.
 
 ---
 
-## 3. Non-Colliding Autocomplete & Gutter Errors
+## 2. User Experience & Visual Design
+
+### Key User Flows
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│ • • •  Main.ktscribe [Kotlin]              [Theme: Darcula] [↶ Undo]   │
-├─────┬──────────────────────────────────────────────────────────────────┤
-│  1  │ fun main() {                                                     │
-│  2  │     val count = 42                                               │
-│  3✕ │     val badString = "unclosed                                    │
-│  4  │     pri▌  <-- Active line stays completely clear and visible!    │
-├─────┴──────────────────────────────────────────────────────────────────┤
-│ [Docked Suggestion Bar: println("") (fn) | print() (fn) | private (kw)]│
-├────────────────────────────────────────────────────────────────────────┤
-│ [ Tab ] [ ( ) ] [ { } ] [ " " ] [ -> ] [  .  ] [  =  ] [  :  ]         │
+│ Main Page (Folder / Document List)                                    │
+│ ├─ Modern Animated Floating Mesh Particle Background (Theme-reactive) │
+│ ├─ macOS Search & Filter Bar                                          │
+│ ├─ List of Document Folders with Language Badges (KT, PY, CPP, RS...) │
+│ └─ Main Studio Settings Button [⚙]                                    │
+│     └─ Modal: Global Theme, Appearance Mode, Shortcuts, Quotas         │
+└────────────────────────────────────┬───────────────────────────────────┘
+                                     │ (Tap folder to open)
+                                     ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ Intra-File Editor Workspace                                           │
+│ ├─ Top Island: Folder breadcrumb, Language indicator, Status pills    │
+│ ├─ Fullscreen Single Code Block with Syntax Highlighting & Line Numbers│
+│ ├─ macOS Action Island & Floating Window Toggles:                     │
+│ │   [Explain] [Files] [AI Studio] [Run ▶] [File Settings ⚙]           │
+│ ├─ Floating Windows (Draggable & Corner-Resizable):                    │
+│ │   ├─ Enforced minimum bounds (no content clipping)                  │
+│ │   ├─ Horizontal Default vs. Vertical Default presets                │
+│ │   └─ [◫ Dock to Split] action                                      │
+│ └─ Variable Split-Screen (Docked Mode):                                │
+│     └─ Draggable split divider bar (Clamped strictly 25% – 75%)        │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-1. **Docked Suggestion Bar**:
-   - When suggestions exist, a sleek horizontal suggestion strip appears directly above the 8-key bottom bar.
-   - Tapping any suggestion instantly inserts it at the cursor without ever covering the line the user is typing.
-2. **Gutter Error Badges & Clickable Diagnostics**:
-   - Syntax errors render a small marker (`✕` or red dot) in the line-number gutter on the exact line.
-   - Tapping the gutter icon reveals the error message and one-tap quick fix in a non-obtrusive tooltip or in the bottom status panel.
+### Visual Identity & Theme Tokens
+
+- **Dynamic Theming Integration**:
+  - Replace hardcoded hex values in `MacFloatingIslandComponents.kt`, `KotlinCodeSectionCard.kt`, and `DocumentEditorScreen.kt` with `MaterialTheme.colorScheme` tokens:
+    - `surface`: Floating window bodies, card backgrounds, dialogs.
+    - `surfaceVariant`: Title bars, secondary pills, inactive resize handles.
+    - `primary`: Active pills, focus borders, primary actions, keyword highlighting.
+    - `outline` / `outlineVariant`: Specular bevels and separation borders.
+    - `background`: Overall canvas and mesh background gradient anchors.
+- **Language Badges & Accent Colors**:
+  - Each language displays a distinct chip in file headers, directory trees, and autocomplete menus:
+    - Kotlin: `#D4883A`
+    - Java: `#E76F51`
+    - Python: `#457B9D`
+    - Dart: `#2A9D8F`
+    - C++: `#8338EC`
+    - Rust: `#E63946`
 
 ---
 
-## 4. Responsive Floating Windows (Proportional Scaling & Reflow)
+## 3. Key Product Decisions & Trade-Offs
 
-1. **Fluid Responsive Reflow**:
-   - Wrap controls and chips inside `FlowRow` and responsive `Column`/`Row` layouts with `BoxWithConstraints`.
-   - Prevent text clipping: font sizes dynamically calculate between `10.sp` and `13.sp` depending on available width.
-2. **No-Scroll Clutter**:
-   - Buttons scale to compact variants (e.g. icon-only with tooltips or shortened labels) when window width shrinks below `280.dp`.
-   - All critical details remain accessible regardless of how the user resizes the window.
-
----
-
-## 5. Renaming Folders & Files
-
-1. **Folder Renaming**:
-   - Available from the folder card on the main screen (overflow menu / edit icon) and inside the editor top bar.
-2. **File Renaming**:
-   - Tapping the file title or selecting "Rename File" from the file dropdown or tab allows changing both the name and switching file extension (`.kt`, `.ktscribe`, `.java`, `.py`, `.dart`).
+- **Decision 1: Dynamic Theme Color Propagation**:
+  - *Approach*: Bind all window chrome, traffic light borders, pill menus, and dialog backgrounds to `MaterialTheme.colorScheme` and `LocalKotlinSyntaxColors.current`. When a theme is selected (or overridden per file), the entire UI immediately recalculates and reflects the new palette without requiring an app reload.
+  - *Why*: The previous implementation had hardcoded `#1B1A19` and `#11100F` color literals in UI components, making the theme picker ineffective.
+- **Decision 2: C++ & Rust Integration with Autocomplete & Tokenization**:
+  - *Approach*: Add `CPP` (`.cpp`, `src/cpp/`) and `RUST` (`.rs`, `src/rust/`) to `LanguageType` enum, define their keywords and snippets in `CodeLanguageEngine`, and implement token regexes for syntax highlighting and simulated execution.
+  - *Why*: Supports the user's expanded language specifications natively.
+- **Decision 3: Floating Window Corner Dragging & Aspect Ratio Snap**:
+  - *Approach*: Provide both a corner resize handle and a quick preset toggle. As the user drags the corner, if `width > height * 1.15`, the window adopts horizontal aspect metrics; if `height > width * 1.15`, it adopts vertical aspect metrics. Both dimensions are strictly clamped at or above `minWidthDp` and `minHeightDp`.
+  - *Why*: Guarantees that terminal output and explanation text are never truncated due to an accidental micro-window collapse.
+- **Decision 4: Variable Split Clamping (25% to 75%)**:
+  - *Approach*: Allow dragging the split divider with an interactive gesture listener that calculates `ratio = (dragPosition / totalDimension).coerceIn(0.25f, 0.75f)`, alongside quick-snap pill buttons for 30%, 50%, and 70%.
+  - *Why*: Prevents collapsing either side into an unreadable state while giving users flexible room to view code and notes simultaneously.
 
 ---
 
-## 6. Technical Architecture & File Plan
+## 4. Technical Architecture & Data Strategy
+
+### Component Hierarchy & Interaction Mapping
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                          ThemeRepository                               │
-│  • 6 App Themes: Darcula, Midnight, Monokai, GitHub Dark, Solarized,   │
-│    Nord Frost                                                          │
-│  • Theme Palette Swatches & Hex Codes                                  │
-│  • Global App Theme + Per-File / Per-Folder Override                   │
-└──────────────────────────────────┬─────────────────────────────────────┘
-                                   │
-┌──────────────────────────────────┴─────────────────────────────────────┐
-│                       CodeLanguageEngine                               │
-│  • Multi-language tokenization: Kotlin, Java, Python, Dart             │
-│  • Snippet expansions: sout, psvm, def, pr                             │
-│  • Non-colliding docked suggestion provider                            │
-└──────────────────────────────────┬─────────────────────────────────────┘
-                                   │
-┌──────────────────────────────────┴─────────────────────────────────────┐
-│                          UI Layer                                      │
-│  • DocumentListScreen: Settings button, Theme picker & Palette sheet   │
-│  • DocumentEditorScreen: Docked suggestion bar, Rename dialogs         │
-│  • KotlinCodeSectionCard: Gutter errors, multi-language highlight      │
-│  • MacDraggableFloatingWindow: Proportional zoom & responsive reflow   │
-└────────────────────────────────────────────────────────────────────────┘
+│                             MainActivity                               │
+│  - Observes uiState.activeAppTheme & uiState.themeMode                 │
+│  - Wraps tree in KtScribeTheme(activeTheme, themeMode)                │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+          ┌─────────────────────────┴─────────────────────────┐
+          ▼                                                   ▼
+┌───────────────────────────┐                       ┌───────────────────────────┐
+│    DocumentListScreen     │                       │   DocumentEditorScreen    │
+│ - Global Mesh Background  │                       │ - Main Code Editor Canvas │
+│ - Search & Folder Cards   │                       │ - Top Island Status Bar   │
+│ - Main Studio Settings [⚙]│                       │ - Intra-File Settings [⚙] │
+│   (Global Theme, Mode,    │                       │ - Floating Window Manager │
+│    Shortcuts, Quotas)     │                       │ - Variable Split Screen   │
+└───────────────────────────┘                       └─────────────┬─────────────┘
+                                                                  │
+                                            ┌─────────────────────┴─────────────────────┐
+                                            ▼                                           ▼
+                             ┌──────────────────────────────┐            ┌──────────────────────────────┐
+                             │    MacFloatingWindowItem     │            │    Variable Split Layout     │
+                             │ - Default Horizontal/Vertical│            │ - Clamped 0.25f to 0.75f     │
+                             │ - Bottom-Right Corner Drag   │            │ - Tactile macOS Drag Bar     │
+                             │ - Enforced minWidth/minHeight│            │ - Side-by-Side or Bottom     │
+                             └──────────────────────────────┘            └──────────────────────────────┘
 ```
 
-- **`com/example/model/EditorModels.kt`**:
-  - Add `LanguageType` enum (`KOTLIN`, `JAVA`, `PYTHON`, `DART`).
-  - Add `AppThemeId` enum (6 themes) and `ThemePaletteDefinition` with explicit hex codes.
-  - Update `CodeSectionUiModel` to include `language: LanguageType` and optional `themeOverride: AppThemeId?`.
-- **`com/example/code/CodeLanguageEngine.kt`**:
-  - Unified multi-language syntax highlighter, token analyzer, and docked suggestion provider.
-- **`com/example/ui/theme/Theme.kt` & `Color.kt`**:
-  - Implement full color schemes and syntax palettes for all 6 themes.
-- **`com/example/ui/screens/DocumentListScreen.kt`**:
-  - Add Settings button in TopBar with 6-theme picker, palette viewer, and folder renaming options.
-- **`com/example/ui/screens/DocumentEditorScreen.kt`**:
-  - Docked suggestion bar, file renaming dialog, language switcher, and per-file theme picker.
-- **`com/example/ui/components/MacFloatingIslandComponents.kt`**:
-  - Responsive reflow and proportional zoom inside `MacDraggableFloatingWindow`.
+### Data Model Enhancements
+
+1. **`LanguageType` enum**:
+   - `KOTLIN`: `.ktscribe`, `#D4883A`, `src/kotlin/`
+   - `JAVA`: `.java`, `#E76F51`, `src/java/`
+   - `PYTHON`: `.py`, `#457B9D`, `src/python/`
+   - `DART`: `.dart`, `#2A9D8F`, `src/dart/`
+   - `CPP`: `.cpp`, `#8338EC`, `src/cpp/`
+   - `RUST`: `.rs`, `#E63946`, `src/rust/`
+2. **`FloatingWindowType` enum**:
+   - Add explicit `defaultHorizontalWidthDp`, `defaultHorizontalHeightDp`, `defaultVerticalWidthDp`, `defaultVerticalHeightDp`, `minWidthDp`, `minHeightDp`.
+3. **`EditorViewModel`**:
+   - `updateSplitScreenRatio(ratio: Float)`: Clamps strictly between `0.25f` and `0.75f`.
+   - `setFloatingWindowOrientation(type, isHorizontal)`: Applies default dimensions.
+   - Separate state handlers for Main Studio Settings dialog vs Intra-File Settings dialog.
+
+---
+
+## 5. Planned Verification Steps
+
+1. **Compilation Check**: Verify successful compilation via `compile_applet`.
+2. **Theme Switching Verification**: Test switching between all 6 themes and confirm that backgrounds, window borders, text, and syntax highlighting transform reactively.
+3. **Language & Extension Verification**: Create and edit files in Kotlin, Java, Python, Dart, C++, and Rust; confirm unique color badges, syntax highlighting, and directories.
+4. **Settings Dialog Verification**: Verify Main Page Settings (global theme, shortcuts, mode) vs Intra-File Settings (language, file theme override, export, formatting).
+5. **Floating Window & Split Screen Verification**: Test horizontal/vertical defaults, corner resizing constraints, and 25%-75% variable split dragging.

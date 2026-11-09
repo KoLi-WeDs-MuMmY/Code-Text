@@ -54,11 +54,14 @@ fun ShortcutAndSettingsDialog(
     currentThemeMode: ThemeMode,
     currentAppTheme: AppThemeId,
     remainingAiQuota: Int,
+    defaultLanguage: com.example.model.LanguageType = com.example.model.LanguageType.KOTLIN,
+    onSelectDefaultLanguage: (com.example.model.LanguageType) -> Unit = {},
     onSelectShortcutLetter: (Char) -> Unit,
     onSelectThemeMode: (ThemeMode) -> Unit,
     onSelectAppTheme: (AppThemeId) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var selectedDefaultLang by remember { mutableStateOf(defaultLanguage) }
     var expandedThemeDetail by remember { mutableStateOf<AppThemeId?>(currentAppTheme) }
 
     AlertDialog(
@@ -225,6 +228,40 @@ fun ShortcutAndSettingsDialog(
                             onClick = { onSelectThemeMode(mode) },
                             label = { Text(mode.label) },
                             modifier = Modifier.testTag("theme_chip_${mode.name.lowercase()}")
+                        )
+                    }
+                }
+
+                HorizontalDivider()
+
+                // Default New File Language
+                Text(
+                    text = "Default Language for New Files",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    com.example.model.LanguageType.entries.forEach { lang ->
+                        FilterChip(
+                            selected = selectedDefaultLang == lang,
+                            onClick = {
+                                selectedDefaultLang = lang
+                                onSelectDefaultLanguage(lang)
+                            },
+                            label = { Text("${lang.displayName} (${lang.extension})") },
+                            leadingIcon = {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(lang.badgeColor)
+                                )
+                            },
+                            modifier = Modifier.testTag("default_lang_${lang.id}")
                         )
                     }
                 }

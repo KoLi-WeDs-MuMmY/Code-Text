@@ -136,16 +136,16 @@ import com.example.ui.theme.Tier3FloatingWindowInactiveBg
 import com.example.ui.theme.Tier3FloatingWindowInactiveHeader
 import kotlin.math.roundToInt
 
-// Warm Mocha & Matte Darcula Window Palette (Zero Neon)
-private val OuterTrenchBg = Tier0OuterTrenchBg
-private val PillSurfaceBg = Color(0xFF211F1D)
-private val PillSelectedBg = Color(0xFF423222)
-private val PillBorderColor = Color(0xFF3E3832)
-private val WarmAmberAccent = Color(0xFFD4883A)
-private val MutedSageAccent = Color(0xFF8AA87B)
-private val MutedSteelAccent = Color(0xFF8CA6B8)
-private val WarmCreamText = Color(0xFFE6E1DC)
-private val MutedTaupeText = Color(0xFFA39C93)
+// Dynamic Window Palette (Reacts instantly to active theme selection)
+private val OuterTrenchBg: Color @Composable get() = MaterialTheme.colorScheme.background
+private val PillSurfaceBg: Color @Composable get() = MaterialTheme.colorScheme.surface
+private val PillSelectedBg: Color @Composable get() = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+private val PillBorderColor: Color @Composable get() = MaterialTheme.colorScheme.outlineVariant
+private val WarmAmberAccent: Color @Composable get() = MaterialTheme.colorScheme.primary
+private val MutedSageAccent: Color @Composable get() = MaterialTheme.colorScheme.tertiary
+private val MutedSteelAccent: Color @Composable get() = MaterialTheme.colorScheme.secondary
+private val WarmCreamText: Color @Composable get() = MaterialTheme.colorScheme.onSurface
+private val MutedTaupeText: Color @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
 private val MacRedDot = Color(0xFFD9534F)
 private val MacYellowDot = Color(0xFFD49B35)
 private val MacGreenDot = Color(0xFF6A9955)
@@ -641,8 +641,8 @@ fun MacDraggableFloatingWindow(
     shakeTriggerCount: Int,
     workspaceWidthPx: Float = 2400f,
     workspaceHeightPx: Float = 2400f,
-    initialWidthDp: Float = 365f,
-    initialHeightDp: Float = 320f,
+    initialWidthDp: Float = windowType.defaultWidthDp,
+    initialHeightDp: Float = windowType.defaultHeightDp,
     onFocusWindow: () -> Unit,
     onCancelWindow: () -> Unit,
     onDockToSplitScreen: (() -> Unit)? = null,
@@ -656,8 +656,8 @@ fun MacDraggableFloatingWindow(
     var offsetY by remember(windowType) {
         mutableFloatStateOf(if (windowSlotIndex == 0) 6f else 48f)
     }
-    var widthDp by remember(windowType) { mutableFloatStateOf(initialWidthDp) }
-    var heightDp by remember(windowType) { mutableFloatStateOf(initialHeightDp) }
+    var widthDp by remember(windowType) { mutableFloatStateOf(initialWidthDp.coerceAtLeast(windowType.minWidthDp)) }
+    var heightDp by remember(windowType) { mutableFloatStateOf(initialHeightDp.coerceAtLeast(windowType.minHeightDp)) }
 
     val shakeOffsetX = remember { Animatable(0f) }
     LaunchedEffect(shakeTriggerCount) {
@@ -669,10 +669,10 @@ fun MacDraggableFloatingWindow(
         }
     }
 
-    val surfaceBg = if (isForegroundWindow) Tier3FloatingWindowActiveBg else Tier3FloatingWindowInactiveBg
-    val headerBg = if (isForegroundWindow) Tier3FloatingWindowActiveHeader else Tier3FloatingWindowInactiveHeader
-    val topBevelColor = if (isForegroundWindow) Tier3FloatingWindowActiveBevel else Tier3FloatingWindowInactiveBevel
-    val elevationDp = if (isForegroundWindow) 28.dp else 14.dp
+    val surfaceBg = if (isForegroundWindow) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant
+    val headerBg = if (isForegroundWindow) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
+    val topBevelColor = if (isForegroundWindow) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant
+    val elevationDp = if (isForegroundWindow) 24.dp else 12.dp
 
     val maxDragLeftPx = -(workspaceWidthPx.coerceAtLeast(1200f) * 0.95f)
     val maxDragRightPx = (workspaceWidthPx.coerceAtLeast(1200f) * 0.95f)
@@ -712,9 +712,9 @@ fun MacDraggableFloatingWindow(
             shadowElevation = elevationDp,
             modifier = Modifier
                 .padding(8.dp)
-                .widthIn(min = 250.dp, max = widthDp.dp)
-                .fillMaxWidth(0.88f)
-                .height(heightDp.dp)
+                .widthIn(min = windowType.minWidthDp.dp, max = widthDp.coerceAtLeast(windowType.minWidthDp).dp)
+                .fillMaxWidth(0.94f)
+                .height(heightDp.coerceAtLeast(windowType.minHeightDp).dp)
                 .tactileWindowDepth(isForeground = isForegroundWindow, cornerRadiusDp = 18f)
                 .shadow(
                     elevation = elevationDp,
@@ -722,20 +722,20 @@ fun MacDraggableFloatingWindow(
                     ambientColor = Color.Black,
                     spotColor = Color.Black
                 )
-                // Pitch-black 1.5dp outer separation trench so the floating window never blends into background windows
+                // Outer separation border adapted to theme
                 .border(
-                    width = 1.5.dp,
-                    color = Color(0xFF090808),
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
                     shape = RoundedCornerShape(18.dp)
                 )
-                .padding(1.5.dp)
-                // Top-lit overhead specular bevel border
+                .padding(1.dp)
+                // Specular bevel border
                 .border(
                     width = if (isForegroundWindow) 1.5.dp else 1.dp,
                     brush = Brush.verticalGradient(
                         colors = listOf(
                             topBevelColor,
-                            Color(0xFF2D2824)
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                         )
                     ),
                     shape = RoundedCornerShape(17.dp)
@@ -754,19 +754,19 @@ fun MacDraggableFloatingWindow(
                 )
         ) {
             Row(modifier = Modifier.fillMaxSize()) {
-                // LEFT-EDGE INTERACTIVE RESIZE HANDLE (`▐` matching the blue handle on the left edge in Sketch 2!)
+                // LEFT-EDGE INTERACTIVE RESIZE HANDLE
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
                         .width(12.dp)
-                        .background(Color(0xFF1F1C1A))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                         .pointerInput(windowType) {
                             detectDragGestures(
                                 onDragStart = { onFocusWindow() }
                             ) { change, dragAmount ->
                                 change.consume()
                                 val dxDp = with(density) { dragAmount.x.toDp().value }
-                                widthDp = (widthDp - dxDp).coerceIn(250f, 680f)
+                                widthDp = (widthDp - dxDp).coerceIn(windowType.minWidthDp, 720f)
                             }
                         }
                         .testTag("left_edge_resize_handle_${windowType.name.lowercase()}"),
@@ -777,7 +777,7 @@ fun MacDraggableFloatingWindow(
                             .width(3.5.dp)
                             .height(42.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .background(if (isForegroundWindow) MutedSteelAccent else Color(0xFF575049))
+                            .background(if (isForegroundWindow) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
                     )
                 }
 
@@ -787,8 +787,7 @@ fun MacDraggableFloatingWindow(
                         .weight(1f)
                         .fillMaxHeight()
                 ) {
-                    // 1. Draggable macOS Window Header Bar (`• • •` + Title + `◫ Split` + Cancel `✕`)
-                    // Uses full-screen pixel bounds so the floating window can pass freely across the middle of the screen!
+                    // 1. Draggable macOS Window Header Bar (`• • •` + Title + Preset + `◫ Split` + Cancel `✕`)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -811,7 +810,7 @@ fun MacDraggableFloatingWindow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            // Traffic Light Dots (`• • •` matching Sketch 5)
+                            // Traffic Light Dots
                             Box(
                                 modifier = Modifier
                                     .size(11.dp)
@@ -819,21 +818,26 @@ fun MacDraggableFloatingWindow(
                                     .background(MacRedDot)
                                     .clickable(onClick = onCancelWindow)
                             )
+                            // Yellow: Default Horizontal Size
                             Box(
                                 modifier = Modifier
                                     .size(11.dp)
                                     .clip(CircleShape)
                                     .background(MacYellowDot)
-                                    .clickable { heightDp = 210f }
+                                    .clickable {
+                                        widthDp = windowType.defaultHorizontalWidthDp
+                                        heightDp = windowType.defaultHorizontalHeightDp
+                                    }
                             )
+                            // Green: Default Vertical Size
                             Box(
                                 modifier = Modifier
                                     .size(11.dp)
                                     .clip(CircleShape)
                                     .background(MacGreenDot)
                                     .clickable {
-                                        widthDp = 520f
-                                        heightDp = 420f
+                                        widthDp = windowType.defaultVerticalWidthDp
+                                        heightDp = windowType.defaultVerticalHeightDp
                                     }
                             )
 
@@ -844,19 +848,15 @@ fun MacDraggableFloatingWindow(
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = WarmCreamText,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = if (isForegroundWindow) {
-                                        "Free Drag Anywhere • Convert to Split Screen"
-                                    } else {
-                                        "Background Window • Tap to focus"
-                                    },
+                                    text = "Min: ${windowType.minWidthDp.toInt()}×${windowType.minHeightDp.toInt()} dp • Corner ⤡ drag",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 9.sp,
-                                    color = MutedTaupeText,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1
                                 )
                             }
@@ -870,14 +870,42 @@ fun MacDraggableFloatingWindow(
                                 headerExtraActions()
                             }
 
+                            // Quick Orientation Toggle (Wide Horizontal <-> Tall Vertical default sizes)
+                            Surface(
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                                shape = RoundedCornerShape(7.dp),
+                                border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(7.dp))
+                                    .clickable {
+                                        if (widthDp >= heightDp) {
+                                            widthDp = windowType.defaultVerticalWidthDp
+                                            heightDp = windowType.defaultVerticalHeightDp
+                                        } else {
+                                            widthDp = windowType.defaultHorizontalWidthDp
+                                            heightDp = windowType.defaultHorizontalHeightDp
+                                        }
+                                    }
+                                    .testTag("toggle_orientation_${windowType.name.lowercase()}")
+                            ) {
+                                Text(
+                                    text = if (widthDp >= heightDp) "⇄ Wide" else "⇅ Tall",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                )
+                            }
+
                             // Option to convert ANY floating window into an Adjustable Split Screen (`◫ Split`)!
                             if (onDockToSplitScreen != null) {
                                 Surface(
-                                    color = Color(0xFF28323B),
+                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
                                     shape = RoundedCornerShape(7.dp),
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(7.dp))
-                                        .border(1.dp, MutedSteelAccent.copy(alpha = 0.55f), RoundedCornerShape(7.dp))
+                                        .border(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.55f), RoundedCornerShape(7.dp))
                                         .clickable(onClick = onDockToSplitScreen)
                                         .testTag(
                                             if (windowType == FloatingWindowType.EXPLANATION) {
@@ -895,7 +923,7 @@ fun MacDraggableFloatingWindow(
                                         Icon(
                                             imageVector = Icons.Default.VerticalSplit,
                                             contentDescription = "Convert Floating Window to Adjustable Split Screen",
-                                            tint = MutedSteelAccent,
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                             modifier = Modifier.size(11.dp)
                                         )
                                         Text(
@@ -903,7 +931,7 @@ fun MacDraggableFloatingWindow(
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 9.5.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = MutedSteelAccent
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                     }
                                 }
@@ -911,11 +939,11 @@ fun MacDraggableFloatingWindow(
 
                             // Explicit Cancel / Close Window Button (`✕`)
                             Surface(
-                                color = Color(0xFF422927),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
                                 shape = RoundedCornerShape(7.dp),
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(7.dp))
-                                    .border(1.dp, Color(0xFF6B3E3B), RoundedCornerShape(7.dp))
+                                    .border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f), RoundedCornerShape(7.dp))
                                     .clickable(onClick = onCancelWindow)
                                     .testTag("cancel_floating_window_${windowType.name.lowercase()}")
                             ) {
@@ -927,7 +955,7 @@ fun MacDraggableFloatingWindow(
                                     Icon(
                                         imageVector = Icons.Default.Close,
                                         contentDescription = "Cancel Floating Window",
-                                        tint = Color(0xFFF2B8B5),
+                                        tint = MaterialTheme.colorScheme.onErrorContainer,
                                         modifier = Modifier.size(11.dp)
                                     )
                                     Text(
@@ -935,14 +963,14 @@ fun MacDraggableFloatingWindow(
                                         fontFamily = JetBrainsMonoFontFamily,
                                         fontSize = 9.5.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFF2B8B5)
+                                        color = MaterialTheme.colorScheme.onErrorContainer
                                     )
                                 }
                             }
                         }
                     }
 
-                    HorizontalDivider(color = Color(0xFF1A1816), thickness = 1.dp)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
 
                     // 2. Window Body Content with Proportional Scaling
                     Box(
@@ -954,49 +982,94 @@ fun MacDraggableFloatingWindow(
                         content()
                     }
 
-                    // 3. Bottom-Right Corner & Bottom Resize Bar (`⤡`)
+                    // 3. Bottom Resize Bar with Preset Quick-Snaps & Bottom-Right Corner Drag (`⤡`)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFF1D1A18))
-                            .pointerInput(windowType) {
-                                detectDragGestures(
-                                    onDragStart = { onFocusWindow() }
-                                ) { change, dragAmount ->
-                                    change.consume()
-                                    val dxDp = with(density) { dragAmount.x.toDp().value }
-                                    val dyDp = with(density) { dragAmount.y.toDp().value }
-                                    widthDp = (widthDp + dxDp).coerceIn(250f, 680f)
-                                    heightDp = (heightDp + dyDp).coerceIn(180f, 540f)
-                                }
-                            }
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "▐ Left edge or corner ⤡ to resize (${widthDp.roundToInt()}×${heightDp.roundToInt()} dp)",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 9.sp,
-                            color = MutedTaupeText
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
                             Text(
-                                text = "Center",
+                                text = "${widthDp.roundToInt()}×${heightDp.roundToInt()} dp",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = WarmAmberAccent,
-                                modifier = Modifier.clickable {
-                                    offsetX = 0f
-                                    offsetY = 8f
-                                }
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Icon(
-                                imageVector = Icons.Default.OpenInFull,
-                                contentDescription = "Resize Window Handle",
-                                tint = MutedTaupeText,
-                                modifier = Modifier.size(11.dp)
+
+                            // Preset buttons: Horizontal (Wide) and Vertical (Tall)
+                            Surface(
+                                color = if (widthDp >= heightDp) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(4.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable {
+                                        widthDp = windowType.defaultHorizontalWidthDp
+                                        heightDp = windowType.defaultHorizontalHeightDp
+                                    }
+                            ) {
+                                Text(
+                                    text = "Horizontal",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (widthDp >= heightDp) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+                            }
+
+                            Surface(
+                                color = if (heightDp > widthDp) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(4.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable {
+                                        widthDp = windowType.defaultVerticalWidthDp
+                                        heightDp = windowType.defaultVerticalHeightDp
+                                    }
+                            ) {
+                                Text(
+                                    text = "Vertical",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (heightDp > widthDp) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        // Bottom-Right Corner Resize Drag Handle (`⤡`)
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                                .pointerInput(windowType) {
+                                    detectDragGestures(
+                                        onDragStart = { onFocusWindow() }
+                                    ) { change, dragAmount ->
+                                        change.consume()
+                                        val dxDp = with(density) { dragAmount.x.toDp().value }
+                                        val dyDp = with(density) { dragAmount.y.toDp().value }
+                                        widthDp = (widthDp + dxDp).coerceIn(windowType.minWidthDp, 720f)
+                                        heightDp = (heightDp + dyDp).coerceIn(windowType.minHeightDp, 600f)
+                                    }
+                                }
+                                .testTag("corner_resize_handle_${windowType.name.lowercase()}"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "⤡",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -1443,6 +1516,7 @@ fun FolderAndSectionsDropdownContent(
     onOpenAllFoldersGrid: () -> Unit,
     onSelectSection: (Long) -> Unit,
     onInsertNewSection: () -> Unit,
+    onInsertNewLanguageSection: (com.example.model.LanguageType) -> Unit = {},
     onDeleteSection: (Long) -> Unit
 ) {
     var newFolderTitle by remember { mutableStateOf("") }
@@ -1502,89 +1576,150 @@ fun FolderAndSectionsDropdownContent(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = ".KTSCRIBE FILES IN FOLDER (${activeFolder.sections.size} • 1 File = 1 Code Block)",
+                text = "FILES BY LANGUAGE DIRECTORY (${activeFolder.sections.size} Files)",
                 fontFamily = JetBrainsMonoFontFamily,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = MutedSageAccent
             )
-            TextButton(onClick = onInsertNewSection) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("New .ktscribe File", fontSize = 11.sp)
+        }
+
+        // Quick create file chips for all 4 supported languages & directories
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            com.example.model.LanguageType.entries.forEach { lang ->
+                Surface(
+                    color = lang.badgeColor.copy(alpha = 0.16f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, lang.badgeColor.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onInsertNewLanguageSection(lang) }
+                        .testTag("add_file_chip_${lang.id}")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = lang.badgeColor, modifier = Modifier.size(12.dp))
+                        Text(
+                            text = "+ ${lang.displayName} (${lang.extension})",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = lang.badgeColor
+                        )
+                    }
+                }
             }
         }
 
-        activeFolder.sections.forEach { sec ->
-            val isCurrent = sec.id == activeSectionId
+        val sectionsByDir = activeFolder.sections.groupBy { it.language }
+        sectionsByDir.forEach { (lang, files) ->
+            // Directory folder header
             Surface(
-                color = if (isCurrent) Tier2CompletionSelectedBg.copy(alpha = 0.65f) else Color(0xFF211E1C),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .border(
-                        width = 1.dp,
-                        color = if (isCurrent) WarmAmberAccent else Color(0xFF3A342E),
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                    .clickable { onSelectSection(sec.id) }
-                    .testTag("jump_concept_chip_${sec.orderIndex}")
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FolderOpen,
+                        contentDescription = null,
+                        tint = lang.badgeColor,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        text = "${lang.directoryPath}  •  ${lang.displayName} (${files.size} ${if (files.size == 1) "file" else "files"})",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
+            files.forEach { sec ->
+                val isCurrent = sec.id == activeSectionId
+                Surface(
+                    color = if (isCurrent) Tier2CompletionSelectedBg.copy(alpha = 0.65f) else Color(0xFF211E1C),
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .padding(start = 8.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(
+                            width = 1.dp,
+                            color = if (isCurrent) WarmAmberAccent else Color(0xFF3A342E),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .clickable { onSelectSection(sec.id) }
+                        .testTag("jump_concept_chip_${sec.orderIndex}")
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Surface(
-                                color = sec.language.badgeColor.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(4.dp),
-                                modifier = Modifier.border(0.5.dp, sec.language.badgeColor, RoundedCornerShape(4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
+                                Surface(
+                                    color = sec.language.badgeColor.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(4.dp),
+                                    modifier = Modifier.border(0.5.dp, sec.language.badgeColor, RoundedCornerShape(4.dp))
+                                ) {
+                                    Text(
+                                        text = sec.language.shortLabel,
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = sec.language.badgeColor,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
                                 Text(
-                                    text = sec.language.shortLabel,
+                                    text = sec.ktScribeFileName,
                                     fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = sec.language.badgeColor,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = WarmCreamText,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                             Text(
-                                text = sec.ktScribeFileName,
+                                text = "${sec.language.directoryPath}${sec.ktScribeFileName} (${sec.lineCount}L) • [${sec.effectiveLearnedConceptTag}]",
                                 fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = WarmCreamText,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                fontSize = 9.5.sp,
+                                color = MutedSageAccent
                             )
                         }
-                        Text(
-                            text = "${sec.language.displayName} (${sec.lineCount}L) • [${sec.effectiveLearnedConceptTag}]",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 10.sp,
-                            color = MutedSageAccent
-                        )
-                    }
-                    if (activeFolder.sections.size > 1) {
-                        IconButton(
-                            onClick = { onDeleteSection(sec.id) },
-                            modifier = Modifier.size(26.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.DeleteOutline,
-                                contentDescription = "Delete File",
-                                tint = MutedTaupeText,
-                                modifier = Modifier.size(15.dp)
-                            )
+                        if (activeFolder.sections.size > 1) {
+                            IconButton(
+                                onClick = { onDeleteSection(sec.id) },
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteOutline,
+                                    contentDescription = "Delete File",
+                                    tint = MutedTaupeText,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
                         }
                     }
                 }
