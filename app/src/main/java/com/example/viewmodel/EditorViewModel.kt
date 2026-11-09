@@ -71,7 +71,13 @@ data class EditorUiState(
     val activeAppTheme: com.example.ui.theme.AppThemeId = com.example.ui.theme.AppThemeId.DARCULA_ESPRESSO,
     val defaultLanguageForNewFiles: com.example.model.LanguageType = com.example.model.LanguageType.KOTLIN,
     val canUndo: Boolean = false,
-    val canRedo: Boolean = false
+    val canRedo: Boolean = false,
+    // Sliding IDE Bottom Command & Debug Drawer (matching VS Code / IntelliJ desktop layout)
+    val isBottomDrawerOpen: Boolean = false,
+    val activeBottomDrawerTab: com.example.model.BottomDrawerTab = com.example.model.BottomDrawerTab.TERMINAL,
+    val bottomDrawerHeightFraction: Float = 0.42f,
+    // File Extension Rename Guard Modal
+    val extensionRenameWarningDialog: String? = null
 ) {
     val activeFormattingStyle: TextFormattingStyle
         get() {
@@ -464,17 +470,48 @@ class EditorViewModel(
         val activeSec = doc.sections.find { it.id == _uiState.value.focusedSectionId }
             ?: doc.sections.firstOrNull()
             ?: return
-        val output = KotlinCodeEngine.simulateKotlinExecution(activeSec.codeContent)
+        val debugInfo = com.example.code.CodeLanguageEngine.executeAndDebug(activeSec.codeContent, activeSec.language)
         _uiState.update { current ->
-            val withOutput = current.copy(terminalExecutionOutput = output)
-            if (FloatingWindowType.RUN_OUTPUT in withOutput.openFloatingWindows) {
-                withOutput.copy(
-                    openFloatingWindows = (withOutput.openFloatingWindows - FloatingWindowType.RUN_OUTPUT) + FloatingWindowType.RUN_OUTPUT
-                )
+            current.copy(
+                terminalExecutionOutput = debugInfo.output,
+                isBottomDrawerOpen = true,
+                activeBottomDrawerTab = com.example.model.BottomDrawerTab.TERMINAL
+            )
+        }
+    }
+
+    fun openBottomDrawer(tab: com.example.model.BottomDrawerTab = com.example.model.BottomDrawerTab.TERMINAL) {
+        _uiState.update { it.copy(isBottomDrawerOpen = true, activeBottomDrawerTab = tab) }
+    }
+
+    fun closeBottomDrawer() {
+        _uiState.update { it.copy(isBottomDrawerOpen = false) }
+    }
+
+    fun toggleBottomDrawer(tab: com.example.model.BottomDrawerTab? = null) {
+        _uiState.update { current ->
+            if (current.isBottomDrawerOpen && (tab == null || tab == current.activeBottomDrawerTab)) {
+                current.copy(isBottomDrawerOpen = false)
             } else {
-                EditorUiState.applyToggleFloatingWindow(withOutput, FloatingWindowType.RUN_OUTPUT)
+                current.copy(isBottomDrawerOpen = true, activeBottomDrawerTab = tab ?: current.activeBottomDrawerTab)
             }
         }
+    }
+
+    fun setBottomDrawerTab(tab: com.example.model.BottomDrawerTab) {
+        _uiState.update { it.copy(activeBottomDrawerTab = tab, isBottomDrawerOpen = true) }
+    }
+
+    fun setBottomDrawerHeightFraction(fraction: Float) {
+        _uiState.update { it.copy(bottomDrawerHeightFraction = fraction.coerceIn(0.25f, 0.85f)) }
+    }
+
+    fun dismissExtensionRenameWarning() {
+        _uiState.update { it.copy(extensionRenameWarningDialog = null) }
+    }
+
+    fun clearTerminalOutput() {
+        _uiState.update { it.copy(terminalExecutionOutput = "") }
     }
 
     fun updateSearchQuery(query: String) {
@@ -721,15 +758,26 @@ class EditorViewModel(
     }
 
     fun updateSectionTitleManual(sectionId: Long, newTitle: String) {
+        val currentDoc = _uiState.value.activeDocument ?: return
+        val targetSec = currentDoc.sections.find { it.id == sectionId } ?: return
+
+        val warning = com.example.model.CodeSectionUiModel.validateFileExtensionRename(
+            currentFileName = targetSec.nativeFileName,
+            newFileName = newTitle,
+            language = targetSec.language
+        )
+        if (warning != null) {
+            _uiState.update { it.copy(extensionRenameWarningDialog = warning) }
+            return
+        }
+
         mutateActiveDocument(recordUndo = true) { doc ->
             doc.copy(
                 sections = doc.sections.map { sec ->
                     if (sec.id == sectionId) {
-                        val inferredLang = com.example.model.LanguageType.fromExtensionOrName(newTitle)
                         sec.copy(
                             sectionTitle = newTitle,
-                            isAiNamed = false,
-                            language = inferredLang
+                            isAiNamed = false
                         )
                     } else {
                         sec

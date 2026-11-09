@@ -904,7 +904,29 @@ fun MacDraggableFloatingWindow(
                                 headerExtraActions()
                             }
 
-                            // 4 Discrete Tier Snapping Pills (Mini, Half, 2/3, Full)
+                            // Quick Portrait / Landscape Orientation Switcher Toggle
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable {
+                                        isDraggingResize = false
+                                        currentTier = if (currentTier == WindowPresetTier.PORTRAIT) WindowPresetTier.LANDSCAPE else WindowPresetTier.PORTRAIT
+                                    }
+                                    .testTag("toggle_orientation_${windowType.name.lowercase()}")
+                            ) {
+                                Text(
+                                    text = if (currentTier == WindowPresetTier.PORTRAIT) "⬍ Portrait" else "⬌ Landscape",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
+
+                            // 4 Discrete Tier Snapping Pills (Mini, Portrait, Landscape, Full)
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(3.dp)

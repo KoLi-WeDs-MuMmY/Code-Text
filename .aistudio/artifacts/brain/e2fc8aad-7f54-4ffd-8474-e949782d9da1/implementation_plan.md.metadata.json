@@ -1,6 +1,6 @@
 {
-  "summary":  "Updated implementation plan incorporating an in-depth breakdown of how debugging, real-time diagnostics, quick-fixes, terminal simulation, and multi-language execution operate in the application, alongside typing fixes, floating cursor completion, 4-tier MIUI/iOS window snapping, and studio home modernization.",
-  "updatedAt":  "2026-11-09T05:43:19.352585383Z",
+  "summary":  "Architectural implementation plan for fixing code line spacing, MIUI-style floating window presets, native file extensions (.kt, .py, .java, etc.) in xScribe containers, accurate multi-language syntax debugging, right-shifted cursor suggestions, IDE features tracker (IDE.md), extension rename guard, and sliding bottom command/debug drawer.",
+  "updatedAt":  "2026-11-09T07:22:32.076209001Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

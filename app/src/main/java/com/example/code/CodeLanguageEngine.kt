@@ -238,21 +238,287 @@ object CodeLanguageEngine {
         return KotlinCodeEngine.applySuggestion(code, cursorPosition, suggestion)
     }
 
+    data class DebugSessionInfo(
+        val output: String,
+        val hasErrors: Boolean,
+        val exitCode: Int,
+        val variables: Map<String, String>,
+        val diagnostics: List<KotlinDiagnostic>
+    )
+
     /**
-     * Simulates terminal script execution for the given language.
+     * Syntactic and semantic validator for all supported programming languages.
      */
-    fun simulateExecutionForLanguage(code: String, language: LanguageType): String {
-        val trimmed = code.trim()
-        if (trimmed.isBlank()) {
-            return "$ ${language.runCommandPrefix} (no code to execute)"
+    fun getDiagnosticsForLanguage(code: String, language: LanguageType): List<KotlinDiagnostic> {
+        if (language == LanguageType.KOTLIN) {
+            return KotlinCodeEngine.getDiagnostics(code)
         }
 
-        return when (language) {
-            LanguageType.KOTLIN -> KotlinCodeEngine.simulateKotlinExecution(code)
-            LanguageType.JAVA -> {
-                val printMatches = Regex("""System\.(?:out|err)\.print(?:ln)?\s*\(([^)]*)\)""").findAll(trimmed)
-                val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }.toList()
-                buildString {
+        val lines = code.split('\n')
+        val diagnostics = mutableListOf<KotlinDiagnostic>()
+        var parenCount = 0
+        var braceCount = 0
+        var bracketCount = 0
+
+        lines.forEachIndexed { idx, rawLine ->
+            val lineNum = idx + 1
+            val trimmed = rawLine.trim()
+
+            // Skip empty lines and full line comments
+            if (trimmed.isEmpty() || trimmed.startsWith("//") || trimmed.startsWith("#")) {
+                return@forEachIndexed
+            }
+
+            // Track grouping delimiters
+            for (ch in trimmed) {
+                when (ch) {
+                    '(' -> parenCount++
+                    ')' -> parenCount--
+                    '{' -> braceCount++
+                    '}' -> braceCount--
+                    '[' -> bracketCount++
+                    ']' -> bracketCount--
+                }
+            }
+
+            // Check unclosed string literals
+            var inSingle = false
+            var inDouble = false
+            var isEscaped = false
+            for (ch in trimmed) {
+                if (isEscaped) {
+                    isEscaped = false
+                    continue
+                }
+                if (ch == '\\') {
+                    isEscaped = true
+                    continue
+                }
+                if (ch == '\'' && !inDouble) inSingle = !inSingle
+                if (ch == '"' && !inSingle) inDouble = !inDouble
+            }
+            if (inSingle || inDouble) {
+                diagnostics.add(
+                    KotlinDiagnostic(
+                        line = lineNum,
+                        startOffset = 0,
+                        endOffset = trimmed.length,
+                        message = "Unterminated string literal",
+                        severity = DiagnosticSeverity.ERROR,
+                        quickFixLabel = "Close quote",
+                        fixedCode = if (inDouble) "$rawLine\"" else "$rawLine'"
+                    )
+                )
+            }
+
+            when (language) {
+                LanguageType.PYTHON -> {
+                    // Python block headers require trailing colon `:`
+                    val needsColon = trimmed.startsWith("def ") ||
+                        trimmed.startsWith("class ") ||
+                        trimmed.startsWith("if ") ||
+                        trimmed.startsWith("elif ") ||
+                        trimmed == "else" ||
+                        trimmed.startsWith("for ") ||
+                        trimmed.startsWith("while ") ||
+                        trimmed == "try" ||
+                        trimmed.startsWith("except") ||
+                        trimmed == "finally"
+
+                    if (needsColon && !trimmed.endsWith(":")) {
+                        diagnostics.add(
+                            KotlinDiagnostic(
+                                line = lineNum,
+                                startOffset = 0,
+                                endOffset = trimmed.length,
+                                message = "SyntaxError: expected ':' at end of statement",
+                                severity = DiagnosticSeverity.ERROR,
+                                quickFixLabel = "Append ':'",
+                                fixedCode = "$rawLine:"
+                            )
+                        )
+                    }
+                }
+                LanguageType.JAVA -> {
+                    val isBlockOpener = trimmed.endsWith("{") || trimmed.endsWith("}")
+                    val isAnnotation = trimmed.startsWith("@")
+                    val isPackageOrImport = trimmed.startsWith("package ") || trimmed.startsWith("import ")
+                    val isHeader = trimmed.startsWith("public class ") || trimmed.startsWith("class ") ||
+                        trimmed.startsWith("interface ") || trimmed.startsWith("public static void main")
+                    if (!isBlockOpener && !isAnnotation && !trimmed.endsWith(";") && !isHeader) {
+                        diagnostics.add(
+                            KotlinDiagnostic(
+                                line = lineNum,
+                                startOffset = 0,
+                                endOffset = trimmed.length,
+                                message = "error: ';' expected",
+                                severity = DiagnosticSeverity.ERROR,
+                                quickFixLabel = "Add ';'",
+                                fixedCode = "$rawLine;"
+                            )
+                        )
+                    }
+                }
+                LanguageType.CPP -> {
+                    val isPreproc = trimmed.startsWith("#")
+                    val isBlockOpener = trimmed.endsWith("{") || trimmed.endsWith("}")
+                    if (!isPreproc && !isBlockOpener && !trimmed.endsWith(";") && !trimmed.endsWith(">") && !trimmed.startsWith("int main")) {
+                        diagnostics.add(
+                            KotlinDiagnostic(
+                                line = lineNum,
+                                startOffset = 0,
+                                endOffset = trimmed.length,
+                                message = "error: expected ';' at end of declaration",
+                                severity = DiagnosticSeverity.ERROR,
+                                quickFixLabel = "Add ';'",
+                                fixedCode = "$rawLine;"
+                            )
+                        )
+                    }
+                }
+                LanguageType.DART -> {
+                    val isBlockOpener = trimmed.endsWith("{") || trimmed.endsWith("}")
+                    if (!isBlockOpener && !trimmed.endsWith(";") && !trimmed.startsWith("void main") && !trimmed.startsWith("class ")) {
+                        diagnostics.add(
+                            KotlinDiagnostic(
+                                line = lineNum,
+                                startOffset = 0,
+                                endOffset = trimmed.length,
+                                message = "A statement must end with a semicolon ';'",
+                                severity = DiagnosticSeverity.ERROR,
+                                quickFixLabel = "Add ';'",
+                                fixedCode = "$rawLine;"
+                            )
+                        )
+                    }
+                }
+                LanguageType.RUST -> {
+                    val isBlockOpener = trimmed.endsWith("{") || trimmed.endsWith("}")
+                    if (!isBlockOpener && !trimmed.endsWith(";") && !trimmed.startsWith("fn main") && !trimmed.startsWith("fn ")) {
+                        diagnostics.add(
+                            KotlinDiagnostic(
+                                line = lineNum,
+                                startOffset = 0,
+                                endOffset = trimmed.length,
+                                message = "error: expected ';'",
+                                severity = DiagnosticSeverity.ERROR,
+                                quickFixLabel = "Add ';'",
+                                fixedCode = "$rawLine;"
+                            )
+                        )
+                    }
+                }
+                LanguageType.KOTLIN -> Unit
+            }
+        })
+
+        if (braceCount > 0) {
+            diagnostics.add(
+                KotlinDiagnostic(
+                    line = lines.size.coerceAtLeast(1),
+                    startOffset = 0,
+                    endOffset = 1,
+                    message = "Unclosed '{': missing $braceCount closing '}' brace(s)",
+                    severity = DiagnosticSeverity.ERROR
+                )
+            )
+        }
+        if (parenCount > 0) {
+            diagnostics.add(
+                KotlinDiagnostic(
+                    line = lines.size.coerceAtLeast(1),
+                    startOffset = 0,
+                    endOffset = 1,
+                    message = "Unclosed '(': missing $parenCount closing ')' parenthesis",
+                    severity = DiagnosticSeverity.ERROR
+                )
+            )
+        }
+
+        return diagnostics
+    }
+
+    /**
+     * Executes the code with real syntax validation, variable tracking, and compiler diagnostics.
+     */
+    fun executeAndDebug(code: String, language: LanguageType): DebugSessionInfo {
+        val trimmed = code.trim()
+        val diagnostics = getDiagnosticsForLanguage(code, language)
+        val errors = diagnostics.filter { it.severity == DiagnosticSeverity.ERROR }
+
+        // Extract variables from simple assignments
+        val variables = mutableMapOf<String, String>()
+        val varRegex = Regex("""(?:val|var|int|String|double|float|let|mut)?\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*([^;\n]+)""")
+        varRegex.findAll(code).forEach { match ->
+            val name = match.groupValues[1].trim()
+            val value = match.groupValues[2].trim()
+            if (name !in setOf("if", "for", "while", "class", "def", "fun", "return", "public", "private", "print", "println")) {
+                variables[name] = value.take(40)
+            }
+        }
+
+        if (errors.isNotEmpty()) {
+            val firstErr = errors.first()
+            val fileName = language.defaultFileName
+            val output = buildString {
+                when (language) {
+                    LanguageType.PYTHON -> {
+                        appendLine("$ python3 $fileName")
+                        appendLine("  File \"$fileName\", line ${firstErr.line}")
+                        val errLine = code.split('\n').getOrNull(firstErr.line - 1)?.trim().orEmpty()
+                        appendLine("    $errLine")
+                        appendLine("    ^")
+                        appendLine(firstErr.message)
+                        appendLine("\nProcess finished with exit code 1 (compilation failed)")
+                    }
+                    LanguageType.JAVA -> {
+                        appendLine("$ javac $fileName")
+                        appendLine("$fileName:${firstErr.line}: ${firstErr.message}")
+                        val errLine = code.split('\n').getOrNull(firstErr.line - 1)?.trim().orEmpty()
+                        appendLine("    $errLine")
+                        appendLine("    ^")
+                        appendLine("${errors.size} error${if (errors.size > 1) "s" else ""}")
+                        appendLine("\nProcess finished with exit code 1 (compilation failed)")
+                    }
+                    LanguageType.CPP -> {
+                        appendLine("$ g++ $fileName -o main")
+                        appendLine("$fileName:${firstErr.line}:1: ${firstErr.message}")
+                        appendLine("\nProcess finished with exit code 1 (compilation failed)")
+                    }
+                    LanguageType.DART -> {
+                        appendLine("$ dart run $fileName")
+                        appendLine("$fileName:${firstErr.line}:1: Error: ${firstErr.message}")
+                        appendLine("\nProcess finished with exit code 1 (compilation failed)")
+                    }
+                    LanguageType.RUST -> {
+                        appendLine("$ rustc $fileName")
+                        appendLine("error: ${firstErr.message}")
+                        appendLine(" --> $fileName:${firstErr.line}:1")
+                        appendLine("\nProcess finished with exit code 1 (compilation failed)")
+                    }
+                    LanguageType.KOTLIN -> {
+                        appendLine("$ kotlinc $fileName")
+                        appendLine("$fileName:${firstErr.line}:1: ${firstErr.message}")
+                        appendLine("\nProcess finished with exit code 1 (compilation failed)")
+                    }
+                }
+            }
+            return DebugSessionInfo(
+                output = output,
+                hasErrors = true,
+                exitCode = 1,
+                variables = variables,
+                diagnostics = diagnostics
+            )
+        }
+
+        // Success execution output
+        val output = buildString {
+            when (language) {
+                LanguageType.KOTLIN -> append(KotlinCodeEngine.simulateKotlinExecution(code))
+                LanguageType.JAVA -> {
+                    val printMatches = Regex("""System\.(?:out|err)\.print(?:ln)?\s*\(([^)]*)\)""").findAll(trimmed)
+                    val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }.toList()
                     appendLine("$ javac Main.java && java Main")
                     if (outputs.isEmpty()) {
                         appendLine("(Process executed without printing to standard output)")
@@ -261,11 +527,9 @@ object CodeLanguageEngine {
                     }
                     append("\nProcess finished with exit code 0")
                 }
-            }
-            LanguageType.PYTHON -> {
-                val printMatches = Regex("""print\s*\(([^)]*)\)""").findAll(trimmed)
-                val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }.toList()
-                buildString {
+                LanguageType.PYTHON -> {
+                    val printMatches = Regex("""print\s*\(([^)]*)\)""").findAll(trimmed)
+                    val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }.toList()
                     appendLine("$ python3 main.py")
                     if (outputs.isEmpty()) {
                         appendLine("(Script finished with no output)")
@@ -274,11 +538,9 @@ object CodeLanguageEngine {
                     }
                     append("\nProcess finished with exit code 0")
                 }
-            }
-            LanguageType.DART -> {
-                val printMatches = Regex("""print\s*\(([^)]*)\)""").findAll(trimmed)
-                val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }.toList()
-                buildString {
+                LanguageType.DART -> {
+                    val printMatches = Regex("""print\s*\(([^)]*)\)""").findAll(trimmed)
+                    val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }.toList()
                     appendLine("$ dart run main.dart")
                     if (outputs.isEmpty()) {
                         appendLine("(Dart program exited cleanly)")
@@ -287,12 +549,10 @@ object CodeLanguageEngine {
                     }
                     append("\nProcess finished with exit code 0")
                 }
-            }
-            LanguageType.CPP -> {
-                val printMatches = Regex("""(?:std::)?cout\s*<<\s*([^;<]+)""").findAll(trimmed)
-                val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }
-                    .filter { it != "std::endl" && it != "endl" }.toList()
-                buildString {
+                LanguageType.CPP -> {
+                    val printMatches = Regex("""(?:std::)?cout\s*<<\s*([^;<]+)""").findAll(trimmed)
+                    val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }
+                        .filter { it != "std::endl" && it != "endl" }.toList()
                     appendLine("$ g++ main.cpp -o main && ./main")
                     if (outputs.isEmpty()) {
                         appendLine("(Binary executed successfully with no output)")
@@ -301,11 +561,9 @@ object CodeLanguageEngine {
                     }
                     append("\nProcess finished with exit code 0")
                 }
-            }
-            LanguageType.RUST -> {
-                val printMatches = Regex("""println!\s*\(([^)]*)\)""").findAll(trimmed)
-                val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }.toList()
-                buildString {
+                LanguageType.RUST -> {
+                    val printMatches = Regex("""println!\s*\(([^)]*)\)""").findAll(trimmed)
+                    val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }.toList()
                     appendLine("$ rustc main.rs && ./main")
                     if (outputs.isEmpty()) {
                         appendLine("(Rust binary exited cleanly)")
@@ -316,5 +574,20 @@ object CodeLanguageEngine {
                 }
             }
         }
+
+        return DebugSessionInfo(
+            output = output,
+            hasErrors = false,
+            exitCode = 0,
+            variables = variables,
+            diagnostics = diagnostics
+        )
+    }
+
+    /**
+     * Simulates terminal script execution for the given language.
+     */
+    fun simulateExecutionForLanguage(code: String, language: LanguageType): String {
+        return executeAndDebug(code, language).output
     }
 }

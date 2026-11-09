@@ -120,69 +120,53 @@ enum class FloatingWindowType(
     val defaultHeightDp: Float get() = defaultHorizontalHeightDp
 
     fun getTierWidthDp(tier: WindowPresetTier, screenWidthDp: Float = 600f): Float = when (tier) {
-        WindowPresetTier.MINI -> when (this) {
-            EXPLANATION -> 280f
-            FOLDERS -> 260f
-            AI_STUDIO -> 280f
-            RUN_OUTPUT -> 300f
-        }
-        WindowPresetTier.HALF -> when (this) {
-            EXPLANATION -> 380f
-            FOLDERS -> 340f
-            AI_STUDIO -> 360f
-            RUN_OUTPUT -> 420f
-        }
-        WindowPresetTier.TWO_THIRDS -> when (this) {
-            EXPLANATION -> 460f
-            FOLDERS -> 440f
-            AI_STUDIO -> 460f
-            RUN_OUTPUT -> 520f
-        }
+        WindowPresetTier.MINI -> 240f
+        WindowPresetTier.PORTRAIT, WindowPresetTier.HALF -> 340f
+        WindowPresetTier.LANDSCAPE, WindowPresetTier.TWO_THIRDS -> 560f
         WindowPresetTier.FULL -> (screenWidthDp * 0.94f).coerceAtLeast(340f)
     }
 
     fun getTierHeightDp(tier: WindowPresetTier, screenHeightDp: Float = 800f): Float = when (tier) {
-        WindowPresetTier.MINI -> when (this) {
-            EXPLANATION -> 200f
-            FOLDERS -> 240f
-            AI_STUDIO -> 220f
-            RUN_OUTPUT -> 180f
-        }
-        WindowPresetTier.HALF -> when (this) {
-            EXPLANATION -> 300f
-            FOLDERS -> 360f
-            AI_STUDIO -> 340f
-            RUN_OUTPUT -> 260f
-        }
-        WindowPresetTier.TWO_THIRDS -> when (this) {
-            EXPLANATION -> 440f
-            FOLDERS -> 500f
-            AI_STUDIO -> 470f
-            RUN_OUTPUT -> 390f
-        }
-        WindowPresetTier.FULL -> (screenHeightDp * 0.86f).coerceAtLeast(360f)
+        WindowPresetTier.MINI -> 170f
+        WindowPresetTier.PORTRAIT, WindowPresetTier.HALF -> 520f
+        WindowPresetTier.LANDSCAPE, WindowPresetTier.TWO_THIRDS -> 360f
+        WindowPresetTier.FULL -> (screenHeightDp * 0.88f).coerceAtLeast(360f)
     }
 
     fun getClosestTier(currentWidthDp: Float, currentHeightDp: Float, screenWidthDp: Float = 600f, screenHeightDp: Float = 800f): WindowPresetTier {
-        return WindowPresetTier.entries.minByOrNull { tier ->
-            val targetW = getTierWidthDp(tier, screenWidthDp)
-            val targetH = getTierHeightDp(tier, screenHeightDp)
-            val dw = currentWidthDp - targetW
-            val dh = currentHeightDp - targetH
-            dw * dw + dh * dh
-        } ?: WindowPresetTier.HALF
+        val aspect = currentWidthDp / currentHeightDp.coerceAtLeast(1f)
+        return when {
+            currentWidthDp < 270f && currentHeightDp < 220f -> WindowPresetTier.MINI
+            currentWidthDp > screenWidthDp * 0.82f && currentHeightDp > screenHeightDp * 0.72f -> WindowPresetTier.FULL
+            aspect >= 1.22f -> WindowPresetTier.LANDSCAPE
+            else -> WindowPresetTier.PORTRAIT
+        }
     }
 }
 
 /**
  * Discrete floating window dimension tiers (MIUI / iOS / HarmonyOS style).
- * Every floating window snaps exclusively to one of these 4 discrete tiers.
+ * Supports Portrait (phone-like ~340x520) and Landscape (console-like ~560x360) presets.
  */
 enum class WindowPresetTier(val label: String, val badge: String) {
     MINI("Mini", "▫"),
-    HALF("Half", "◫"),
-    TWO_THIRDS("2/3", "◰"),
-    FULL("Full", "◻")
+    PORTRAIT("Portrait", "⬍"),
+    LANDSCAPE("Landscape", "⬌"),
+    FULL("Full", "◻");
+
+    companion object {
+        val HALF get() = PORTRAIT
+        val TWO_THIRDS get() = LANDSCAPE
+    }
+}
+
+/**
+ * Tabs inside the sliding IDE Bottom Command & Debug Drawer.
+ */
+enum class BottomDrawerTab(val label: String, val badge: String) {
+    TERMINAL("Terminal", ">_"),
+    DEBUGGER("Debugger", "🪲"),
+    PROBLEMS("Problems", "⚠")
 }
 
 /**
@@ -273,7 +257,8 @@ data class TextFormattingStyle(
 enum class LanguageType(
     val id: String,
     val displayName: String,
-    val extension: String,
+    val nativeExtension: String,
+    val containerExtension: String,
     val badgeLabel: String,
     val defaultFileName: String,
     val directoryPath: String,
@@ -283,9 +268,10 @@ enum class LanguageType(
     KOTLIN(
         id = "kotlin",
         displayName = "Kotlin",
-        extension = ".ktscribe",
+        nativeExtension = ".kt",
+        containerExtension = ".ktscribe",
         badgeLabel = "KT",
-        defaultFileName = "Main.ktscribe",
+        defaultFileName = "main.kt",
         directoryPath = "src/kotlin/",
         runCommandPrefix = "kotlinc",
         starterCode = "fun main() {\n    println(\"Hello KtScribe!\")\n}"
@@ -293,7 +279,8 @@ enum class LanguageType(
     JAVA(
         id = "java",
         displayName = "Java",
-        extension = ".java",
+        nativeExtension = ".java",
+        containerExtension = ".javascribe",
         badgeLabel = "JAVA",
         defaultFileName = "Main.java",
         directoryPath = "src/java/",
@@ -303,7 +290,8 @@ enum class LanguageType(
     PYTHON(
         id = "python",
         displayName = "Python",
-        extension = ".py",
+        nativeExtension = ".py",
+        containerExtension = ".pyscribe",
         badgeLabel = "PY",
         defaultFileName = "main.py",
         directoryPath = "src/python/",
@@ -313,7 +301,8 @@ enum class LanguageType(
     DART(
         id = "dart",
         displayName = "Dart",
-        extension = ".dart",
+        nativeExtension = ".dart",
+        containerExtension = ".dartscribe",
         badgeLabel = "DART",
         defaultFileName = "main.dart",
         directoryPath = "src/dart/",
@@ -323,7 +312,8 @@ enum class LanguageType(
     CPP(
         id = "cpp",
         displayName = "C++",
-        extension = ".cpp",
+        nativeExtension = ".cpp",
+        containerExtension = ".cppscribe",
         badgeLabel = "C++",
         defaultFileName = "main.cpp",
         directoryPath = "src/cpp/",
@@ -333,7 +323,8 @@ enum class LanguageType(
     RUST(
         id = "rust",
         displayName = "Rust",
-        extension = ".rs",
+        nativeExtension = ".rs",
+        containerExtension = ".rustscribe",
         badgeLabel = "RS",
         defaultFileName = "main.rs",
         directoryPath = "src/rust/",
@@ -341,6 +332,7 @@ enum class LanguageType(
         starterCode = "fn main() {\n    println!(\"Hello Rust!\");\n}"
     );
 
+    val extension: String get() = nativeExtension
     val shortLabel: String get() = badgeLabel
 
     val badgeColor: androidx.compose.ui.graphics.Color get() = when (this) {
@@ -356,11 +348,11 @@ enum class LanguageType(
         fun fromExtensionOrName(name: String): LanguageType {
             val lower = name.lowercase().trim()
             return when {
-                lower.endsWith(".java") -> JAVA
-                lower.endsWith(".py") -> PYTHON
-                lower.endsWith(".dart") -> DART
-                lower.endsWith(".cpp") || lower.endsWith(".cc") || lower.endsWith(".cxx") -> CPP
-                lower.endsWith(".rs") -> RUST
+                lower.endsWith(".java") || lower.endsWith(".javascribe") -> JAVA
+                lower.endsWith(".py") || lower.endsWith(".pyscribe") -> PYTHON
+                lower.endsWith(".dart") || lower.endsWith(".dartscribe") -> DART
+                lower.endsWith(".cpp") || lower.endsWith(".cc") || lower.endsWith(".cxx") || lower.endsWith(".cppscribe") -> CPP
+                lower.endsWith(".rs") || lower.endsWith(".rustscribe") -> RUST
                 else -> KOTLIN
             }
         }
@@ -383,42 +375,53 @@ data class CodeSectionUiModel(
     val themeOverride: com.example.ui.theme.AppThemeId? = null
 ) {
     /**
-     * Canonical file name for this code block inside its parent Folder.
-     * Respects user-defined extensions (.ktscribe, .java, .py, .dart, .cpp, .rs) or defaults to the section's language.
+     * Canonical native code file name (e.g. main.kt, main.py, Main.java, main.cpp, main.dart, main.rs).
+     * Inside each xScribe bundle, the code block is an actual native file with real language extension.
      */
-    val ktScribeFileName: String
+    val nativeFileName: String
         get() {
             val raw = sectionTitle.trim()
-            val hasKnownExt = raw.endsWith(".ktscribe", ignoreCase = true) ||
-                raw.endsWith(".kt", ignoreCase = true) ||
+            val hasNativeExt = raw.endsWith(".kt", ignoreCase = true) ||
                 raw.endsWith(".java", ignoreCase = true) ||
                 raw.endsWith(".py", ignoreCase = true) ||
                 raw.endsWith(".dart", ignoreCase = true) ||
                 raw.endsWith(".cpp", ignoreCase = true) ||
                 raw.endsWith(".rs", ignoreCase = true)
-            if (hasKnownExt) return raw
+            if (hasNativeExt) return raw
 
-            val cleaned = raw
+            val stripped = raw
+                .replace(Regex("\\.(?:ktscribe|javascribe|pyscribe|dartscribe|cppscribe|rustscribe)$", RegexOption.IGNORE_CASE), "")
                 .replace(Regex("^Section\\s*\\d+\\s*[•\\-:]?\\s*", RegexOption.IGNORE_CASE), "")
                 .replace(Regex("[^A-Za-z0-9_\\-]"), "")
                 .take(22)
+
             val stem = when {
-                cleaned.isNotBlank() -> cleaned.replaceFirstChar { it.uppercase() }
+                stripped.isNotBlank() -> stripped.replaceFirstChar { it.uppercase() }
                 else -> {
                     val decl = Regex("""\b(?:class|interface|object|fun|def)\s+([A-Za-z_][A-Za-z0-9_]*)""")
                         .find(codeContent)?.groupValues?.getOrNull(1)
                     if (!decl.isNullOrBlank()) decl.replaceFirstChar { it.uppercase() }
-                    else "File${orderIndex + 1}"
+                    else if (language == LanguageType.JAVA) "Main"
+                    else "main"
                 }
             }
-            return "$stem${language.extension}"
+            return "$stem${language.nativeExtension}"
         }
 
+    val containerFileName: String
+        get() = "${nativeFileName.substringBeforeLast(".")}${language.containerExtension}"
+
+    val explanationFileName: String
+        get() = "explanation.txt"
+
+    val ktScribeFileName: String
+        get() = nativeFileName
+
     val fullFilePath: String
-        get() = "${language.directoryPath}$ktScribeFileName"
+        get() = "${language.directoryPath}$nativeFileName"
 
     val displayTitle: String
-        get() = ktScribeFileName
+        get() = nativeFileName
 
     /**
      * Serializes this single-code-block `.ktscribe` file together with its bundled concept tag and explanation notes.
@@ -496,6 +499,19 @@ data class CodeSectionUiModel(
                     sectionTitle.take(24)
                 else -> "Concept #$sectionNumber"
             }
+        }
+
+        fun validateFileExtensionRename(currentFileName: String, newFileName: String, language: LanguageType): String? {
+            val newTrimmed = newFileName.trim().lowercase()
+            val expectedExt = language.nativeExtension.lowercase()
+            if (!newTrimmed.endsWith(expectedExt)) {
+                val detectedOther = LanguageType.entries.find { 
+                    newTrimmed.endsWith(it.nativeExtension) || newTrimmed.endsWith(it.containerExtension) 
+                }
+                val newExt = detectedOther?.nativeExtension ?: (if (newTrimmed.contains('.')) ".${newTrimmed.substringAfterLast('.')}" else "")
+                return "File extension cannot be changed to '$newExt'. Modifying the file type from $expectedExt to $newExt will prevent compilation and debugging because the syntax and runtime language differ."
+            }
+            return null
         }
     }
 }

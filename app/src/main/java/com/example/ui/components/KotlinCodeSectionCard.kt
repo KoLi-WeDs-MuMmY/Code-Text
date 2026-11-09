@@ -1793,6 +1793,13 @@ fun KotlinCodeSectionCard(
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 12.sp,
                                             lineHeight = 22.sp,
+                                            style = androidx.compose.ui.text.TextStyle(
+                                                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+                                                lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
+                                                    alignment = androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
+                                                    trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.None
+                                                )
+                                            ),
                                             fontWeight = if (isCurrentCursorLine) FontWeight.Bold else FontWeight.Normal,
                                             color = when {
                                                 lineDiag != null -> IdeInlineErrorPillText
@@ -1839,7 +1846,12 @@ fun KotlinCodeSectionCard(
                                         fontFamily = JetBrainsMonoFontFamily,
                                         fontSize = 13.5.sp,
                                         lineHeight = 22.sp,
-                                        color = DarculaBrightText
+                                        color = DarculaBrightText,
+                                        platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+                                        lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
+                                            alignment = androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
+                                            trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.None
+                                        )
                                     ),
                                     visualTransformation = syntaxVisualTransformation,
                                     cursorBrush = SolidColor(DarculaWarmAmber),
@@ -1856,6 +1868,13 @@ fun KotlinCodeSectionCard(
                                                     fontFamily = JetBrainsMonoFontFamily,
                                                     fontSize = 13.sp,
                                                     lineHeight = 22.sp,
+                                                    style = androidx.compose.ui.text.TextStyle(
+                                                        platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+                                                        lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
+                                                            alignment = androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
+                                                            trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.None
+                                                        )
+                                                    ),
                                                     color = DarculaMutedText.copy(alpha = 0.45f)
                                                 )
                                             }
@@ -1871,7 +1890,7 @@ fun KotlinCodeSectionCard(
                                         .testTag("kotlin_code_input_${section.orderIndex}")
                                 )
 
-                                // Contextual Floating IDE Autocomplete Popup (Anchored directly next to the caret)
+                                // Contextual Floating IDE Autocomplete Popup (Shifted +28dp right of cursor)
                                 val cursorOffset = codeFieldValue.selection.end.coerceIn(0, codeFieldValue.text.length)
                                 val cursorRect = codeLayoutResult?.let { layout ->
                                     try {
@@ -1882,8 +1901,8 @@ fun KotlinCodeSectionCard(
                                 }
 
                                 if (showCursorCompletionPopup && cursorRect != null) {
-                                    val popupX = with(density) { (cursorRect.right + 12f).toDp().coerceAtLeast(8.dp) }
-                                    val popupY = with(density) { (cursorRect.top - 4f).toDp().coerceAtLeast(0.dp) }
+                                    val popupX = with(density) { (cursorRect.right.toDp() + 28.dp).coerceAtLeast(16.dp) }
+                                    val popupY = with(density) { (cursorRect.top.toDp() - 4.dp).coerceAtLeast(0.dp) }
 
                                     Surface(
                                         color = MaterialTheme.colorScheme.surface,
