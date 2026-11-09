@@ -3,8 +3,10 @@ package com.example.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import com.example.model.WindowPresetTier
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -656,8 +658,25 @@ fun MacDraggableFloatingWindow(
     var offsetY by remember(windowType) {
         mutableFloatStateOf(if (windowSlotIndex == 0) 6f else 48f)
     }
-    var widthDp by remember(windowType) { mutableFloatStateOf(initialWidthDp.coerceAtLeast(windowType.minWidthDp)) }
-    var heightDp by remember(windowType) { mutableFloatStateOf(initialHeightDp.coerceAtLeast(windowType.minHeightDp)) }
+    // 4 Discrete Window Presets (Mini, Half, Two-Thirds, Full - MIUI / iOS / Harmony style)
+    var currentTier by remember(windowType) { mutableStateOf(WindowPresetTier.HALF) }
+    var isDraggingResize by remember { mutableStateOf(false) }
+    var dragWidthDp by remember(windowType) { mutableFloatStateOf(windowType.getTierWidthDp(WindowPresetTier.HALF)) }
+    var dragHeightDp by remember(windowType) { mutableFloatStateOf(windowType.getTierHeightDp(WindowPresetTier.HALF)) }
+
+    val targetWidth = if (isDraggingResize) dragWidthDp else windowType.getTierWidthDp(currentTier)
+    val targetHeight = if (isDraggingResize) dragHeightDp else windowType.getTierHeightDp(currentTier)
+
+    val animatedWidthDp by animateFloatAsState(
+        targetValue = targetWidth,
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f),
+        label = "win_w"
+    )
+    val animatedHeightDp by animateFloatAsState(
+        targetValue = targetHeight,
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f),
+        label = "win_h"
+    )
 
     val shakeOffsetX = remember { Animatable(0f) }
     LaunchedEffect(shakeTriggerCount) {
@@ -712,9 +731,8 @@ fun MacDraggableFloatingWindow(
             shadowElevation = elevationDp,
             modifier = Modifier
                 .padding(8.dp)
-                .widthIn(min = windowType.minWidthDp.dp, max = widthDp.coerceAtLeast(windowType.minWidthDp).dp)
-                .fillMaxWidth(0.94f)
-                .height(heightDp.coerceAtLeast(windowType.minHeightDp).dp)
+                .width(animatedWidthDp.dp)
+                .height(animatedHeightDp.dp)
                 .tactileWindowDepth(isForeground = isForegroundWindow, cornerRadiusDp = 18f)
                 .shadow(
                     elevation = elevationDp,
@@ -762,11 +780,27 @@ fun MacDraggableFloatingWindow(
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                         .pointerInput(windowType) {
                             detectDragGestures(
-                                onDragStart = { onFocusWindow() }
+                                onDragStart = {
+                                    onFocusWindow()
+                                    isDraggingResize = true
+                                    dragWidthDp = animatedWidthDp
+                                    dragHeightDp = animatedHeightDp
+                                },
+                                onDragEnd = {
+                                    isDraggingResize = false
+                                    currentTier = windowType.getClosestTier(dragWidthDp, dragHeightDp)
+                                },
+                                onDragCancel = {
+                                    isDraggingResize = false
+                                    currentTier = windowType.getClosestTier(dragWidthDp, dragHeightDp)
+                                }
                             ) { change, dragAmount ->
                                 change.consume()
                                 val dxDp = with(density) { dragAmount.x.toDp().value }
-                                widthDp = (widthDp - dxDp).coerceIn(windowType.minWidthDp, 720f)
+                                dragWidthDp = (dragWidthDp - dxDp).coerceIn(
+                                    windowType.getTierWidthDp(WindowPresetTier.MINI),
+                                    windowType.getTierWidthDp(WindowPresetTier.FULL)
+                                )
                             }
                         }
                         .testTag("left_edge_resize_handle_${windowType.name.lowercase()}"),
@@ -818,26 +852,26 @@ fun MacDraggableFloatingWindow(
                                     .background(MacRedDot)
                                     .clickable(onClick = onCancelWindow)
                             )
-                            // Yellow: Default Horizontal Size
+                            // Yellow: Half size preset
                             Box(
                                 modifier = Modifier
                                     .size(11.dp)
                                     .clip(CircleShape)
                                     .background(MacYellowDot)
                                     .clickable {
-                                        widthDp = windowType.defaultHorizontalWidthDp
-                                        heightDp = windowType.defaultHorizontalHeightDp
+                                        isDraggingResize = false
+                                        currentTier = WindowPresetTier.HALF
                                     }
                             )
-                            // Green: Default Vertical Size
+                            // Green: Full size toggle
                             Box(
                                 modifier = Modifier
                                     .size(11.dp)
                                     .clip(CircleShape)
                                     .background(MacGreenDot)
                                     .clickable {
-                                        widthDp = windowType.defaultVerticalWidthDp
-                                        heightDp = windowType.defaultVerticalHeightDp
+                                        isDraggingResize = false
+                                        currentTier = if (currentTier == WindowPresetTier.FULL) WindowPresetTier.HALF else WindowPresetTier.FULL
                                     }
                             )
 
@@ -853,7 +887,7 @@ fun MacDraggableFloatingWindow(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "Min: ${windowType.minWidthDp.toInt()}×${windowType.minHeightDp.toInt()} dp • Corner ⤡ drag",
+                                    text = "Tier: ${currentTier.label} (${animatedWidthDp.roundToInt()}×${animatedHeightDp.roundToInt()} dp)",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 9.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -864,38 +898,44 @@ fun MacDraggableFloatingWindow(
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             if (headerExtraActions != null) {
                                 headerExtraActions()
                             }
 
-                            // Quick Orientation Toggle (Wide Horizontal <-> Tall Vertical default sizes)
-                            Surface(
-                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                                shape = RoundedCornerShape(7.dp),
-                                border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(7.dp))
-                                    .clickable {
-                                        if (widthDp >= heightDp) {
-                                            widthDp = windowType.defaultVerticalWidthDp
-                                            heightDp = windowType.defaultVerticalHeightDp
-                                        } else {
-                                            widthDp = windowType.defaultHorizontalWidthDp
-                                            heightDp = windowType.defaultHorizontalHeightDp
-                                        }
-                                    }
-                                    .testTag("toggle_orientation_${windowType.name.lowercase()}")
+                            // 4 Discrete Tier Snapping Pills (Mini, Half, 2/3, Full)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
-                                Text(
-                                    text = if (widthDp >= heightDp) "⇄ Wide" else "⇅ Tall",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                )
+                                WindowPresetTier.entries.forEach { tier ->
+                                    val isSelected = currentTier == tier
+                                    Surface(
+                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                                        shape = RoundedCornerShape(6.dp),
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            width = if (isSelected) 1.dp else 0.5.dp,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                                        ),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .clickable {
+                                                isDraggingResize = false
+                                                currentTier = tier
+                                            }
+                                            .testTag("tier_${tier.name.lowercase()}_${windowType.name.lowercase()}")
+                                    ) {
+                                        Text(
+                                            text = "${tier.badge} ${tier.label}",
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 8.5.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 4.5.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
                             }
 
                             // Option to convert ANY floating window into an Adjustable Split Screen (`◫ Split`)!
@@ -993,55 +1033,38 @@ fun MacDraggableFloatingWindow(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = "${widthDp.roundToInt()}×${heightDp.roundToInt()} dp",
+                                text = "${animatedWidthDp.roundToInt()}×${animatedHeightDp.roundToInt()} dp",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
-                            // Preset buttons: Horizontal (Wide) and Vertical (Tall)
-                            Surface(
-                                color = if (widthDp >= heightDp) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                                shape = RoundedCornerShape(4.dp),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .clickable {
-                                        widthDp = windowType.defaultHorizontalWidthDp
-                                        heightDp = windowType.defaultHorizontalHeightDp
-                                    }
-                            ) {
-                                Text(
-                                    text = "Horizontal",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 8.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (widthDp >= heightDp) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                )
-                            }
-
-                            Surface(
-                                color = if (heightDp > widthDp) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                                shape = RoundedCornerShape(4.dp),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .clickable {
-                                        widthDp = windowType.defaultVerticalWidthDp
-                                        heightDp = windowType.defaultVerticalHeightDp
-                                    }
-                            ) {
-                                Text(
-                                    text = "Vertical",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 8.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (heightDp > widthDp) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                )
+                            // Quick discrete tier preset selector
+                            WindowPresetTier.entries.forEach { tier ->
+                                val isSelected = currentTier == tier
+                                Surface(
+                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                    shape = RoundedCornerShape(4.dp),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable {
+                                            isDraggingResize = false
+                                            currentTier = tier
+                                        }
+                                ) {
+                                    Text(
+                                        text = tier.label,
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
                         }
 
@@ -1053,13 +1076,32 @@ fun MacDraggableFloatingWindow(
                                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
                                 .pointerInput(windowType) {
                                     detectDragGestures(
-                                        onDragStart = { onFocusWindow() }
+                                        onDragStart = {
+                                            onFocusWindow()
+                                            isDraggingResize = true
+                                            dragWidthDp = animatedWidthDp
+                                            dragHeightDp = animatedHeightDp
+                                        },
+                                        onDragEnd = {
+                                            isDraggingResize = false
+                                            currentTier = windowType.getClosestTier(dragWidthDp, dragHeightDp)
+                                        },
+                                        onDragCancel = {
+                                            isDraggingResize = false
+                                            currentTier = windowType.getClosestTier(dragWidthDp, dragHeightDp)
+                                        }
                                     ) { change, dragAmount ->
                                         change.consume()
                                         val dxDp = with(density) { dragAmount.x.toDp().value }
                                         val dyDp = with(density) { dragAmount.y.toDp().value }
-                                        widthDp = (widthDp + dxDp).coerceIn(windowType.minWidthDp, 720f)
-                                        heightDp = (heightDp + dyDp).coerceIn(windowType.minHeightDp, 600f)
+                                        dragWidthDp = (dragWidthDp + dxDp).coerceIn(
+                                            windowType.getTierWidthDp(WindowPresetTier.MINI),
+                                            windowType.getTierWidthDp(WindowPresetTier.FULL)
+                                        )
+                                        dragHeightDp = (dragHeightDp + dyDp).coerceIn(
+                                            windowType.getTierHeightDp(WindowPresetTier.MINI),
+                                            windowType.getTierHeightDp(WindowPresetTier.FULL)
+                                        )
                                     }
                                 }
                                 .testTag("corner_resize_handle_${windowType.name.lowercase()}"),

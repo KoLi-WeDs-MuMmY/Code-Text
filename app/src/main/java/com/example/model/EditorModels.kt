@@ -118,6 +118,71 @@ enum class FloatingWindowType(
 
     val defaultWidthDp: Float get() = defaultHorizontalWidthDp
     val defaultHeightDp: Float get() = defaultHorizontalHeightDp
+
+    fun getTierWidthDp(tier: WindowPresetTier, screenWidthDp: Float = 600f): Float = when (tier) {
+        WindowPresetTier.MINI -> when (this) {
+            EXPLANATION -> 280f
+            FOLDERS -> 260f
+            AI_STUDIO -> 280f
+            RUN_OUTPUT -> 300f
+        }
+        WindowPresetTier.HALF -> when (this) {
+            EXPLANATION -> 380f
+            FOLDERS -> 340f
+            AI_STUDIO -> 360f
+            RUN_OUTPUT -> 420f
+        }
+        WindowPresetTier.TWO_THIRDS -> when (this) {
+            EXPLANATION -> 460f
+            FOLDERS -> 440f
+            AI_STUDIO -> 460f
+            RUN_OUTPUT -> 520f
+        }
+        WindowPresetTier.FULL -> (screenWidthDp * 0.94f).coerceAtLeast(340f)
+    }
+
+    fun getTierHeightDp(tier: WindowPresetTier, screenHeightDp: Float = 800f): Float = when (tier) {
+        WindowPresetTier.MINI -> when (this) {
+            EXPLANATION -> 200f
+            FOLDERS -> 240f
+            AI_STUDIO -> 220f
+            RUN_OUTPUT -> 180f
+        }
+        WindowPresetTier.HALF -> when (this) {
+            EXPLANATION -> 300f
+            FOLDERS -> 360f
+            AI_STUDIO -> 340f
+            RUN_OUTPUT -> 260f
+        }
+        WindowPresetTier.TWO_THIRDS -> when (this) {
+            EXPLANATION -> 440f
+            FOLDERS -> 500f
+            AI_STUDIO -> 470f
+            RUN_OUTPUT -> 390f
+        }
+        WindowPresetTier.FULL -> (screenHeightDp * 0.86f).coerceAtLeast(360f)
+    }
+
+    fun getClosestTier(currentWidthDp: Float, currentHeightDp: Float, screenWidthDp: Float = 600f, screenHeightDp: Float = 800f): WindowPresetTier {
+        return WindowPresetTier.entries.minByOrNull { tier ->
+            val targetW = getTierWidthDp(tier, screenWidthDp)
+            val targetH = getTierHeightDp(tier, screenHeightDp)
+            val dw = currentWidthDp - targetW
+            val dh = currentHeightDp - targetH
+            dw * dw + dh * dh
+        } ?: WindowPresetTier.HALF
+    }
+}
+
+/**
+ * Discrete floating window dimension tiers (MIUI / iOS / HarmonyOS style).
+ * Every floating window snaps exclusively to one of these 4 discrete tiers.
+ */
+enum class WindowPresetTier(val label: String, val badge: String) {
+    MINI("Mini", "▫"),
+    HALF("Half", "◫"),
+    TWO_THIRDS("2/3", "◰"),
+    FULL("Full", "◻")
 }
 
 /**
@@ -442,7 +507,8 @@ data class DocumentSummaryUiModel(
     val sectionCount: Int,
     val updatedAt: Long,
     val wordCount: Int,
-    val conceptTags: List<String> = emptyList()
+    val conceptTags: List<String> = emptyList(),
+    val primaryLanguage: LanguageType = LanguageType.fromExtensionOrName(title)
 )
 
 data class DocumentDetailUiModel(

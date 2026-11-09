@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -33,20 +34,25 @@ import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SettingsBrightness
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -77,6 +83,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.model.DocumentSummaryUiModel
+import com.example.model.LanguageType
+import com.example.ui.components.ModernFloatingMeshBackground
+import com.example.ui.components.TrichromeBrandHeader
+import com.example.ui.components.TrichromeStudioLogo
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.ThemeMode
 import java.text.SimpleDateFormat
@@ -103,68 +113,21 @@ fun DocumentListScreen(
     val totalSections = documents.sumOf { it.sectionCount }
     val allLearnedConcepts = documents.flatMap { it.conceptTags }.distinct()
 
+    var selectedLanguageFilter by remember { mutableStateOf<LanguageType?>(null) }
+
+    val filteredList = documents.filter { doc ->
+        val matchesLang = selectedLanguageFilter == null || doc.primaryLanguage == selectedLanguageFilter
+        matchesLang
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            color = Color(0xFFDF9E55).copy(alpha = 0.16f),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.FolderSpecial,
-                                    contentDescription = null,
-                                    tint = Color(0xFFDF9E55),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(
-                                    text = "FOLDERS",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color(0xFFDF9E55)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.app_name),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Surface(
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                                    shape = RoundedCornerShape(6.dp)
-                                ) {
-                                    Text(
-                                        text = "v2.1",
-                                        fontFamily = JetBrainsMonoFontFamily,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                            Text(
-                                text = stringResource(R.string.subtitle_tagline),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                    TrichromeBrandHeader(
+                        appName = stringResource(R.string.app_name)
+                    )
                 },
                 actions = {
                     // Hidden Vault ("xyz") Recovery & Status Button
@@ -254,7 +217,7 @@ fun DocumentListScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f)
                 )
             )
         },
@@ -286,8 +249,8 @@ fun DocumentListScreen(
                 .padding(innerPadding),
             contentAlignment = Alignment.TopCenter
         ) {
-            // High-tech modern floating mesh particles background with subtle gradient pulse
-            com.example.ui.components.ModernFloatingMeshBackground(
+            // High-tech Antigravity and Google AI Studio live animated background
+            ModernFloatingMeshBackground(
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -313,7 +276,7 @@ fun DocumentListScreen(
                     )
                 }
 
-                // 2. Search Bar (searches folders, Kotlin code, or learned concepts)
+                // 2. Search Bar (searches folders, code blocks, or learned concepts)
                 item {
                     OutlinedTextField(
                         value = searchQuery,
@@ -343,8 +306,8 @@ fun DocumentListScreen(
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                            focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -352,14 +315,91 @@ fun DocumentListScreen(
                     )
                 }
 
-                // 3. Folder Cards or Empty State
-                if (documents.isEmpty()) {
+                // 3. Multi-Language Filter Strip with Icon Badges
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FilterList,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "LANG",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        // "All" filter chip
+                        FilterChip(
+                            selected = selectedLanguageFilter == null,
+                            onClick = { selectedLanguageFilter = null },
+                            label = { Text("All (${documents.size})") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
+
+                        // Language filter chips
+                        LanguageType.entries.forEach { lang ->
+                            val count = documents.count { it.primaryLanguage == lang }
+                            FilterChip(
+                                selected = selectedLanguageFilter == lang,
+                                onClick = {
+                                    selectedLanguageFilter = if (selectedLanguageFilter == lang) null else lang
+                                },
+                                leadingIcon = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(lang.badgeColor)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = "${lang.displayName} ($count)",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 11.5.sp
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = lang.badgeColor.copy(alpha = 0.22f),
+                                    selectedLabelColor = lang.badgeColor
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // 4. Folder Cards or Empty State
+                if (filteredList.isEmpty()) {
                     item {
                         EmptyDocumentsCard(onCreateDocument = onCreateDocument)
                     }
                 } else {
                     items(
-                        items = documents,
+                        items = filteredList,
                         key = { it.id }
                     ) { folder ->
                         FolderSummaryCard(
@@ -390,7 +430,7 @@ private fun HeroWorkspaceBanner(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(168.dp)
+                .height(176.dp)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.img_editor_hero_1794022926039),
@@ -404,26 +444,28 @@ private fun HeroWorkspaceBanner(
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                MaterialTheme.colorScheme.background.copy(alpha = 0.94f),
-                                MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                                MaterialTheme.colorScheme.background.copy(alpha = 0.65f)
+                                MaterialTheme.colorScheme.background.copy(alpha = 0.95f),
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                                MaterialTheme.colorScheme.background.copy(alpha = 0.70f)
                             )
                         )
                     )
                     .padding(16.dp),
                 contentAlignment = Alignment.BottomStart
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        TrichromeStudioLogo(sizeDp = 28.dp)
+
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
-                                text = "● ● ●  MULTI-LANGUAGE FLOATING WINDOWS",
+                                text = "● ● ●  ISLAND STUDIO",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.sp,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -431,6 +473,7 @@ private fun HeroWorkspaceBanner(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
+
                         Surface(
                             color = Color(0xFF6A8759).copy(alpha = 0.25f),
                             shape = RoundedCornerShape(8.dp)
@@ -446,16 +489,27 @@ private fun HeroWorkspaceBanner(
                         }
                     }
                     Text(
-                        text = "Full-Screen Apple cmd Kotlin Folders + Resizable Floating Windows",
+                        text = "Apple macOS Dynamic Island + Resizable Floating Windows",
                         style = MaterialTheme.typography.titleMedium,
                         color = Color.White,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = "$folderCount Folders • $totalSections Code Sections • $learnedConceptsCount Concepts • Hidden 'xyz' Vault Sync",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFCBD5E1)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Terminal,
+                            contentDescription = null,
+                            tint = Color(0xFF06B6D4),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "$folderCount Folders • $totalSections Code Blocks • $learnedConceptsCount Concepts • Vault Sync",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFCBD5E1)
+                        )
+                    }
                 }
             }
         }
@@ -474,10 +528,12 @@ private fun FolderSummaryCard(
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameText by remember(folder.title) { mutableStateOf(folder.title) }
 
+    val lang = folder.primaryLanguage
+
     Card(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         modifier = Modifier
@@ -506,19 +562,22 @@ private fun FolderSummaryCard(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.weight(1f)
                 ) {
+                    // Language badge box
                     Surface(
-                        color = Color(0xFFDF9E55).copy(alpha = 0.16f),
-                        shape = RoundedCornerShape(10.dp)
+                        color = lang.badgeColor.copy(alpha = 0.16f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, lang.badgeColor.copy(alpha = 0.35f))
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Folder,
-                            contentDescription = null,
-                            tint = Color(0xFFDF9E55),
-                            modifier = Modifier
-                                .padding(8.dp)
-                                .size(22.dp)
+                        Text(
+                            text = lang.badgeLabel,
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 12.sp,
+                            color = lang.badgeColor,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp)
                         )
                     }
+
                     Column(modifier = Modifier.weight(1f)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -529,10 +588,11 @@ private fun FolderSummaryCard(
                             Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Color(0xFF27C93F)))
                             Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = "FOLDER MODULE",
+                                text = "${lang.displayName.uppercase()} ${lang.extension}",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 9.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = lang.badgeColor,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                         Text(
@@ -544,7 +604,21 @@ private fun FolderSummaryCard(
                         )
                     }
                 }
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onClick,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("open_run_document_${folder.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Open in Studio",
+                            tint = lang.badgeColor,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
                     IconButton(
                         onClick = {
                             renameText = folder.title
@@ -676,14 +750,14 @@ private fun FolderSummaryCard(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Terminal,
+                            imageVector = Icons.Default.Code,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(13.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "${folder.sectionCount} Kotlin Sections",
+                            text = "${folder.sectionCount} Code Block${if (folder.sectionCount > 1) "s" else ""}",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -691,19 +765,41 @@ private fun FolderSummaryCard(
                     }
                 }
 
-                Text(
-                    text = "${folder.wordCount} words",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Terminal,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${folder.wordCount} words",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                Text(
-                    text = "Vault synced $formattedDate",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Storage,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Synced $formattedDate",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
@@ -714,7 +810,7 @@ private fun EmptyDocumentsCard(onCreateDocument: () -> Unit) {
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
         ),
         modifier = Modifier
             .fillMaxWidth()

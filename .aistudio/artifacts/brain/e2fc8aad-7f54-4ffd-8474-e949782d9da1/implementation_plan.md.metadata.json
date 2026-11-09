@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan for KtScribe multi-language IDE: dynamic theme application across all UI components, expanding languages to Kotlin, Java, Python, Dart, C++, and Rust with distinct extensions and badges, separate Main vs Intra-File Settings, 2 default floating window dimensions (horizontal & vertical) with corner drag resizing and minimum size clamps, and variable split-screen clamped between 25% and 75% with a responsive drag handle.",
-  "updatedAt":  "2026-11-09T03:51:56.186658104Z",
+  "summary":  "Updated implementation plan incorporating an in-depth breakdown of how debugging, real-time diagnostics, quick-fixes, terminal simulation, and multi-language execution operate in the application, alongside typing fixes, floating cursor completion, 4-tier MIUI/iOS window snapping, and studio home modernization.",
+  "updatedAt":  "2026-11-09T05:43:19.352585383Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

@@ -261,14 +261,15 @@ fun DocumentEditorScreen(
                     ) {
                         document.sections.forEachIndexed { _, sec ->
                             val isCurrent = activeSection?.id == sec.id
+                            val langColor = sec.language.badgeColor
                             Surface(
-                                color = if (isCurrent) Tier2CompletionSelectedBg else Color(0xFF1F1C1A),
+                                color = if (isCurrent) langColor.copy(alpha = 0.22f) else Color(0xFF1F1C1A),
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(10.dp))
                                     .border(
                                         width = 1.dp,
-                                        color = if (isCurrent) Color(0xFFD4883A) else Color(0xFF36312C),
+                                        color = if (isCurrent) langColor else Color(0xFF36312C),
                                         shape = RoundedCornerShape(10.dp)
                                     )
                                     .clickable {
@@ -283,7 +284,7 @@ fun DocumentEditorScreen(
                                     Icon(
                                         imageVector = Icons.Default.Description,
                                         contentDescription = null,
-                                        tint = if (isCurrent) Color(0xFFE6E1DC) else Color(0xFFD4883A),
+                                        tint = if (isCurrent) langColor else Color(0xFFA39C93),
                                         modifier = Modifier.size(11.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))

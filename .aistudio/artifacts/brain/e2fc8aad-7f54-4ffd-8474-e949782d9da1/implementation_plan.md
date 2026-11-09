@@ -1,168 +1,222 @@
-# KtScribe IDE: Dynamic Themes, Multi-Language File Types, Dual Settings, Floating Window Presets & Clamped Split Screen
+# IDE Typing Stabilization, Multi-Language Debugging, 4-Tier Window Presets & Modern Studio Home
 
-Comprehensive implementation plan to resolve theme application across all UI components, add support for Kotlin, Java, Python, Dart, C++, and Rust with unique file extensions and distinctive color badges, implement separate Main Settings vs. Intra-File Settings, introduce dual default dimensions (horizontal and vertical) with interactive corner resizing and minimum size protection for floating windows, and enable variable split-screen resizing clamped between 25% and 75%.
-
----
+Fix text editor typing misalignment and blank line cascades, explain and enhance how the real-time debugging and compilation engine works, replace bottom completion chips with a cursor-anchored floating IDE popup, establish discrete 4-tier MIUI/iOS-style window snapping with spring physics, and modernize the home screen with an animated AI Studio mesh background and aesthetic trichrome branding.
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> User requirements and choices confirmed during clarification:
-> - **Programming Languages & Extensions**: Expand beyond Kotlin (`.ktscribe` / `.kt`), Java (`.java`), Python (`.py`), and Dart (`.dart`) to also include **C++ (`.cpp`)** and **Rust (`.rs`)**, each with distinct file extension badges, directory paths (`src/cpp/`, `src/rust/`), unique accent color codes, and dedicated syntax engines and snippets.
-> - **Dual Settings Architecture**:
->   - **Main Page Settings**: Global studio theme (Darcula Espresso, macOS Midnight, Monokai Pro, GitHub Dark, Solarized Dark, Nord Frost), dark/light/system mode toggle, default new file language, code block keyboard shortcut (`Ctrl + [Letter]`), and API/quota monitoring.
->   - **Intra-File Settings**: File-specific theme override (can inherit or override studio theme), file name & extension customization, target directory assignment, AI naming & explanation triggers, tab indent configuration (2 vs 4 spaces), line numbers toggle, and file export actions (.ktscribe bundle, clean raw code, or markdown).
-> - **Floating Window Sizing & Drag Interaction**:
->   - Every floating window has **2 default size presets**: **Horizontal (Wide Landscape)** and **Vertical (Tall Portrait)** with strict minimum width and height limits (preventing content cutoff).
->   - Corner and edge drag interaction allows fluid resizing above default minimums, and dragging dynamically snaps/adjusts to horizontal or vertical orientation based on whether width > height.
-> - **Variable Split-Screen Ratio**:
->   - Replace static 50:50 split with a variable split-screen divider clamped strictly between **25% (0.25f)** and **75% (0.75f)**, featuring a macOS-inspired tactile drag handle bar with quick ratio snaps (25%, 50%, 75%).
+> The following key decisions were confirmed via interactive user clarification and govern this implementation plan:
+
+- **Comprehensive Debugging & Execution Architecture**:
+  - Detailed architectural breakdown of how real-time diagnostics, inline gutter error pills, one-tap quick-fixes, multi-language compiler simulations (`kotlinc`, `javac`, `python3`, `dart`, `g++`, `rustc`), and terminal output floating windows operate together.
+- **Typing Engine Stabilization**:
+  - Gutter line height will dynamically match `BasicTextField` metrics using font-scaled scalable units (`sp` translated via density) to eliminate line drift between code and line numbers.
+  - Soft-keyboard multi-character inputs, composing spans, and Enter auto-indentation are normalized to prevent accidental blank lines and unwanted cursor jumpiness.
+- **Contextual Floating Completion Box**:
+  - Replaces the bottom suggestion chips with a floating IDE popup anchored directly beside the active cursor/token in the code space, featuring JetBrains-style badges (`{}`, `K`, `C`, `m`, `v`), syntax descriptions, and keyboard/touch completion.
+- **4-Tier Discrete Floating Window Presets (MIUI / iOS / Harmony)**:
+  - Instead of arbitrary pixel dimensions, every floating window will snap with fluid spring physics to one of 4 discrete tiers: **Mini** (PIP glance), **Half** (Standard utility), **Two-Thirds** (Expanded editor), and **Full** (Immersive modal).
+  - Each window type (`EXPLANATION`, `FOLDERS`, `AI_STUDIO`, `RUN_OUTPUT`) defines custom content-proportioned dimensions for each of the 4 tiers.
+- **Home Page Atmosphere & Aesthetics**:
+  - Full-screen animated ambient fluid mesh gradient with antigravity floating constellation particles inspired by Google AI Studio and developer portfolios.
+  - Rich Material Symbol icon support across folder stats, language badges, and navigation actions.
+  - Minimal aesthetic trichrome logo combining sharp geometric compiler brackets, diamond nodes, and radiant studio accents.
 
 ---
 
 ## 1. Overview & Core Concept
 
-**KtScribe** is a lightweight, high-aesthetic developer environment designed with macOS floating island and floating window aesthetics. Each file represents a single code block with an associated explanation/concept block, AI-assisted naming, and real-time execution preview.
-
-### Core Capabilities:
-1. **Dynamic Theme Application**: Full reactive integration of 6 curated studio color schemes (`DARCULA_ESPRESSO`, `MACOS_MIDNIGHT`, `MONOKAI_PRO`, `GITHUB_DARK`, `SOLARIZED_DARK`, `NORD_FROST`) across all floating windows, backgrounds, cards, dividers, and typography, removing hardcoded espresso hex values.
-2. **Multi-Language Architecture**: 6 first-class programming languages with unique file extensions, syntax highlighting tokens, language-specific directory structures, autocomplete suggestions, and execution output simulation:
-   - **Kotlin**: `.ktscribe` / `.kt` (`src/kotlin/`) — Amber/Orange (`#D4883A`)
-   - **Java**: `.java` (`src/java/`) — Coral/Terracotta (`#E76F51`)
-   - **Python**: `.py` (`src/python/`) — Steel Blue (`#457B9D`)
-   - **Dart**: `.dart` (`src/dart/`) — Teal Emerald (`#2A9D8F`)
-   - **C++**: `.cpp` (`src/cpp/`) — Royal Violet (`#8338EC`)
-   - **Rust**: `.rs` (`src/rust/`) — Rust Crimson (`#E63946`)
-3. **Dedicated Main Page Settings vs. Intra-File Settings**: Clear separation of concerns between global studio configuration and intra-file actions.
-4. **Adaptive Floating Windows with 2 Default Presets**:
-   - **Horizontal Preset (Wide)**: Optimized for code reading and terminal output (e.g. 380dp x 280dp).
-   - **Vertical Preset (Tall)**: Optimized for file browsing and explanation note-taking (e.g. 320dp x 420dp).
-   - Interactive bottom-right and corner drag handles with minimum bounds preventing element cutoff.
-5. **Clamped Variable Split-Screen**: Draggable divider smoothly clamped between 25% and 75% for custom code-to-notes or code-to-terminal ratios.
+This milestone addresses core productivity friction, debugging transparency, and visual polish in KtScribe:
+1. **Flawless Code Typing Experience**: Eliminates the vertical drift where line numbers slip out of sync with text, prevents runaway empty lines during rapid typing or soft-keyboard suggestions, and anchors viewport scrolling strictly to active cursor bounds.
+2. **Desktop IDE Contextual Autocomplete**: Elevates code completion from an awkward bottom bar into a floating contextual overlay directly beside the caret, matching Xcode, IntelliJ IDEA, and VS Code.
+3. **Transparent & Robust Debugging Engine**: Details and polishes the multi-stage debugging system: live syntax tokenization, gutter error badges, one-tap auto-fixes, and isolated terminal runtime execution.
+4. **MIUI / iOS Discrete Window Snapping**: Brings mobile OS-grade window management with 4 calibrated preset tiers that prevent awkward content cutoffs, snapping with fluid spring physics on resize release.
+5. **Studio-Grade Home Interface**: Transforms the initial document list into a fluid, responsive dashboard with Google AI Studio animated mesh aesthetics, rich symbol indicators, and a modern trichrome brand mark.
 
 ---
 
-## 2. User Experience & Visual Design
+## 2. How Debugging & Execution Work in KtScribe
+
+The application implements a full-featured, lightweight on-device development environment. Debugging operates through four synchronized layers:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                       Developer Types Code in Section Card                       │
+└────────────────────────────────────────┬────────────────────────────────────────┘
+                                         │
+                   ┌─────────────────────┴─────────────────────┐
+                   ▼                                           ▼
+┌─────────────────────────────────────┐     ┌─────────────────────────────────────┐
+│    1. Real-Time Diagnostic Engine   │     │    2. Visual Error & Quick-Fixes    │
+├─────────────────────────────────────┤     ├─────────────────────────────────────┤
+│ • O(1) LRU syntax analysis cache    │     │ • Gutter Badges: red ✕ or yellow !  │
+│ • Bracket & quote balance tracker   │     │ • Inline Error Pills over code lines│
+│ • Language-specific keyword linting │     │ • One-tap "Quick-Fix" code applier  │
+│ • Entry-point detection (main fun)  │     │ • Top-bar Error Counter (e.g. "!2") │
+└──────────────────┬──────────────────┘     └─────────────────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    3. Interactive Terminal & Compilation Runner                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ • Triggered by "Run ▶" button (Header or Island Pill)                           │
+│ • Validates language target: Kotlin, Java, Python, Dart, C++, or Rust           │
+│ • Dispatches execution simulation with real compiler CLI formatting:            │
+│   - kotlinc Main.ktscribe -include-runtime -d Main.jar && java -jar Main.jar    │
+│   - javac Main.java && java Main                                                │
+│   - python3 main.py                                                             │
+│   - dart run main.dart                                                          │
+│   - g++ -O3 main.cpp -o main && ./main                                          │
+│   - rustc main.rs && ./main                                                     │
+│ • Extracts dynamic console outputs, variable states, and standard streams       │
+└──────────────────┬──────────────────────────────────────────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│              4. Run Output Floating Window & AI Deep Debugging Assister         │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ • Spawns macOS-styled terminal window displaying formatted stdout & exit code   │
+│ • If errors persist: AI Deep Explain and AI Auto-Refactor options analyze       │
+│   the exact failing code segment and recommend corrected implementations        │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Detailed Breakdown of Debugging Features:
+
+1. **Syntax Checking & Error Detection**:
+   - As text changes, `KotlinCodeEngine.diagnoseKotlinSyntax` (and `CodeLanguageEngine` for other languages) evaluates the code.
+   - It verifies balanced parentheses `()`, brackets `[]`, braces `{}`, and strings `""`/`''`.
+   - Flags language-specific syntax discrepancies (e.g. typing `def` instead of `fun`, or using `new` in Kotlin).
+2. **Visual Gutter & Inline Error Overlays**:
+   - The gutter on the left shows a red `✕` on lines containing fatal errors and a yellow `!` for warnings.
+   - Tapping an error reveals an interactive pill with a clear message and a **Quick Fix** action that automatically replaces or inserts the missing syntax.
+3. **Compiler Simulation & Process Output**:
+   - Pressing **Run ▶** checks whether errors exist. If clean, it runs the code simulation for the active language.
+   - It captures standard output (`println()`, `print()`, `System.out.println()`, `std::cout`) and formats the output into a simulated macOS terminal session (`zsh • kotlinc ...`).
+4. **AI-Assisted Troubleshooting**:
+   - For semantic or logical bugs, the **AI Guide** window provides step-by-step breakdown and algorithmic suggestions using server-side Gemini AI.
+
+---
+
+## 3. User Experience & Visual Design
 
 ### Key User Flows
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ Main Page (Folder / Document List)                                    │
-│ ├─ Modern Animated Floating Mesh Particle Background (Theme-reactive) │
-│ ├─ macOS Search & Filter Bar                                          │
-│ ├─ List of Document Folders with Language Badges (KT, PY, CPP, RS...) │
-│ └─ Main Studio Settings Button [⚙]                                    │
-│     └─ Modal: Global Theme, Appearance Mode, Shortcuts, Quotas         │
-└────────────────────────────────────┬───────────────────────────────────┘
-                                     │ (Tap folder to open)
-                                     ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│ Intra-File Editor Workspace                                           │
-│ ├─ Top Island: Folder breadcrumb, Language indicator, Status pills    │
-│ ├─ Fullscreen Single Code Block with Syntax Highlighting & Line Numbers│
-│ ├─ macOS Action Island & Floating Window Toggles:                     │
-│ │   [Explain] [Files] [AI Studio] [Run ▶] [File Settings ⚙]           │
-│ ├─ Floating Windows (Draggable & Corner-Resizable):                    │
-│ │   ├─ Enforced minimum bounds (no content clipping)                  │
-│ │   ├─ Horizontal Default vs. Vertical Default presets                │
-│ │   └─ [◫ Dock to Split] action                                      │
-│ └─ Variable Split-Screen (Docked Mode):                                │
-│     └─ Draggable split divider bar (Clamped strictly 25% – 75%)        │
-└────────────────────────────────────────────────────────────────────────┘
-```
+1. **Typing & Editing Flow**:
+   - The user opens a code block and begins typing code or comments.
+   - Gutter line numbers (`1.`, `2.`, `3.`) strictly align with each line of text regardless of system font scale.
+   - Pressing Enter cleanly inserts an indented newline without duplicating whitespace or adding stray blank lines.
+   - As tokens are typed (e.g. `val`, `fun`, `sealed`), a compact IDE popup floats directly beside the cursor, displaying filtered keyword and template options that can be accepted with a single tap or Tab press.
+2. **Floating Window Resizing Flow**:
+   - Tapping an island pill (e.g. `Explain §1` or `Files 2`) opens the floating window in its **Half** (Standard) tier.
+   - Dragging the resize handle reveals the nearest discrete target tier (**Mini**, **Half**, **Two-Thirds**, or **Full**).
+   - Releasing the handle snaps the window to the chosen tier using a smooth spring animation (`dampingRatio = 0.8f, stiffness = 400f`).
+   - Quick tier selector pills on the window header allow one-tap switching between tiers without manual dragging.
+3. **Home Page Browsing Flow**:
+   - The user enters the app and sees an ambient, animated mesh wave background with gentle antigravity particles floating across the screen.
+   - Folders display rich icon indicators for file counts, active languages, and hidden vault status.
+   - The top navigation bar showcases the trichrome logo with glowing gradient depth.
 
 ### Visual Identity & Theme Tokens
 
-- **Dynamic Theming Integration**:
-  - Replace hardcoded hex values in `MacFloatingIslandComponents.kt`, `KotlinCodeSectionCard.kt`, and `DocumentEditorScreen.kt` with `MaterialTheme.colorScheme` tokens:
-    - `surface`: Floating window bodies, card backgrounds, dialogs.
-    - `surfaceVariant`: Title bars, secondary pills, inactive resize handles.
-    - `primary`: Active pills, focus borders, primary actions, keyword highlighting.
-    - `outline` / `outlineVariant`: Specular bevels and separation borders.
-    - `background`: Overall canvas and mesh background gradient anchors.
-- **Language Badges & Accent Colors**:
-  - Each language displays a distinct chip in file headers, directory trees, and autocomplete menus:
-    - Kotlin: `#D4883A`
-    - Java: `#E76F51`
-    - Python: `#457B9D`
-    - Dart: `#2A9D8F`
-    - C++: `#8338EC`
-    - Rust: `#E63946`
+- **Trichrome Logo Palette**:
+  - Primary Accent: Neon Emerald (`#10B981`)
+  - Secondary Accent: Electric Cyan (`#06B6D4`)
+  - Tertiary Accent: Warm Amber (`#F59E0B`)
+  - Background Base: Obsidian Trench (`#121110` / `#1C1917`)
+- **Typography**:
+  - Code & Editor: JetBrains Mono (`13.5.sp`, line height matched strictly via layout math)
+  - Headers & Brand: Plus Jakarta Sans (Bold display weights)
+- **Motion & Physics**:
+  - Window Snap: High-stiffness spring curves (`stiffness = 380f`, `dampingRatio = 0.82f`)
+  - Home Mesh Background: Continuous low-overhead Canvas shader simulation at 60fps
 
 ---
 
-## 3. Key Product Decisions & Trade-Offs
+## 4. Key Product Decisions & Trade-Offs
 
-- **Decision 1: Dynamic Theme Color Propagation**:
-  - *Approach*: Bind all window chrome, traffic light borders, pill menus, and dialog backgrounds to `MaterialTheme.colorScheme` and `LocalKotlinSyntaxColors.current`. When a theme is selected (or overridden per file), the entire UI immediately recalculates and reflects the new palette without requiring an app reload.
-  - *Why*: The previous implementation had hardcoded `#1B1A19` and `#11100F` color literals in UI components, making the theme picker ineffective.
-- **Decision 2: C++ & Rust Integration with Autocomplete & Tokenization**:
-  - *Approach*: Add `CPP` (`.cpp`, `src/cpp/`) and `RUST` (`.rs`, `src/rust/`) to `LanguageType` enum, define their keywords and snippets in `CodeLanguageEngine`, and implement token regexes for syntax highlighting and simulated execution.
-  - *Why*: Supports the user's expanded language specifications natively.
-- **Decision 3: Floating Window Corner Dragging & Aspect Ratio Snap**:
-  - *Approach*: Provide both a corner resize handle and a quick preset toggle. As the user drags the corner, if `width > height * 1.15`, the window adopts horizontal aspect metrics; if `height > width * 1.15`, it adopts vertical aspect metrics. Both dimensions are strictly clamped at or above `minWidthDp` and `minHeightDp`.
-  - *Why*: Guarantees that terminal output and explanation text are never truncated due to an accidental micro-window collapse.
-- **Decision 4: Variable Split Clamping (25% to 75%)**:
-  - *Approach*: Allow dragging the split divider with an interactive gesture listener that calculates `ratio = (dragPosition / totalDimension).coerceIn(0.25f, 0.75f)`, alongside quick-snap pill buttons for 30%, 50%, and 70%.
-  - *Why*: Prevents collapsing either side into an unreadable state while giving users flexible room to view code and notes simultaneously.
+### Decision 1: Gutter Metric Synchronization
+- **Chosen Approach**: Compute the gutter line height directly from Compose `LocalDensity` using the exact line height of the `BasicTextField` style (`lineHeight = 22.sp`), and synchronize text measurement via `TextLayoutResult`.
+- **Why**: Eliminates font-scaling drift on devices with non-default accessibility font sizes, guaranteeing that line 50 in the gutter sits on the exact same vertical pixel coordinate as line 50 of the code.
+
+### Decision 2: Floating Cursor Popup vs. Bottom Toolbar
+- **Chosen Approach**: Use Compose `codeLayoutResult.getBoundingBox(cursorOffset)` to calculate the exact on-screen position of the active text cursor, anchoring a floating completion popup offset by `+12.dp` horizontally and `-8.dp` vertically.
+- **Why**: Fulfills the user's explicit request to make code completion look like a real desktop IDE rather than a disconnected mobile keyboard bar.
+
+### Decision 3: 4 Discrete Window Presets (MIUI / iOS / HarmonyOS)
+- **Chosen Approach**: Replace continuous free-form float dimensions with 4 discrete snap tiers (**Mini**, **Half**, **Two-Thirds**, **Full**). Users can drag to resize, but releasing always snaps to the closest tier.
+- **Why**: Solves content cutoff completely because each tier is engineered to fit the specific contents of that window type without horizontal or vertical clipping.
 
 ---
 
-## 4. Technical Architecture & Data Strategy
-
-### Component Hierarchy & Interaction Mapping
+## 5. Technical Architecture & Component Mapping
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                             MainActivity                               │
-│  - Observes uiState.activeAppTheme & uiState.themeMode                 │
-│  - Wraps tree in KtScribeTheme(activeTheme, themeMode)                │
+│                        Jetpack Compose Root UI                         │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
           ┌─────────────────────────┴─────────────────────────┐
           ▼                                                   ▼
-┌───────────────────────────┐                       ┌───────────────────────────┐
-│    DocumentListScreen     │                       │   DocumentEditorScreen    │
-│ - Global Mesh Background  │                       │ - Main Code Editor Canvas │
-│ - Search & Folder Cards   │                       │ - Top Island Status Bar   │
-│ - Main Studio Settings [⚙]│                       │ - Intra-File Settings [⚙] │
-│   (Global Theme, Mode,    │                       │ - Floating Window Manager │
-│    Shortcuts, Quotas)     │                       │ - Variable Split Screen   │
-└───────────────────────────┘                       └─────────────┬─────────────┘
-                                                                  │
-                                            ┌─────────────────────┴─────────────────────┐
-                                            ▼                                           ▼
-                             ┌──────────────────────────────┐            ┌──────────────────────────────┐
-                             │    MacFloatingWindowItem     │            │    Variable Split Layout     │
-                             │ - Default Horizontal/Vertical│            │ - Clamped 0.25f to 0.75f     │
-                             │ - Bottom-Right Corner Drag   │            │ - Tactile macOS Drag Bar     │
-                             │ - Enforced minWidth/minHeight│            │ - Side-by-Side or Bottom     │
-                             └──────────────────────────────┘            └──────────────────────────────┘
+┌───────────────────────────────────┐       ┌───────────────────────────────────┐
+│        DocumentListScreen         │       │       DocumentEditorScreen        │
+│  (Modern Home Page with Mesh)     │       │     (Full-Screen IDE Canvas)      │
+├───────────────────────────────────┤       ├───────────────────────────────────┤
+│ • ModernFloatingMeshBackground    │       │ • Synchronized Gutter & Editor    │
+│ • Trichrome Logo Header           │       │ • ContextualCursorCompletionPopup │
+│ • Rich Language & Stats Symbols   │       │ • 4-Tier Snapping Floating Window │
+│ • Quick-Access New File Actions   │       │ • Variable Clamped Split Screen   │
+└───────────────────────────────────┘       └─────────────────┬─────────────────┘
+                                                              │
+                                            ┌─────────────────┴─────────────────┐
+                                            ▼                                   ▼
+                            ┌───────────────────────────────┐   ┌───────────────────────────────┐
+                            │     KotlinCodeSectionCard     │   │   MacDraggableFloatingWindow  │
+                            ├───────────────────────────────┤   ├───────────────────────────────┤
+                            │ • BasicTextField + TextLayout │   │ • Discrete Tier Snap State    │
+                            │ • Gutter Line Number Alignment│   │ • Spring Animated Dimensions  │
+                            │ • Clean Soft-Keyboard Input   │   │ • Mini / Half / 2/3 / Full    │
+                            │ • Floating Cursor Popup Menu  │   │ • Tailored Content Sizing     │
+                            │ • Diagnostics & Quick-Fixes   │   │ • Run Output Terminal Window  │
+                            └───────────────────────────────┘   └───────────────────────────────┘
 ```
 
-### Data Model Enhancements
+### Component & State Mapping
 
-1. **`LanguageType` enum**:
-   - `KOTLIN`: `.ktscribe`, `#D4883A`, `src/kotlin/`
-   - `JAVA`: `.java`, `#E76F51`, `src/java/`
-   - `PYTHON`: `.py`, `#457B9D`, `src/python/`
-   - `DART`: `.dart`, `#2A9D8F`, `src/dart/`
-   - `CPP`: `.cpp`, `#8338EC`, `src/cpp/`
-   - `RUST`: `.rs`, `#E63946`, `src/rust/`
-2. **`FloatingWindowType` enum**:
-   - Add explicit `defaultHorizontalWidthDp`, `defaultHorizontalHeightDp`, `defaultVerticalWidthDp`, `defaultVerticalHeightDp`, `minWidthDp`, `minHeightDp`.
-3. **`EditorViewModel`**:
-   - `updateSplitScreenRatio(ratio: Float)`: Clamps strictly between `0.25f` and `0.75f`.
-   - `setFloatingWindowOrientation(type, isHorizontal)`: Applies default dimensions.
-   - Separate state handlers for Main Studio Settings dialog vs Intra-File Settings dialog.
+1. **`KotlinCodeSectionCard.kt`**:
+   - `codeLayoutResult`: Measures exact cursor coordinates (`getBoundingBox`).
+   - `ContextualCursorCompletionPopup`: Renders a floating surface next to the cursor when suggestions are available.
+   - Gutter synchronizer: Calculates exact pixel height per line to match font-scaled text.
+   - Text filter: Normalizes incoming IME composing text and Enter keypresses to prevent spurious blank lines.
+   - Inline Diagnostics & Quick-Fix actions.
+2. **`MacFloatingIslandComponents.kt`**:
+   - Add `WindowPresetTier` enum (`MINI`, `HALF`, `TWO_THIRDS`, `FULL`).
+   - Add discrete dimension mapping per `FloatingWindowType`:
+     - `EXPLANATION`: Mini (280×180), Half (380×280), Two-Thirds (460×420), Full (92%×88%).
+     - `FOLDERS`: Mini (260×220), Half (340×340), Two-Thirds (440×480), Full (90%×85%).
+     - `AI_STUDIO`: Mini (280×200), Half (360×320), Two-Thirds (460×450), Full (92%×88%).
+     - `RUN_OUTPUT`: Mini (300×160), Half (420×240), Two-Thirds (520×380), Full (95%×85%).
+   - Implement `detectDragGestures` with `onDragEnd` that calculates Euclidean distance to the nearest tier and animates smoothly using `animateDpAsState(spring(...))`.
+3. **`ModernFloatingMeshBackground.kt` & `DocumentListScreen.kt`**:
+   - Render the Google AI Studio ambient mesh background behind the folder list.
+   - Integrate rich icons (`Code`, `FolderSpecial`, `Terminal`, `AutoAwesome`, `Memory`) for folder metadata.
+4. **Logo & Asset Refresh**:
+   - Implement a clean trichrome vector and drawable asset with layered gradient strokes (`#10B981`, `#06B6D4`, `#F59E0B`).
 
 ---
 
-## 5. Planned Verification Steps
+## 6. Verification Plan
 
-1. **Compilation Check**: Verify successful compilation via `compile_applet`.
-2. **Theme Switching Verification**: Test switching between all 6 themes and confirm that backgrounds, window borders, text, and syntax highlighting transform reactively.
-3. **Language & Extension Verification**: Create and edit files in Kotlin, Java, Python, Dart, C++, and Rust; confirm unique color badges, syntax highlighting, and directories.
-4. **Settings Dialog Verification**: Verify Main Page Settings (global theme, shortcuts, mode) vs Intra-File Settings (language, file theme override, export, formatting).
-5. **Floating Window & Split Screen Verification**: Test horizontal/vertical defaults, corner resizing constraints, and 25%-75% variable split dragging.
+1. **Compilation Check**:
+   - Run `compile_applet` to ensure zero compilation or syntax errors across all Kotlin and Compose modules.
+2. **Editor Typing Verification**:
+   - Verify line gutter numbers stay strictly aligned with code text across all lines.
+   - Verify typing at any position does not produce cascading blank lines.
+   - Verify the autocomplete box pops up contextually directly beside the text cursor.
+3. **Debugging Verification**:
+   - Verify real-time syntax error pills appear with accurate line numbers and quick fixes.
+   - Verify tapping **Run ▶** correctly compiles and executes code across all languages (Kotlin, Java, Python, Dart, C++, Rust), outputting to the Run Output terminal window.
+4. **Window Snapping Verification**:
+   - Test dragging and releasing a floating window; verify it snaps cleanly to the nearest of the 4 discrete tiers with spring physics.
+5. **Home Page Aesthetics**:
+   - Verify fluid mesh gradient background and rich developer icons on the document list screen.

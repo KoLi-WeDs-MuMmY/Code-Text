@@ -315,7 +315,7 @@ fun KotlinCodeSectionCard(
         onActiveCodeLineChanged(info.line, info.totalLines)
         coroutineScope.launch {
             try {
-                val linePx = with(density) { 22.dp.toPx() }
+                val linePx = with(density) { 22.sp.toPx() }
                 val cursorTopPx = ((info.line - 1).coerceAtLeast(0) * linePx).toInt()
                 val cursorBottomPx = (cursorTopPx + linePx * 2.2f).toInt()
                 val viewportH = codeViewportHeightPx
@@ -432,9 +432,10 @@ fun KotlinCodeSectionCard(
         suggestions.isNotEmpty() &&
         dismissedCompletionForPrefix != currentPrefix
 
-    val visibleLines = section.visibleLineSlots
-    val lineHeightDp = 22.dp
-    val minCodeEditorHeight = (visibleLines * 22 + 24).dp
+    val currentCodeLineCount = maxOf(codeFieldValue.text.count { it == '\n' } + 1, section.lineCount)
+    val visibleLines = maxOf(currentCodeLineCount, 4)
+    val lineHeightDp = with(density) { 22.sp.toDp() }
+    val minCodeEditorHeight = (lineHeightDp * visibleLines) + 24.dp
 
     androidx.compose.runtime.CompositionLocalProvider(
         com.example.ui.theme.LocalKotlinSyntaxColors provides activeSyntaxColors
@@ -1807,15 +1808,15 @@ fun KotlinCodeSectionCard(
                             Box(
                                 modifier = Modifier
                                     .width(1.dp)
-                                    .height((visibleLines * 22).dp)
+                                    .height(lineHeightDp * visibleLines)
                                     .background(DarculaBorder)
                             )
 
-                            // Main Code Text Field + Inline Line Error Pills Overlay
+                            // Main Code Text Field + Floating Cursor Completion Popup
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .heightIn(min = (visibleLines * 22).dp)
+                                    .heightIn(min = lineHeightDp * visibleLines)
                             ) {
                                 BasicTextField(
                                     value = codeFieldValue,
@@ -1846,7 +1847,7 @@ fun KotlinCodeSectionCard(
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .heightIn(min = (visibleLines * 22).dp)
+                                                .heightIn(min = lineHeightDp * visibleLines)
                                                 .padding(horizontal = 10.dp)
                                         ) {
                                             if (codeFieldValue.text.isEmpty()) {
@@ -1869,6 +1870,108 @@ fun KotlinCodeSectionCard(
                                         }
                                         .testTag("kotlin_code_input_${section.orderIndex}")
                                 )
+
+                                // Contextual Floating IDE Autocomplete Popup (Anchored directly next to the caret)
+                                val cursorOffset = codeFieldValue.selection.end.coerceIn(0, codeFieldValue.text.length)
+                                val cursorRect = codeLayoutResult?.let { layout ->
+                                    try {
+                                        layout.getCursorRect(cursorOffset)
+                                    } catch (_: Exception) {
+                                        null
+                                    }
+                                }
+
+                                if (showCursorCompletionPopup && cursorRect != null) {
+                                    val popupX = with(density) { (cursorRect.right + 12f).toDp().coerceAtLeast(8.dp) }
+                                    val popupY = with(density) { (cursorRect.top - 4f).toDp().coerceAtLeast(0.dp) }
+
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surface,
+                                        shape = RoundedCornerShape(10.dp),
+                                        shadowElevation = 14.dp,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)),
+                                        modifier = Modifier
+                                            .offset(x = popupX, y = popupY)
+                                            .widthIn(min = 200.dp, max = 300.dp)
+                                            .heightIn(max = 220.dp)
+                                            .zIndex(150f)
+                                            .testTag("floating_cursor_completion_popup")
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .padding(4.dp)
+                                                .verticalScroll(rememberScrollState())
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(
+                                                    text = "Suggestions (${suggestions.size})",
+                                                    fontFamily = JetBrainsMonoFontFamily,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                                Text(
+                                                    text = "Tab ↵ to accept",
+                                                    fontFamily = JetBrainsMonoFontFamily,
+                                                    fontSize = 8.5.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                                            suggestions.take(8).forEachIndexed { idx, sugg ->
+                                                val isSelected = idx == selectedSuggestionIndex
+                                                Surface(
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            val (newCode, newCursor) = KotlinCodeEngine.applySuggestion(
+                                                                code = codeFieldValue.text,
+                                                                cursorPosition = codeFieldValue.selection.end,
+                                                                suggestion = sugg
+                                                            )
+                                                            codeFieldValue = TextFieldValue(text = newCode, selection = TextRange(newCursor))
+                                                            onCodeChange(newCode)
+                                                            bringActiveCodeLineIntoView(newCursor, newCode)
+                                                        }
+                                                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                    ) {
+                                                        IdeCompletionBadgeIcon(badgeChar = sugg.badgeChar)
+                                                        Text(
+                                                            text = sugg.label,
+                                                            fontFamily = JetBrainsMonoFontFamily,
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 11.5.sp,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        )
+                                                        val detailText = if (sugg.tailSignature.isNotEmpty()) sugg.tailSignature else sugg.description
+                                                        if (detailText.isNotEmpty()) {
+                                                            Text(
+                                                                text = detailText,
+                                                                fontFamily = JetBrainsMonoFontFamily,
+                                                                fontSize = 9.5.sp,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
 
                                 // Non-obstructive live line status:
                                 // Errors are shown cleanly in the line number gutter on the left (with ✕ and severity color)
@@ -2089,82 +2192,6 @@ fun KotlinCodeSectionCard(
                     }
                 }
 
-                // =========================================================================
-                // J. DOCKED SUGGESTIONS BAR (Positioned directly above bottom constant keys,
-                // NEVER covering the active code line being typed!)
-                // =========================================================================
-                AnimatedVisibility(
-                    visible = isCodeFocused && !isCodeFolded && !isDockedCompactForExplanation && currentPrefix.isNotBlank() && suggestions.isNotEmpty()
-                ) {
-                    Surface(
-                        color = Color(0xFF24201D),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 3.dp)
-                            .border(1.dp, DarculaBorder, RoundedCornerShape(12.dp))
-                            .testTag("docked_suggestion_bar_${section.orderIndex}")
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 8.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = "💡",
-                                fontSize = 11.sp
-                            )
-                            suggestions.take(5).forEachIndexed { idx, sugg ->
-                                Surface(
-                                    color = if (idx == 0) Tier2CompletionSelectedBg else Color(0xFF2C2723),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier
-                                        .border(1.dp, if (idx == 0) DarculaWarmAmber else Color(0xFF453D35), RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            val (newCode, newCursor) = com.example.code.CodeLanguageEngine.applySuggestionForLanguage(
-                                                code = codeFieldValue.text,
-                                                cursorPosition = codeFieldValue.selection.end,
-                                                suggestion = sugg
-                                            )
-                                            codeFieldValue = TextFieldValue(
-                                                text = newCode,
-                                                selection = TextRange(newCursor)
-                                            )
-                                            onCodeChange(newCode)
-                                            bringActiveCodeLineIntoView(newCursor, newCode)
-                                        }
-                                        .testTag("docked_suggestion_chip_${section.orderIndex}_$idx")
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                    ) {
-                                        IdeCompletionBadgeIcon(badgeChar = sugg.badgeChar)
-                                        Text(
-                                            text = sugg.label,
-                                            fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 11.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = DarculaBrightText
-                                        )
-                                        if (sugg.tailSignature.isNotBlank()) {
-                                            Text(
-                                                text = sugg.tailSignature,
-                                                fontFamily = JetBrainsMonoFontFamily,
-                                                fontSize = 10.sp,
-                                                color = DarculaMutedText
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
 
                 // =========================================================================
                 // K. CONSTANT (`val`) 8-KEY SHORTCUT BAR AT BOTTOM OF CODE BLOCK

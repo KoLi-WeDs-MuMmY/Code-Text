@@ -449,11 +449,13 @@ object KotlinCodeEngine {
                         ""
                     }
                     val totalIndent = baseIndent + extraIndent
-                    if (totalIndent.isNotEmpty()) {
-                        val indentedText = newText.substring(0, newCursor) + totalIndent + newText.substring(newCursor)
+                    val existingIndentAfter = newText.substring(newCursor).takeWhile { it == ' ' || it == '\t' }
+                    val neededIndent = if (existingIndentAfter.length >= totalIndent.length) "" else totalIndent.substring(existingIndentAfter.length)
+                    if (neededIndent.isNotEmpty()) {
+                        val indentedText = newText.substring(0, newCursor) + neededIndent + newText.substring(newCursor)
                         return TextFieldValue(
                             text = indentedText,
-                            selection = TextRange(newCursor + totalIndent.length)
+                            selection = TextRange(newCursor + neededIndent.length)
                         )
                     }
                 }
