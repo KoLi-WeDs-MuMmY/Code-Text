@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan for pixel-locked gutter & code line heights, moving language switching exclusively into File Settings with a mandatory confirmation warning popup, reorganizing primary actions into the Top Row and editor/export tools into the Left Rail, and implementing full Export/Share & Copy functionality with toast confirmation.",
-  "updatedAt":  "2026-11-10T12:57:56.214684212Z",
+  "summary":  "Comprehensive redesign and functional overhaul plan for KtScribe IDE combining the CodeAssist IDE layout with iOS glassmorphism, bottom-anchored Build/Terminal/Debugger drawer, real-time caret auto-scrolling, an SDK & Plugin Toolchain Manager, and categorized iOS-style grouped Settings.",
+  "updatedAt":  "2026-11-10T16:09:42.499750763Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

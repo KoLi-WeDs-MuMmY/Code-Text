@@ -78,3 +78,31 @@ app/src/main/java/com/example/
 ## 5. Verification Commands
 - **Compiler Check**: `compile_applet`
 - **Unit & Robolectric Tests**: `gradle :app:testDebugUnitTest` (via `run_command`)
+
+
+---
+
+## 9. CodeAssist + iOS Glass Workspace Overhaul & SDK Toolchain Manager
+
+### 9.1 CodeAssist + iOS Glass Workspace Architecture (`DocumentEditorScreen.kt`)
+- **Single Bezel-Safe CodeAssist Top Bar**: Consolidates project navigation (`←`), collapsible `Files` sidebar toggle (`◧`), folder badge & title, `✓ Indexed` / `● Sync` vault status pill, Save (`💾`), Undo/Redo, primary `▶ Run` pill, `>_ Terminal` bottom drawer toggle, `Explain`, `Files`, `AI Guide`, `⌘P`, and `Settings`.
+- **Slim Left Activity Bar + Collapsible Side Panel**:
+  - `FILES`: Hierarchical project explorer (`▾ 📁 app` → `▾ 📁 app/src/main/<lang>` → package node → language files `K Main.kt`, `module.toml`, and quick `+ext` language file creators).
+  - `SEARCH`: Live search across all files, code, and explanations in the active folder.
+  - `STRUCTURE`: Real-time AST symbol & variable outline (`entryPointSignature` + line-mapped variables).
+  - `EXPLAIN`: Inline rich-text explanation & concept tag editor.
+  - `PLUGINS`: Inline SDK & Plugin Toolchain Manager for one-tap compiler/debugger installation.
+- **CodeAssist Editor File Tab Bar (`K Main.kt • ×`)**: Pill-shaped file tabs with circular language badge, modified indicator dot, individual tab close button (`×`), and a **"No file open" Zero-State Screen** (`Double Shift`, `Ctrl + Shift + N`, `Ctrl + E`, `Ctrl + Shift + F`, `Ctrl + N`, `Alt + 1`) when all tabs are closed.
+
+### 9.2 Bottom-Anchored IDE Drawer (`IdeBottomDrawer.kt`)
+- Explicitly anchored to the bottom of the workspace (`Modifier.align(Alignment.BottomCenter)`) so it always slides up from the bottom.
+- Includes **4 CodeAssist tabs**: `Build & Run (>_ )`, `Problems`, `Debugger`, and `Logcat` with `All` / `Warnings` / `Errors` filter pills and a `Filter log...` search box.
+- **Interactive Step-Through Debugger**: Provides `Step Over`, `Step Into`, `Reset`, Call Stack frame selection, and watched local variable inspection.
+
+### 9.3 Real-Time Caret Auto-Scroll & Parameter Hints (`KotlinCodeSectionCard.kt`)
+- Calls `codeLayoutResult.getCursorRect(cursorIdx)` + `codeBringIntoViewRequester.bringIntoView(paddedRect)` on **every** character typed, cursor movement, and soft-keyboard (`IME`) viewport resize (`onSizeChanged`) so the active line is never hidden behind the keyboard.
+- Displays inline CodeAssist diagnostic pills (`⊗ Unresolved reference...`), floating parameter signature hints (`< 1/20 > println(message: Any?)`), and side quick-documentation cards next to the autocomplete popup.
+
+### 9.4 SDK & Plugin Toolchain Manager & iOS Grouped Settings (`ShortcutAndSettingsDialog.kt` & `FileSettingsDialog.kt`)
+- Both Main Studio Settings and File Inspector are organized into **iOS-style grouped inset cards** with a top segmented category filter bar (`All`, `SDK & Plugins`, `Appearance`, `Editor & Caret`, `Shortcuts`, `Vault & AI`).
+- Users can download, install, and manage 6 Language SDKs & Debuggers (Kotlin, Java, Python, C/C++, Dart, Rust) and 4 IDE Extensions with persisted state in `SharedPreferences`.

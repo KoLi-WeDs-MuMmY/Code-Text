@@ -161,12 +161,202 @@ enum class WindowPresetTier(val label: String, val badge: String) {
 }
 
 /**
- * Tabs inside the sliding IDE Bottom Command & Debug Drawer.
+ * Tabs inside the sliding IDE Bottom Command, Build & Debug Drawer (CodeAssist + iOS IDE style).
  */
 enum class BottomDrawerTab(val label: String, val badge: String) {
-    TERMINAL("Terminal", ">_"),
+    TERMINAL("Build & Run", ">_"),
+    PROBLEMS("Problems", "⚠"),
     DEBUGGER("Debugger", "🪲"),
-    PROBLEMS("Problems", "⚠")
+    LOGCAT("Logcat", "≣")
+}
+
+/**
+ * Severity filter pills in the Bottom Build / Terminal / Logcat Drawer.
+ */
+enum class LogFilterLevel(val label: String) {
+    ALL("All"),
+    WARNINGS("Warnings"),
+    ERRORS("Errors")
+}
+
+/**
+ * Slim Left Activity Bar panels (CodeAssist-style collapsible sidebar).
+ */
+enum class LeftActivityTab(val label: String) {
+    FILES("Files"),
+    SEARCH("Search"),
+    STRUCTURE("Structure"),
+    EXPLAIN("Explain & Notes"),
+    PLUGINS("SDK & Plugins"),
+    NONE("Collapsed")
+}
+
+/**
+ * Categories inside the SDK & Plugin Toolchain Manager.
+ */
+enum class PluginCategory(val label: String, val subtitle: String) {
+    LANGUAGE_SDK("Language SDKs & Debuggers", "Compilers, runtimes & step-through debuggers"),
+    IDE_EXTENSION("IDE Extensions & Tools", "Inline hints, templates, AI & static analysis")
+}
+
+/**
+ * Represents a downloadable compiler/runtime toolchain or IDE extension plugin.
+ */
+data class ToolchainPluginItem(
+    val id: String,
+    val name: String,
+    val subtitle: String,
+    val category: PluginCategory,
+    val language: LanguageType? = null,
+    val version: String,
+    val sizeLabel: String,
+    val binaryCommand: String,
+    val debuggerName: String,
+    val isInstalled: Boolean = false,
+    val isDownloading: Boolean = false,
+    val downloadProgress: Float = 0f
+) {
+    companion object {
+        fun defaultCatalog(installedIds: Set<String> = DEFAULT_PREINSTALLED_IDS): List<ToolchainPluginItem> = listOf(
+            ToolchainPluginItem(
+                id = "sdk_kotlin",
+                name = "Kotlin Compiler & K2 Debugger",
+                subtitle = "kotlinc 2.1.0 + JVM/ART bytecode runner & K2 variable inspector",
+                category = PluginCategory.LANGUAGE_SDK,
+                language = LanguageType.KOTLIN,
+                version = "v2.1.0-RC",
+                sizeLabel = "48.2 MB",
+                binaryCommand = "kotlinc",
+                debuggerName = "Kotlin K2 JDWP Debugger",
+                isInstalled = "sdk_kotlin" in installedIds
+            ),
+            ToolchainPluginItem(
+                id = "sdk_java",
+                name = "OpenJDK 21 LTS & JDB Debugger",
+                subtitle = "javac + java runtime with JDB step-through debugger & stack inspector",
+                category = PluginCategory.LANGUAGE_SDK,
+                language = LanguageType.JAVA,
+                version = "v21.0.4-LTS",
+                sizeLabel = "64.5 MB",
+                binaryCommand = "javac / java",
+                debuggerName = "OpenJDK JDB Attach",
+                isInstalled = "sdk_java" in installedIds
+            ),
+            ToolchainPluginItem(
+                id = "sdk_python",
+                name = "Python 3.12 Runtime & PDB",
+                subtitle = "CPython 3.12 interpreter, pip virtual env & interactive pdb debugger",
+                category = PluginCategory.LANGUAGE_SDK,
+                language = LanguageType.PYTHON,
+                version = "v3.12.6",
+                sizeLabel = "36.8 MB",
+                binaryCommand = "python3",
+                debuggerName = "Python PDB Inspector",
+                isInstalled = "sdk_python" in installedIds
+            ),
+            ToolchainPluginItem(
+                id = "sdk_cpp",
+                name = "Clang/LLVM 18 & LLDB Debugger",
+                subtitle = "C++20 g++/clang++ compiler, STL headers & native LLDB memory debugger",
+                category = PluginCategory.LANGUAGE_SDK,
+                language = LanguageType.CPP,
+                version = "v18.1.8",
+                sizeLabel = "82.0 MB",
+                binaryCommand = "clang++ / g++",
+                debuggerName = "LLDB Native Debugger",
+                isInstalled = "sdk_cpp" in installedIds
+            ),
+            ToolchainPluginItem(
+                id = "sdk_dart",
+                name = "Dart SDK & VM Observatory",
+                subtitle = "Dart 3.5 AOT/JIT compiler, pub manager & VM Service isolate debugger",
+                category = PluginCategory.LANGUAGE_SDK,
+                language = LanguageType.DART,
+                version = "v3.5.3",
+                sizeLabel = "51.4 MB",
+                binaryCommand = "dart run",
+                debuggerName = "Dart VM Observatory",
+                isInstalled = "sdk_dart" in installedIds
+            ),
+            ToolchainPluginItem(
+                id = "sdk_rust",
+                name = "Rust Cargo & Rust-GDB Toolchain",
+                subtitle = "rustc 2024 edition borrow-checker, cargo build & rust-gdb symbols",
+                category = PluginCategory.LANGUAGE_SDK,
+                language = LanguageType.RUST,
+                version = "v1.82.0",
+                sizeLabel = "94.1 MB",
+                binaryCommand = "cargo / rustc",
+                debuggerName = "Rust-GDB Symbol Debugger",
+                isInstalled = "sdk_rust" in installedIds
+            ),
+            ToolchainPluginItem(
+                id = "ext_param_hints",
+                name = "Inline Parameter & Overload Hints",
+                subtitle = "Displays < 1/20 > function signature tooltips & parameter types at caret",
+                category = PluginCategory.IDE_EXTENSION,
+                language = null,
+                version = "v1.4.2",
+                sizeLabel = "3.2 MB",
+                binaryCommand = "lsp-hints",
+                debuggerName = "AST Signature Resolver",
+                isInstalled = "ext_param_hints" in installedIds
+            ),
+            ToolchainPluginItem(
+                id = "ext_live_templates",
+                name = "CodeAssist Live Templates Pack",
+                subtitle = "Instant abbreviations (sout, psvm, stless, main, cout) with caret stops",
+                category = PluginCategory.IDE_EXTENSION,
+                language = null,
+                version = "v2.0.1",
+                sizeLabel = "1.8 MB",
+                binaryCommand = "snippets-engine",
+                debuggerName = "Template Expander",
+                isInstalled = "ext_live_templates" in installedIds
+            ),
+            ToolchainPluginItem(
+                id = "ext_ast_metrics",
+                name = "AST Complexity & Immutability Linter",
+                subtitle = "Real-time cyclomatic complexity, val/var immutability ratio & quick-fixes",
+                category = PluginCategory.IDE_EXTENSION,
+                language = null,
+                version = "v1.9.0",
+                sizeLabel = "4.5 MB",
+                binaryCommand = "ast-lint",
+                debuggerName = "Static Analyzer",
+                isInstalled = "ext_ast_metrics" in installedIds
+            ),
+            ToolchainPluginItem(
+                id = "ext_ai_copilot",
+                name = "KtScribe AI Code & KDoc Assistant",
+                subtitle = "Deep-dive concept explanations, syntax auto-repair & semantic naming",
+                category = PluginCategory.IDE_EXTENSION,
+                language = null,
+                version = "v3.1.0",
+                sizeLabel = "6.0 MB",
+                binaryCommand = "ai-scribe",
+                debuggerName = "AI Semantic Engine",
+                isInstalled = "ext_ai_copilot" in installedIds
+            )
+        )
+
+        val DEFAULT_PREINSTALLED_IDS = setOf(
+            "sdk_kotlin",
+            "ext_param_hints",
+            "ext_live_templates",
+            "ext_ast_metrics",
+            "ext_ai_copilot"
+        )
+
+        fun sdkIdForLanguage(language: LanguageType): String = when (language) {
+            LanguageType.KOTLIN -> "sdk_kotlin"
+            LanguageType.JAVA -> "sdk_java"
+            LanguageType.PYTHON -> "sdk_python"
+            LanguageType.CPP -> "sdk_cpp"
+            LanguageType.DART -> "sdk_dart"
+            LanguageType.RUST -> "sdk_rust"
+        }
+    }
 }
 
 /**

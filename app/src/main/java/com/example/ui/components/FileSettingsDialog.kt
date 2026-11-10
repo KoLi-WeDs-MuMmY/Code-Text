@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,11 +11,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,20 +23,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -56,8 +55,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -67,6 +66,13 @@ import com.example.model.CodeSectionUiModel
 import com.example.model.LanguageType
 import com.example.ui.theme.AppThemeId
 import com.example.ui.theme.JetBrainsMonoFontFamily
+
+private enum class FileInspectorTab(val id: String, val label: String, val icon: ImageVector) {
+    ALL("all", "All", Icons.Default.Tune),
+    FILE_LANG("file_lang", "File & Language", Icons.Default.Folder),
+    STYLE("style", "Style & Theme", Icons.Default.Palette),
+    AI_EXPORT("ai_export", "AI & Export", Icons.Default.AutoAwesome)
+}
 
 /**
  * Shared utility for exporting, saving via Android Share/Save dialog, and copying code/bundle files
@@ -115,12 +121,8 @@ fun exportOrCopyCodePayload(
 }
 
 /**
- * File-specific settings dialog.
- * Differs from Main Studio Settings by focusing exclusively on active file properties:
- * - Active file name & extension
- * - Language selection & dedicated language directory (guarded by confirmation warning popup)
- * - Per-file theme override
- * - File formatting & export options
+ * Restructured iOS-style grouped File Configuration Inspector.
+ * Preserves guarded language switching with mandatory confirmation popup.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -144,40 +146,91 @@ fun FileSettingsDialog(
     var wordWrapEnabled by remember { mutableStateOf(true) }
     var pendingLanguageChange by remember { mutableStateOf<LanguageType?>(null) }
     var exportStatusFeedback by remember { mutableStateOf<String?>(null) }
+    var activeTab by remember { mutableStateOf(FileInspectorTab.ALL) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1C1917),
+        tonalElevation = 12.dp,
         title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Surface(
-                    color = activeSection.language.badgeColor.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(6.dp),
-                    modifier = Modifier.border(1.dp, activeSection.language.badgeColor, RoundedCornerShape(6.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = activeSection.language.shortLabel,
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = activeSection.language.badgeColor,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+                    Surface(
+                        color = activeSection.language.badgeColor.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(7.dp),
+                        modifier = Modifier.border(1.dp, activeSection.language.badgeColor, RoundedCornerShape(7.dp))
+                    ) {
+                        Text(
+                            text = activeSection.language.shortLabel,
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = activeSection.language.badgeColor,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "File Inspector • ${activeSection.nativeFileName}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFE6E1DC)
+                        )
+                        Text(
+                            text = "${activeSection.language.directoryPath}${activeSection.nativeFileName}",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.sp,
+                            color = Color(0xFFA39C93)
+                        )
+                    }
                 }
-                Column {
-                    Text(
-                        text = "File Configuration",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Path: ${activeSection.language.directoryPath}${activeSection.ktScribeFileName}",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+
+                // Segmented iOS Filter Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF141210))
+                        .border(0.5.dp, Color(0xFF36312C), RoundedCornerShape(10.dp))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FileInspectorTab.entries.forEach { tab ->
+                        val selected = activeTab == tab
+                        Surface(
+                            color = if (selected) Color(0xFF332C27) else Color.Transparent,
+                            shape = RoundedCornerShape(8.dp),
+                            border = if (selected) BorderStroke(0.5.dp, Color(0xFFD4883A).copy(alpha = 0.6f)) else null,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { activeTab = tab }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = null,
+                                    tint = if (selected) Color(0xFFD4883A) else Color(0xFFA39C93),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = tab.label,
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) Color(0xFFE6E1DC) else Color(0xFFA39C93)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -185,373 +238,317 @@ fun FileSettingsDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(max = 460.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // 1. FILE NAME & DIRECTORY
-                Text(
-                    text = "File Name & Target Directory",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // =========================================================================
+                // CARD 1: FILE IDENTITY & LANGUAGE TYPE
+                // =========================================================================
+                if (activeTab == FileInspectorTab.ALL || activeTab == FileInspectorTab.FILE_LANG) {
+                    IosSettingsGroupCard(
+                        headerTitle = "FILE IDENTITY & TARGET DIRECTORY",
+                        headerSubtitle = "Folder: $folderTitle  •  ${activeSection.language.directoryPath}"
                     ) {
-                        Icon(
-                            Icons.Default.Folder,
-                            contentDescription = null,
-                            tint = activeSection.language.badgeColor,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = "Folder: $folderTitle  /  ${activeSection.language.directoryPath}",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-
-                OutlinedTextField(
-                    value = fileNameInput,
-                    onValueChange = {
-                        fileNameInput = it
-                        onUpdateFileName(it)
-                    },
-                    label = { Text("File Name", fontSize = 11.sp) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("file_settings_name_input")
-                )
-
-                HorizontalDivider()
-
-                // 2. LANGUAGE & DIRECTORY SPECIFICATION
-                Text(
-                    text = "Language & Directory Type",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Selecting a language places this file in its language directory with starter structure:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    LanguageType.entries.forEach { lang ->
-                        val isSelected = activeSection.language == lang
-                        Surface(
-                            color = if (isSelected) {
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                width = if (isSelected) 1.5.dp else 0.5.dp,
-                                color = if (isSelected) lang.badgeColor else MaterialTheme.colorScheme.outlineVariant
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable {
-                                    if (lang != activeSection.language) {
-                                        pendingLanguageChange = lang
-                                    }
-                                }
-                                .testTag("file_settings_lang_${lang.id}")
-                        ) {
-                            Row(
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = fileNameInput,
+                                onValueChange = {
+                                    fileNameInput = it
+                                    onUpdateFileName(it)
+                                },
+                                label = { Text("File Name (extension locked to language)", fontSize = 11.sp) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color(0xFF161412),
+                                    unfocusedContainerColor = Color(0xFF161412),
+                                    focusedBorderColor = Color(0xFFD4883A),
+                                    unfocusedBorderColor = Color(0xFF36312C)
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 10.dp, vertical = 7.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                    .testTag("file_settings_name_input")
+                            )
+
+                            HorizontalDivider(thickness = 0.5.dp, color = Color(0xFF36312C))
+
+                            Text(
+                                text = "Language & Compiler Target (Guarded Switch)",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE6E1DC)
+                            )
+
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(5.dp)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Box(
+                                LanguageType.entries.forEach { lang ->
+                                    val isSelected = activeSection.language == lang
+                                    Surface(
+                                        color = if (isSelected) Color(0xFF332922) else Color(0xFF1A1715),
+                                        shape = RoundedCornerShape(9.dp),
+                                        border = BorderStroke(
+                                            width = if (isSelected) 1.5.dp else 0.5.dp,
+                                            color = if (isSelected) lang.badgeColor else Color(0xFF36312C)
+                                        ),
                                         modifier = Modifier
-                                            .size(10.dp)
-                                            .clip(CircleShape)
-                                            .background(lang.badgeColor)
-                                    )
-                                    Column {
-                                        Text(
-                                            text = "${lang.displayName} (${lang.nativeExtension})",
-                                            fontFamily = JetBrainsMonoFontFamily,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.5.sp,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = "Directory: ${lang.directoryPath} • Bundle: ${lang.containerExtension}",
-                                            fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 9.5.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(9.dp))
+                                            .clickable {
+                                                if (lang != activeSection.language) {
+                                                    pendingLanguageChange = lang
+                                                }
+                                            }
+                                            .testTag("file_settings_lang_${lang.id}")
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(10.dp)
+                                                        .clip(CircleShape)
+                                                        .background(lang.badgeColor)
+                                                )
+                                                Column {
+                                                    Text(
+                                                        text = "${lang.displayName} (${lang.nativeExtension})",
+                                                        fontFamily = JetBrainsMonoFontFamily,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 11.5.sp,
+                                                        color = Color(0xFFE6E1DC)
+                                                    )
+                                                    Text(
+                                                        text = "Dir: ${lang.directoryPath} • Bundle: ${lang.containerExtension}",
+                                                        fontFamily = JetBrainsMonoFontFamily,
+                                                        fontSize = 9.5.sp,
+                                                        color = Color(0xFFA39C93)
+                                                    )
+                                                }
+                                            }
+                                            if (isSelected) {
+                                                Text(
+                                                    text = "Active",
+                                                    fontFamily = JetBrainsMonoFontFamily,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = lang.badgeColor
+                                                )
+                                            }
+                                        }
                                     }
-                                }
-                                if (isSelected) {
-                                    Text(
-                                        text = "Active",
-                                        fontFamily = JetBrainsMonoFontFamily,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = lang.badgeColor
-                                    )
                                 }
                             }
                         }
                     }
                 }
 
-                HorizontalDivider()
-
-                // 3. PER-FILE THEME OVERRIDE
-                Text(
-                    text = "File Theme Override",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Override the Studio theme for this specific file, or inherit the global studio theme:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    FilterChip(
-                        selected = activeSection.themeOverride == null,
-                        onClick = { onUpdateThemeOverride(null) },
-                        label = { Text("Inherit Studio Theme") },
-                        modifier = Modifier.testTag("file_theme_inherit")
-                    )
-                    AppThemeId.entries.forEach { theme ->
-                        FilterChip(
-                            selected = activeSection.themeOverride == theme,
-                            onClick = { onUpdateThemeOverride(theme) },
-                            label = { Text(theme.displayName) },
-                            modifier = Modifier.testTag("file_theme_${theme.name.lowercase()}")
-                        )
-                    }
-                }
-
-                HorizontalDivider()
-
-                // 4. EDITOR FORMATTING
-                Text(
-                    text = "Formatting & Display",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Tab Indent:",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    listOf(2, 4).forEach { spaces ->
-                        FilterChip(
-                            selected = selectedIndentSpaces == spaces,
-                            onClick = { selectedIndentSpaces = spaces },
-                            label = { Text("$spaces Spaces") },
-                            modifier = Modifier.testTag("file_indent_$spaces")
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FilterChip(
-                        selected = showLineNumbers,
-                        onClick = { showLineNumbers = !showLineNumbers },
-                        label = { Text(if (showLineNumbers) "Line Numbers: On" else "Line Numbers: Off") },
-                        modifier = Modifier.testTag("file_toggle_line_numbers")
-                    )
-                    FilterChip(
-                        selected = wordWrapEnabled,
-                        onClick = { wordWrapEnabled = !wordWrapEnabled },
-                        label = { Text(if (wordWrapEnabled) "Wrap: On" else "Wrap: Off") },
-                        modifier = Modifier.testTag("file_toggle_word_wrap")
-                    )
-                }
-
-                HorizontalDivider()
-
-                // 5. AI NAMING & EXPLANATION ACTIONS
-                Text(
-                    text = "AI Naming & Explanations",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Generate a semantic name, concept tag, or detailed code explanation using integrated AI:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            onRequestAiNaming()
-                            onDismiss()
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("file_ai_naming_btn")
+                // =========================================================================
+                // CARD 2: PER-FILE THEME OVERRIDE & FORMATTING
+                // =========================================================================
+                if (activeTab == FileInspectorTab.ALL || activeTab == FileInspectorTab.STYLE) {
+                    IosSettingsGroupCard(
+                        headerTitle = "PER-FILE THEME & CODE FORMATTING",
+                        headerSubtitle = "Override the global theme for this file or adjust indentation & line numbers"
                     ) {
-                        Text("AI Rename File", fontSize = 11.sp, maxLines = 1)
-                    }
-                    Button(
-                        onClick = {
-                            onRequestAiExplain()
-                            onDismiss()
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("file_ai_explain_btn")
-                    ) {
-                        Text("AI Explain Code", fontSize = 11.sp, maxLines = 1)
-                    }
-                }
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                FilterChip(
+                                    selected = activeSection.themeOverride == null,
+                                    onClick = { onUpdateThemeOverride(null) },
+                                    label = { Text("Inherit Studio Theme", fontSize = 10.5.sp) },
+                                    modifier = Modifier.testTag("file_theme_inherit")
+                                )
+                                AppThemeId.entries.forEach { theme ->
+                                    FilterChip(
+                                        selected = activeSection.themeOverride == theme,
+                                        onClick = { onUpdateThemeOverride(theme) },
+                                        label = { Text(theme.displayName, fontSize = 10.5.sp) },
+                                        modifier = Modifier.testTag("file_theme_${theme.name.lowercase()}")
+                                    )
+                                }
+                            }
 
-                HorizontalDivider()
+                            HorizontalDivider(thickness = 0.5.dp, color = Color(0xFF36312C))
 
-                // 6. EXPORT & SHARING
-                Text(
-                    text = "Export & Copy Actions",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Tab Indent:",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.5.sp,
+                                    color = Color(0xFFE6E1DC)
+                                )
+                                listOf(2, 4).forEach { spaces ->
+                                    FilterChip(
+                                        selected = selectedIndentSpaces == spaces,
+                                        onClick = { selectedIndentSpaces = spaces },
+                                        label = { Text("$spaces Spaces", fontSize = 10.5.sp) },
+                                        modifier = Modifier.testTag("file_indent_$spaces")
+                                    )
+                                }
+                            }
 
-                exportStatusFeedback?.let { statusMsg ->
-                    Surface(
-                        color = Color(0xFF1E3323),
-                        shape = RoundedCornerShape(8.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = Color(0xFF81C784),
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                text = statusMsg,
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 10.5.sp,
-                                color = Color(0xFFE6E1DC),
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                FilterChip(
+                                    selected = showLineNumbers,
+                                    onClick = { showLineNumbers = !showLineNumbers },
+                                    label = { Text(if (showLineNumbers) "Line Numbers: On" else "Line Numbers: Off", fontSize = 10.5.sp) },
+                                    modifier = Modifier.testTag("file_toggle_line_numbers")
+                                )
+                                FilterChip(
+                                    selected = wordWrapEnabled,
+                                    onClick = { wordWrapEnabled = !wordWrapEnabled },
+                                    label = { Text(if (wordWrapEnabled) "Wrap: On" else "Wrap: Off", fontSize = 10.5.sp) },
+                                    modifier = Modifier.testTag("file_toggle_word_wrap")
+                                )
+                            }
                         }
                     }
                 }
 
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            exportStatusFeedback = "Exported & copied ${activeSection.containerFileName} bundle!"
-                            onCopyFileBundle()
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().testTag("file_copy_bundle_btn")
+                // =========================================================================
+                // CARD 3: AI ACTIONS, EXPORT & GLOBAL STUDIO LINK
+                // =========================================================================
+                if (activeTab == FileInspectorTab.ALL || activeTab == FileInspectorTab.AI_EXPORT) {
+                    IosSettingsGroupCard(
+                        headerTitle = "AI TOOLS & EXPORT BUNDLES",
+                        headerSubtitle = "Semantic file naming, AI explanations, and shareable code bundles"
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Export & Copy ${activeSection.containerFileName} Bundle", fontSize = 11.sp)
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            exportStatusFeedback = "Exported & copied ${activeSection.nativeFileName} raw code!"
-                            onCopyRawCode()
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().testTag("file_copy_raw_btn")
-                    ) {
-                        Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Export & Copy Raw Code (${activeSection.nativeFileName})", fontSize = 11.sp)
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            exportStatusFeedback = "Exported & copied Folder Markdown (${folderTitle}.md)!"
-                            onCopyFolderMarkdown()
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().testTag("file_copy_md_btn")
-                    ) {
-                        Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Export Entire Folder as Markdown", fontSize = 11.sp)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        onRequestAiNaming()
+                                        onDismiss()
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("file_ai_naming_btn")
+                                ) {
+                                    Text("AI Rename File", fontSize = 11.sp, maxLines = 1)
+                                }
+                                Button(
+                                    onClick = {
+                                        onRequestAiExplain()
+                                        onDismiss()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4883A)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("file_ai_explain_btn")
+                                ) {
+                                    Text("AI Explain Code", fontSize = 11.sp, maxLines = 1, color = Color(0xFF161412), fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            exportStatusFeedback?.let { statusMsg ->
+                                Surface(
+                                    color = Color(0xFF1E3323),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, Color(0xFF4CAF50)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = Color(0xFF81C784),
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Text(
+                                            text = statusMsg,
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 10.5.sp,
+                                            color = Color(0xFFE6E1DC),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    exportStatusFeedback = "Exported & copied ${activeSection.containerFileName} bundle!"
+                                    onCopyFileBundle()
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth().testTag("file_copy_bundle_btn")
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Export & Copy ${activeSection.containerFileName} Bundle", fontSize = 11.sp)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    exportStatusFeedback = "Exported & copied ${activeSection.nativeFileName} raw code!"
+                                    onCopyRawCode()
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth().testTag("file_copy_raw_btn")
+                            ) {
+                                Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Export & Copy Raw Code (${activeSection.nativeFileName})", fontSize = 11.sp)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    exportStatusFeedback = "Exported & copied Folder Markdown (${folderTitle}.md)!"
+                                    onCopyFolderMarkdown()
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth().testTag("file_copy_md_btn")
+                            ) {
+                                Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Export Entire Folder as Markdown", fontSize = 11.sp)
+                            }
+                        }
                     }
                 }
 
-                HorizontalDivider()
-
-                // 7. LINK TO GLOBAL STUDIO SETTINGS
+                // =========================================================================
+                // LINK TO GLOBAL STUDIO SETTINGS & SDK MANAGER
+                // =========================================================================
                 Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF28221E),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(0.75.dp, Color(0xFFD4883A).copy(alpha = 0.5f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .clickable {
                             onDismiss()
                             onOpenStudioSettings()
@@ -563,31 +560,27 @@ fun FileSettingsDialog(
                             .fillMaxWidth()
                             .padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Settings,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = null,
+                            tint = Color(0xFFD4883A),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Studio Settings & SDK Toolchain Manager...",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE6E1DC)
                             )
-                            Column {
-                                Text(
-                                    text = "Studio & Global Settings...",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Global themes, dark/light mode, shortcuts & RPM quota",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            Text(
+                                text = "Download compilers/debuggers, global themes, shortcuts & RPM quota",
+                                fontSize = 10.sp,
+                                color = Color(0xFFA39C93)
+                            )
                         }
                     }
                 }
@@ -598,7 +591,12 @@ fun FileSettingsDialog(
                 onClick = onDismiss,
                 modifier = Modifier.testTag("file_settings_done_btn")
             ) {
-                Text("Done")
+                Text(
+                    text = "Done",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFD4883A)
+                )
             }
         }
     )

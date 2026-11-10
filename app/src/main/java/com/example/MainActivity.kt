@@ -172,7 +172,11 @@ fun KtScribeApp(
                     onSetBottomDrawerHeightFraction = editorViewModel::setBottomDrawerHeightFraction,
                     onClearTerminal = editorViewModel::clearTerminalOutput,
                     onDismissExtensionRenameWarning = editorViewModel::dismissExtensionRenameWarning,
-                    onShowStatusToast = editorViewModel::showStatusToast
+                    onShowStatusToast = editorViewModel::showStatusToast,
+                    onToggleLeftActivityTab = editorViewModel::toggleLeftActivityTab,
+                    onCloseEditorTab = editorViewModel::closeEditorTab,
+                    onInstallOrTogglePlugin = editorViewModel::installOrTogglePlugin,
+                    onInstallAllSdks = editorViewModel::installAllLanguageSdks
                 )
             }
 
@@ -194,10 +198,13 @@ fun KtScribeApp(
                     currentAppTheme = uiState.activeAppTheme,
                     remainingAiQuota = uiState.remainingAiRpmQuota,
                     defaultLanguage = uiState.defaultLanguageForNewFiles,
+                    toolchainPlugins = uiState.toolchainPlugins,
                     onSelectDefaultLanguage = editorViewModel::setDefaultLanguageForNewFiles,
                     onSelectShortcutLetter = editorViewModel::setShortcutLetter,
                     onSelectThemeMode = editorViewModel::setThemeMode,
                     onSelectAppTheme = editorViewModel::setActiveAppTheme,
+                    onInstallOrTogglePlugin = editorViewModel::installOrTogglePlugin,
+                    onInstallAllSdks = editorViewModel::installAllLanguageSdks,
                     onDismiss = { showSettingsDialog = false }
                 )
             }

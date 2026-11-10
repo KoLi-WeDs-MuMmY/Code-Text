@@ -243,8 +243,64 @@ object CodeLanguageEngine {
         val hasErrors: Boolean,
         val exitCode: Int,
         val variables: Map<String, String>,
-        val diagnostics: List<KotlinDiagnostic>
+        val diagnostics: List<KotlinDiagnostic>,
+        val callStack: List<String> = emptyList(),
+        val logcatEntries: List<String> = emptyList(),
+        val toolchainInstalled: Boolean = true,
+        val requiredSdkName: String = ""
     )
+
+    /**
+     * Detects when the caret is inside a function call's parentheses (e.g., `println(|)`)
+     * and returns a CodeAssist-style parameter signature hint (`< 1/20 > println(message: Any?)`).
+     */
+    fun getParameterHintForCursor(
+        code: String,
+        cursorPosition: Int,
+        language: LanguageType
+    ): String? {
+        if (code.isEmpty()) return null
+        val safeCursor = cursorPosition.coerceIn(0, code.length)
+        val lineStart = code.lastIndexOf('\n', (safeCursor - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+        val prefixOnLine = code.substring(lineStart, safeCursor)
+        val openParenIdx = prefixOnLine.lastIndexOf('(')
+        if (openParenIdx <= 0) return null
+        // Check if the parenthesis was already closed before cursor on the same line
+        val afterOpen = prefixOnLine.substring(openParenIdx + 1)
+        if (afterOpen.count { it == ')' } > afterOpen.count { it == '(' }) return null
+
+        val fnIdentMatch = Regex("""([A-Za-z_][A-Za-z0-9_!.]*)\s*$""").find(prefixOnLine.substring(0, openParenIdx))
+            ?: return null
+        val fnName = fnIdentMatch.groupValues[1]
+
+        return when {
+            fnName.endsWith("println") && language == LanguageType.KOTLIN ->
+                "< 1/20 >\nprintln(message: Any?)"
+            fnName.endsWith("print") && language == LanguageType.KOTLIN ->
+                "< 1/14 >\nprint(message: Any?)"
+            fnName.endsWith("println") && language == LanguageType.JAVA ->
+                "< 1/10 >\nSystem.out.println(String x)"
+            fnName == "print" && language == LanguageType.PYTHON ->
+                "< 1/6 >\nprint(*objects, sep=' ', end='\\n')"
+            fnName == "print" && language == LanguageType.DART ->
+                "< 1/2 >\nvoid print(Object? object)"
+            fnName.startsWith("println") && language == LanguageType.RUST ->
+                "< 1/4 >\nprintln!(fmt: &str, ...args)"
+            fnName == "filter" ->
+                "< 1/4 >\nfilter(predicate: (T) -> Boolean): List<T>"
+            fnName == "map" ->
+                "< 1/5 >\nmap(transform: (T) -> R): List<R>"
+            fnName == "listOf" ->
+                "< 1/3 >\nlistOf(vararg elements: T): List<T>"
+            fnName == "mutableStateOf" ->
+                "< 1/2 >\nmutableStateOf(value: T, policy: SnapshotMutationPolicy<T>)"
+            fnName == "range" && language == LanguageType.PYTHON ->
+                "< 1/3 >\nrange(start: int, stop: int, step: int = 1)"
+            fnName == "len" && language == LanguageType.PYTHON ->
+                "< 1/1 >\nlen(s: Sized) -> int"
+            else -> null
+        }
+    }
 
     /**
      * Syntactic and semantic validator for all supported programming languages.
@@ -313,7 +369,6 @@ object CodeLanguageEngine {
 
             when (language) {
                 LanguageType.PYTHON -> {
-                    // Python block headers require trailing colon `:`
                     val needsColon = trimmed.startsWith("def ") ||
                         trimmed.startsWith("class ") ||
                         trimmed.startsWith("if ") ||
@@ -345,7 +400,7 @@ object CodeLanguageEngine {
                     val isPackageOrImport = trimmed.startsWith("package ") || trimmed.startsWith("import ")
                     val isHeader = trimmed.startsWith("public class ") || trimmed.startsWith("class ") ||
                         trimmed.startsWith("interface ") || trimmed.startsWith("public static void main")
-                    if (!isBlockOpener && !isAnnotation && !trimmed.endsWith(";") && !isHeader) {
+                    if (!isBlockOpener && !isAnnotation && !isPackageOrImport && !trimmed.endsWith(";") && !isHeader) {
                         diagnostics.add(
                             KotlinDiagnostic(
                                 line = lineNum,
@@ -439,22 +494,74 @@ object CodeLanguageEngine {
     }
 
     /**
-     * Executes the code with real syntax validation, variable tracking, and compiler diagnostics.
+     * Executes the code with real syntax validation, variable tracking, call stack frames,
+     * Logcat telemetry, and SDK Toolchain verification.
      */
-    fun executeAndDebug(code: String, language: LanguageType): DebugSessionInfo {
+    fun executeAndDebug(
+        code: String,
+        language: LanguageType,
+        isSdkInstalled: Boolean = true
+    ): DebugSessionInfo {
         val trimmed = code.trim()
         val diagnostics = getDiagnosticsForLanguage(code, language)
         val errors = diagnostics.filter { it.severity == DiagnosticSeverity.ERROR }
 
-        // Extract variables from simple assignments
+        val sdkTitle = when (language) {
+            LanguageType.KOTLIN -> "Kotlin Compiler & K2 Debugger (kotlinc 2.1)"
+            LanguageType.JAVA -> "OpenJDK 21 LTS & JDB Debugger"
+            LanguageType.PYTHON -> "Python 3.12 Runtime & PDB"
+            LanguageType.CPP -> "Clang/LLVM 18 & LLDB Debugger"
+            LanguageType.DART -> "Dart SDK & VM Observatory"
+            LanguageType.RUST -> "Rust Cargo & Rust-GDB Toolchain"
+        }
+
+        // Extract variables from assignments across languages
         val variables = mutableMapOf<String, String>()
-        val varRegex = Regex("""(?:val|var|int|String|double|float|let|mut)?\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*([^;\n]+)""")
+        val varRegex = Regex("""(?:val|var|int|String|double|float|boolean|let|mut|const|final)?\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*([^;\n]+)""")
         varRegex.findAll(code).forEach { match ->
             val name = match.groupValues[1].trim()
             val value = match.groupValues[2].trim()
-            if (name !in setOf("if", "for", "while", "class", "def", "fun", "return", "public", "private", "print", "println")) {
+            if (name !in setOf("if", "for", "while", "class", "def", "fun", "return", "public", "private", "print", "println", "package", "import")) {
                 variables[name] = value.take(40)
             }
+        }
+
+        // Build call stack frames
+        val callStack = mutableListOf<String>()
+        code.lines().forEachIndexed { idx, line ->
+            val fnMatch = Regex("""\b(?:fun|def|void|int|fn)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(""").find(line)
+            if (fnMatch != null) {
+                callStack.add("${fnMatch.groupValues[1]}() at ${language.defaultFileName}:${idx + 1}")
+            }
+        }
+        if (callStack.isEmpty()) {
+            callStack.add("main() at ${language.defaultFileName}:1")
+        }
+
+        if (!isSdkInstalled) {
+            val missingOutput = buildString {
+                appendLine("$ ${language.runCommandPrefix} ${language.defaultFileName}")
+                appendLine("Error: Toolchain binary '${language.runCommandPrefix}' is not installed in local SDK environment.")
+                appendLine("Required Package: $sdkTitle")
+                appendLine("→ Tap 'Install SDK Plugin' above or open Settings > SDK & Plugin Manager to download.")
+                appendLine("\nProcess finished with exit code 127 (command not found)")
+            }
+            val logcat = listOf(
+                "E/ToolchainManager: Missing runtime binary '${language.runCommandPrefix}' for ${language.displayName}",
+                "W/DebuggerBridge: Cannot attach debugger session without $sdkTitle",
+                "I/PackageManager: Ready to download ${com.example.model.ToolchainPluginItem.sdkIdForLanguage(language)} from KtScribe SDK Registry"
+            )
+            return DebugSessionInfo(
+                output = missingOutput,
+                hasErrors = true,
+                exitCode = 127,
+                variables = variables,
+                diagnostics = diagnostics,
+                callStack = callStack,
+                logcatEntries = logcat,
+                toolchainInstalled = false,
+                requiredSdkName = sdkTitle
+            )
         }
 
         if (errors.isNotEmpty()) {
@@ -503,12 +610,23 @@ object CodeLanguageEngine {
                     }
                 }
             }
+            val logcat = buildList {
+                add("I/BuildTask: Starting ${language.displayName} toolchain ($sdkTitle)")
+                errors.forEach { err ->
+                    add("E/Compiler: ${language.defaultFileName}:${err.line} -> ${err.message}")
+                }
+                add("W/DebugRunner: Build halted with ${errors.size} error(s) (exit code 1)")
+            }
             return DebugSessionInfo(
                 output = output,
                 hasErrors = true,
                 exitCode = 1,
                 variables = variables,
-                diagnostics = diagnostics
+                diagnostics = diagnostics,
+                callStack = callStack,
+                logcatEntries = logcat,
+                toolchainInstalled = true,
+                requiredSdkName = sdkTitle
             )
         }
 
@@ -575,12 +693,26 @@ object CodeLanguageEngine {
             }
         }
 
+        val logcat = buildList {
+            add("I/Toolchain: Verified $sdkTitle")
+            add("I/Compiler: Indexed & compiled ${language.defaultFileName} in 142ms")
+            add("D/Debugger: Attached to process PID 4821 (${variables.size} active local symbol(s))")
+            diagnostics.filter { it.severity == DiagnosticSeverity.WARNING }.forEach { warn ->
+                add("W/Linter: Ln ${warn.line}: ${warn.message}")
+            }
+            add("I/Process: Process finished with exit code 0")
+        }
+
         return DebugSessionInfo(
             output = output,
             hasErrors = false,
             exitCode = 0,
             variables = variables,
-            diagnostics = diagnostics
+            diagnostics = diagnostics,
+            callStack = callStack,
+            logcatEntries = logcat,
+            toolchainInstalled = true,
+            requiredSdkName = sdkTitle
         )
     }
 
@@ -588,6 +720,6 @@ object CodeLanguageEngine {
      * Simulates terminal script execution for the given language.
      */
     fun simulateExecutionForLanguage(code: String, language: LanguageType): String {
-        return executeAndDebug(code, language).output
+        return executeAndDebug(code, language, isSdkInstalled = true).output
     }
 }

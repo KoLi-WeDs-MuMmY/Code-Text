@@ -359,6 +359,15 @@ class EditorRepository(
         )
     }
 
+    fun getInstalledPluginIds(): Set<String> {
+        val saved = prefs.getStringSet(KEY_INSTALLED_PLUGINS, null)
+        return saved?.toSet() ?: com.example.model.ToolchainPluginItem.DEFAULT_PREINSTALLED_IDS
+    }
+
+    fun setInstalledPluginIds(ids: Set<String>) {
+        prefs.edit().putStringSet(KEY_INSTALLED_PLUGINS, ids).apply()
+    }
+
     private fun countWords(text: String): Int {
         if (text.isBlank()) return 0
         return text.trim().split(Regex("\\s+")).count { it.isNotBlank() }
@@ -368,5 +377,6 @@ class EditorRepository(
         private const val KEY_SHORTCUT_LETTER = "shortcut_letter"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_APP_THEME_ID = "app_theme_id"
+        private const val KEY_INSTALLED_PLUGINS = "installed_toolchain_plugins"
     }
 }

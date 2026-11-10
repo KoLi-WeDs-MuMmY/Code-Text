@@ -69,3 +69,13 @@
    - Ability to add multiple native code files (e.g., `utils.py`, `models.py`) inside the same `.xScribe` project bundle with draggable editor tabs.
 3. **Integrated Git Diff & History Bar**:
    - File revision history tracker with visual side-by-side diffing and restore capabilities.
+
+
+---
+
+## 9. CodeAssist + iOS Glass UI Overhaul, Bottom Terminal Drawer & SDK Toolchain Manager
+
+- **Bottom-Anchored Build/Terminal/Debugger/Logcat Drawer**: Fixed `IdeBottomDrawer` alignment in `DocumentEditorScreen.kt` using `Modifier.align(Alignment.BottomCenter)` so the drawer always slides up from the bottom of the screen. Added CodeAssist `Logcat` tab, `All` / `Warnings` / `Errors` filter pills, `Filter log...` search field, and interactive Step Over / Step Into / Call Stack debugging.
+- **Decluttered CodeAssist + iOS Glass Workspace**: Consolidated redundant headers into a single CodeAssist Top Bar, Slim Left Activity Rail, Collapsible `Files` Project Tree (`app/src/main/<lang>`), Editor File Tab Bar (`K Main.kt • ×`), Breadcrumb Bar (`app > example > myapp > Main.kt`), and "No file open" Zero-State Screen.
+- **Real-Time Caret & Keyboard Auto-Scroll**: Updated `KotlinCodeSectionCard.kt` so `bringActiveCodeLineIntoView` runs on every character typed, cursor change, and soft-keyboard (`IME`) height change using `TextLayoutResult.getCursorRect()`.
+- **SDK & Plugin Toolchain Manager + iOS Grouped Settings**: Added downloadable language SDKs & debuggers (Kotlin, Java, Python, C++, Dart, Rust) and IDE extensions in `ShortcutAndSettingsDialog.kt` and the workspace `Plugins` panel, and restructured both Main Studio Settings and File Settings into categorized iOS-style grouped cards.

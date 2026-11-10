@@ -72,13 +72,23 @@ data class EditorUiState(
     val defaultLanguageForNewFiles: com.example.model.LanguageType = com.example.model.LanguageType.KOTLIN,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
-    // Sliding IDE Bottom Command & Debug Drawer (matching VS Code / IntelliJ desktop layout)
+    // Sliding IDE Bottom Command & Debug Drawer (matching VS Code / IntelliJ / CodeAssist layout)
     val isBottomDrawerOpen: Boolean = false,
     val activeBottomDrawerTab: com.example.model.BottomDrawerTab = com.example.model.BottomDrawerTab.TERMINAL,
     val bottomDrawerHeightFraction: Float = 0.42f,
     // File Extension Rename Guard Modal
-    val extensionRenameWarningDialog: String? = null
+    val extensionRenameWarningDialog: String? = null,
+    // CodeAssist Left Activity Bar & Collapsible File Tree State
+    val activeLeftActivityTab: com.example.model.LeftActivityTab = com.example.model.LeftActivityTab.FILES,
+    // Closed Editor Tab IDs (allows closing tabs with 'x' to reveal the CodeAssist 'No file open' screen)
+    val closedTabSectionIds: Set<Long> = emptySet(),
+    // SDK & Plugin Toolchain Manager Catalog
+    val toolchainPlugins: List<com.example.model.ToolchainPluginItem> = com.example.model.ToolchainPluginItem.defaultCatalog()
 ) {
+    fun isLanguageSdkInstalled(language: com.example.model.LanguageType): Boolean {
+        val sdkId = com.example.model.ToolchainPluginItem.sdkIdForLanguage(language)
+        return toolchainPlugins.find { it.id == sdkId }?.isInstalled == true
+    }
     val activeFormattingStyle: TextFormattingStyle
         get() {
             val doc = activeDocument ?: return TextFormattingStyle()
@@ -186,7 +196,10 @@ class EditorViewModel(
         EditorUiState(
             shortcutLetter = repository.getShortcutLetter(),
             themeMode = repository.getThemeMode(),
-            activeAppTheme = repository.getActiveAppTheme()
+            activeAppTheme = repository.getActiveAppTheme(),
+            toolchainPlugins = com.example.model.ToolchainPluginItem.defaultCatalog(
+                repository.getInstalledPluginIds()
+            )
         )
     )
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
@@ -470,13 +483,119 @@ class EditorViewModel(
         val activeSec = doc.sections.find { it.id == _uiState.value.focusedSectionId }
             ?: doc.sections.firstOrNull()
             ?: return
-        val debugInfo = com.example.code.CodeLanguageEngine.executeAndDebug(activeSec.codeContent, activeSec.language)
+        val isSdkReady = _uiState.value.isLanguageSdkInstalled(activeSec.language)
+        val debugInfo = com.example.code.CodeLanguageEngine.executeAndDebug(
+            code = activeSec.codeContent,
+            language = activeSec.language,
+            isSdkInstalled = isSdkReady
+        )
         _uiState.update { current ->
             current.copy(
                 terminalExecutionOutput = debugInfo.output,
                 isBottomDrawerOpen = true,
                 activeBottomDrawerTab = com.example.model.BottomDrawerTab.TERMINAL
             )
+        }
+    }
+
+    fun toggleLeftActivityTab(tab: com.example.model.LeftActivityTab) {
+        _uiState.update { current ->
+            val next = if (current.activeLeftActivityTab == tab) {
+                com.example.model.LeftActivityTab.NONE
+            } else {
+                tab
+            }
+            current.copy(activeLeftActivityTab = next)
+        }
+    }
+
+    fun closeEditorTab(sectionId: Long) {
+        _uiState.update { current ->
+            val doc = current.activeDocument ?: return@update current
+            val newClosed = current.closedTabSectionIds + sectionId
+            val openSections = doc.sections.filter { it.id !in newClosed }
+            val nextFocused = if (current.focusedSectionId == sectionId) {
+                openSections.firstOrNull()?.id
+            } else {
+                current.focusedSectionId
+            }
+            current.copy(
+                closedTabSectionIds = newClosed,
+                focusedSectionId = nextFocused
+            )
+        }
+    }
+
+    fun installOrTogglePlugin(pluginId: String) {
+        val currentList = _uiState.value.toolchainPlugins
+        val target = currentList.find { it.id == pluginId } ?: return
+        if (target.isDownloading) return
+
+        if (target.isInstalled) {
+            // Uninstall / disable plugin
+            val updated = currentList.map {
+                if (it.id == pluginId) it.copy(isInstalled = false, isDownloading = false, downloadProgress = 0f) else it
+            }
+            val installedIds = updated.filter { it.isInstalled }.map { it.id }.toSet()
+            repository.setInstalledPluginIds(installedIds)
+            _uiState.update {
+                it.copy(
+                    toolchainPlugins = updated,
+                    aiStatusMessage = "Removed ${target.name}"
+                )
+            }
+        } else {
+            // Download and install with animated progress
+            viewModelScope.launch {
+                _uiState.update { state ->
+                    state.copy(
+                        toolchainPlugins = state.toolchainPlugins.map {
+                            if (it.id == pluginId) it.copy(isDownloading = true, downloadProgress = 0.25f) else it
+                        },
+                        aiStatusMessage = "⬇ Downloading ${target.name} (${target.sizeLabel})…"
+                    )
+                }
+                delay(180)
+                _uiState.update { state ->
+                    state.copy(
+                        toolchainPlugins = state.toolchainPlugins.map {
+                            if (it.id == pluginId) it.copy(isDownloading = true, downloadProgress = 0.72f) else it
+                        }
+                    )
+                }
+                delay(180)
+                val updated = _uiState.value.toolchainPlugins.map {
+                    if (it.id == pluginId) {
+                        it.copy(isInstalled = true, isDownloading = false, downloadProgress = 1f)
+                    } else {
+                        it
+                    }
+                }
+                val installedIds = updated.filter { it.isInstalled }.map { it.id }.toSet()
+                repository.setInstalledPluginIds(installedIds)
+                _uiState.update {
+                    it.copy(
+                        toolchainPlugins = updated,
+                        aiStatusMessage = "✓ Installed ${target.name} (${target.version}) — Debugger & Compiler Ready"
+                    )
+                }
+            }
+        }
+    }
+
+    fun installAllLanguageSdks() {
+        viewModelScope.launch {
+            val allUpdated = _uiState.value.toolchainPlugins.map {
+                it.copy(isInstalled = true, isDownloading = false, downloadProgress = 1f)
+            }
+            val installedIds = allUpdated.map { it.id }.toSet()
+            repository.setInstalledPluginIds(installedIds)
+            _uiState.update {
+                it.copy(
+                    toolchainPlugins = allUpdated,
+                    aiStatusMessage = "✓ All 6 Language SDKs & IDE Debugger Plugins installed"
+                )
+            }
         }
     }
 
@@ -555,6 +674,7 @@ class EditorViewModel(
                     activeTarget = initialTarget,
                     isFocusedSingleSectionMode = firstSec != null,
                     focusedSectionId = firstSec?.id,
+                    closedTabSectionIds = emptySet(),
                     newlyInsertedSectionId = null,
                     activeIslandDropdown = IslandDropdownMenu.NONE,
                     hasUnsavedChanges = false,
@@ -884,6 +1004,7 @@ class EditorViewModel(
                 activeTarget = ActiveEditorTarget.SectionCode(targetSec.id, targetSec.orderIndex),
                 isFocusedSingleSectionMode = true,
                 focusedSectionId = targetSec.id,
+                closedTabSectionIds = state.closedTabSectionIds - targetSec.id,
                 activeIslandDropdown = IslandDropdownMenu.NONE,
                 aiStatusMessage = "Switched to §${targetSec.orderIndex + 1} [${targetSec.effectiveLearnedConceptTag}]"
             )
