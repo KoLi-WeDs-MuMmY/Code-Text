@@ -34,6 +34,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoFixHigh
@@ -145,7 +146,10 @@ enum class LeftRailIdeTool {
     NONE,
     DIAGNOSTICS,
     STRUCTURE_AND_FIND,
-    LINE_ACTIONS
+    LINE_ACTIONS,
+    COLOR_PALETTE,
+    AI_ASSISTANT,
+    EXPORT_AND_COPY
 }
 
 private data class IdeColorPreset(
@@ -197,6 +201,9 @@ fun KotlinCodeSectionCard(
     onDeactivateLeftRailTool: () -> Unit = {},
     onSelectLanguage: (com.example.model.LanguageType) -> Unit = {},
     onSelectThemeOverride: (com.example.ui.theme.AppThemeId?) -> Unit = {},
+    onOpenFileSettings: () -> Unit = {},
+    onRunCode: () -> Unit = {},
+    onExportOrCopyFile: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val defaultSyntaxColors = com.example.ui.theme.LocalKotlinSyntaxColors.current
@@ -233,21 +240,38 @@ fun KotlinCodeSectionCard(
                 showFindReplaceBar = true
                 showLiveTemplatesBar = false
                 showMetricsBar = false
+                showColorPalettePicker = false
             }
             LeftRailIdeTool.LINE_ACTIONS -> {
                 showLiveTemplatesBar = true
                 showFindReplaceBar = false
                 showMetricsBar = false
+                showColorPalettePicker = false
             }
             LeftRailIdeTool.DIAGNOSTICS -> {
                 showMetricsBar = true
                 showFindReplaceBar = false
                 showLiveTemplatesBar = false
+                showColorPalettePicker = false
+            }
+            LeftRailIdeTool.COLOR_PALETTE -> {
+                showColorPalettePicker = true
+                showFindReplaceBar = false
+                showLiveTemplatesBar = false
+                showMetricsBar = false
+            }
+            LeftRailIdeTool.AI_ASSISTANT -> {
+                showAiStudioMenu = true
+            }
+            LeftRailIdeTool.EXPORT_AND_COPY -> {
+                onExportOrCopyFile(true)
+                onDeactivateLeftRailTool()
             }
             LeftRailIdeTool.NONE -> {
                 showFindReplaceBar = false
                 showLiveTemplatesBar = false
                 showMetricsBar = false
+                showColorPalettePicker = false
             }
         }
     }
@@ -596,67 +620,30 @@ fun KotlinCodeSectionCard(
                         }
                     }
 
-                    // Center: Language Badge + Learned Concept Tag Pill
+                    // Center: Read-Only Language Badge (Click opens File Settings where language change requires warning confirmation) + Learned Concept Tag Pill
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        var showLangMenu by remember { mutableStateOf(false) }
                         Surface(
                             color = section.language.badgeColor.copy(alpha = 0.22f),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .border(1.dp, section.language.badgeColor, RoundedCornerShape(8.dp))
-                                .clickable { showLangMenu = true }
+                                .clickable { onOpenFileSettings() }
                                 .testTag("language_selector_chip_${section.orderIndex}")
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
                                 Text(
-                                    text = section.language.shortLabel,
+                                    text = "${section.language.shortLabel} • ${section.language.nativeExtension}",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = section.language.badgeColor
                                 )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Icon(
-                                    imageVector = Icons.Default.KeyboardArrowDown,
-                                    contentDescription = "Switch Language",
-                                    tint = section.language.badgeColor,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = showLangMenu,
-                                onDismissRequest = { showLangMenu = false }
-                            ) {
-                                com.example.model.LanguageType.entries.forEach { lang ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(
-                                                    text = lang.shortLabel,
-                                                    fontFamily = JetBrainsMonoFontFamily,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = lang.badgeColor
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(
-                                                    text = lang.displayName,
-                                                    fontFamily = JetBrainsMonoFontFamily,
-                                                    fontSize = 12.sp
-                                                )
-                                            }
-                                        },
-                                        onClick = {
-                                            onSelectLanguage(lang)
-                                            showLangMenu = false
-                                        }
-                                    )
-                                }
                             }
                         }
 
@@ -902,7 +889,11 @@ fun KotlinCodeSectionCard(
                     // ▶ Run in Apple cmd Simulator button
                     IconButton(
                         onClick = {
-                            terminalConsoleOutput = KotlinCodeEngine.simulateKotlinExecution(codeFieldValue.text)
+                            terminalConsoleOutput = com.example.code.CodeLanguageEngine.simulateExecutionForLanguage(
+                                codeFieldValue.text,
+                                section.language
+                            )
+                            onRunCode()
                         },
                         modifier = Modifier
                             .size(29.dp)
@@ -910,7 +901,7 @@ fun KotlinCodeSectionCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Run Kotlin Snippet in Terminal",
+                            contentDescription = "Run Code Snippet in Terminal",
                             tint = DarculaSageGreen,
                             modifier = Modifier.size(18.dp)
                         )
@@ -1091,17 +1082,37 @@ fun KotlinCodeSectionCard(
                         )
                     }
 
-                    // Copy Kotlin Code button
+                    // Copy Code button (with Toast & Banner feedback)
                     IconButton(
                         onClick = {
-                            clipboardManager.setText(AnnotatedString(section.codeContent))
+                            clipboardManager.setText(AnnotatedString(codeFieldValue.text))
+                            onExportOrCopyFile(false)
                         },
-                        modifier = Modifier.size(29.dp)
+                        modifier = Modifier
+                            .size(29.dp)
+                            .testTag("copy_code_button_${section.orderIndex}")
                     ) {
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Copy Kotlin Code",
+                            contentDescription = "Copy Code",
                             tint = DarculaMutedText,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+
+                    // Export / Share File button (Android Share/Save Dialog + Clipboard)
+                    IconButton(
+                        onClick = {
+                            onExportOrCopyFile(true)
+                        },
+                        modifier = Modifier
+                            .size(29.dp)
+                            .testTag("export_share_code_button_${section.orderIndex}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = "Export or Share Code File",
+                            tint = DarculaWarmAmber,
                             modifier = Modifier.size(14.dp)
                         )
                     }
@@ -1737,6 +1748,35 @@ fun KotlinCodeSectionCard(
                             .background(DarculaCanvasBg)
                             .onSizeChanged { codeViewportHeightPx = it.height }
                     ) {
+                        // Compute logical line character ranges (`\n`-delimited) so each gutter number row
+                        // is mathematically locked to the exact rendered pixel height of its corresponding
+                        // logical line in `codeLayoutResult` (preventing cumulative vertical drift!).
+                        val logicalLineRanges = remember(codeFieldValue.text) {
+                            val txt = codeFieldValue.text
+                            val list = mutableListOf<IntRange>()
+                            var startIdx = 0
+                            var i = 0
+                            while (i < txt.length) {
+                                if (txt[i] == '\n') {
+                                    list.add(startIdx..i)
+                                    startIdx = i + 1
+                                }
+                                i++
+                            }
+                            list.add(startIdx..txt.length)
+                            list
+                        }
+
+                        val defaultSingleLineHeightDp = remember(codeLayoutResult, density) {
+                            val layout = codeLayoutResult
+                            if (layout != null && layout.lineCount > 0) {
+                                val firstLinePx = (layout.getLineBottom(0) - layout.getLineTop(0)).coerceAtLeast(1f)
+                                with(density) { firstLinePx.toDp() }
+                            } else {
+                                lineHeightDp
+                            }
+                        }
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1753,7 +1793,7 @@ fun KotlinCodeSectionCard(
                                 .padding(top = 8.dp, bottom = if (isSingleSectionFocusMode) 88.dp else 8.dp),
                             verticalAlignment = Alignment.Top
                         ) {
-                            // Line Numbers Gutter (`1.`, `2.`, `3.` matching Sketch 1)
+                            // Line Numbers Gutter (`1.`, `2.`, `3.` locked 1:1 with `BasicTextField` line layout bounds)
                             Column(
                                 modifier = Modifier
                                     .width(48.dp)
@@ -1764,10 +1804,31 @@ fun KotlinCodeSectionCard(
                                 for (lineNum in 1..visibleLines) {
                                     val lineDiag = diagnostics.firstOrNull { it.line == lineNum }
                                     val isCurrentCursorLine = isCodeFocused && cursorInfo.line == lineNum
+                                    val rowHeightDp = run {
+                                        val layout = codeLayoutResult
+                                        val range = logicalLineRanges.getOrNull(lineNum - 1)
+                                        if (layout != null && range != null && layout.lineCount > 0) {
+                                            val textLen = codeFieldValue.text.length
+                                            val startChar = range.first.coerceIn(0, textLen)
+                                            val endChar = (if (range.last > range.first && range.last <= textLen && codeFieldValue.text.getOrNull(range.last) == '\n') {
+                                                range.last - 1
+                                            } else {
+                                                range.last
+                                            }).coerceIn(startChar, textLen)
+                                            val startVis = layout.getLineForOffset(startChar)
+                                            val endVis = layout.getLineForOffset(endChar)
+                                            val topPx = layout.getLineTop(startVis)
+                                            val bottomPx = layout.getLineBottom(endVis)
+                                            val heightPx = (bottomPx - topPx).coerceAtLeast(1f)
+                                            with(density) { heightPx.toDp() }
+                                        } else {
+                                            defaultSingleLineHeightDp
+                                        }
+                                    }
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(lineHeightDp)
+                                            .height(rowHeightDp)
                                             .background(
                                                 if (isCurrentCursorLine) {
                                                     DarculaActiveLineBg
@@ -1791,7 +1852,7 @@ fun KotlinCodeSectionCard(
                                         Text(
                                             text = "$lineNum.",
                                             fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 12.sp,
+                                            fontSize = 13.sp,
                                             lineHeight = 22.sp,
                                             style = androidx.compose.ui.text.TextStyle(
                                                 platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
@@ -1812,10 +1873,19 @@ fun KotlinCodeSectionCard(
                             }
 
                             // Subtle Vertical Gutter Divider
+                            val totalGutterHeightDp = run {
+                                val layout = codeLayoutResult
+                                if (layout != null && layout.lineCount > 0) {
+                                    val renderedTotalDp = with(density) { layout.size.height.toDp() }
+                                    maxOf(renderedTotalDp, defaultSingleLineHeightDp * visibleLines)
+                                } else {
+                                    defaultSingleLineHeightDp * visibleLines
+                                }
+                            }
                             Box(
                                 modifier = Modifier
                                     .width(1.dp)
-                                    .height(lineHeightDp * visibleLines)
+                                    .height(totalGutterHeightDp)
                                     .background(DarculaBorder)
                             )
 
@@ -1823,7 +1893,7 @@ fun KotlinCodeSectionCard(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .heightIn(min = lineHeightDp * visibleLines)
+                                    .heightIn(min = totalGutterHeightDp)
                             ) {
                                 BasicTextField(
                                     value = codeFieldValue,
@@ -1844,7 +1914,7 @@ fun KotlinCodeSectionCard(
                                     },
                                     textStyle = TextStyle(
                                         fontFamily = JetBrainsMonoFontFamily,
-                                        fontSize = 13.5.sp,
+                                        fontSize = 13.sp,
                                         lineHeight = 22.sp,
                                         color = DarculaBrightText,
                                         platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
@@ -1859,7 +1929,7 @@ fun KotlinCodeSectionCard(
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .heightIn(min = lineHeightDp * visibleLines)
+                                                .heightIn(min = totalGutterHeightDp)
                                                 .padding(horizontal = 10.dp)
                                         ) {
                                             if (codeFieldValue.text.isEmpty()) {

@@ -171,7 +171,8 @@ fun KtScribeApp(
                     onSetBottomDrawerTab = editorViewModel::setBottomDrawerTab,
                     onSetBottomDrawerHeightFraction = editorViewModel::setBottomDrawerHeightFraction,
                     onClearTerminal = editorViewModel::clearTerminalOutput,
-                    onDismissExtensionRenameWarning = editorViewModel::dismissExtensionRenameWarning
+                    onDismissExtensionRenameWarning = editorViewModel::dismissExtensionRenameWarning,
+                    onShowStatusToast = editorViewModel::showStatusToast
                 )
             }
 

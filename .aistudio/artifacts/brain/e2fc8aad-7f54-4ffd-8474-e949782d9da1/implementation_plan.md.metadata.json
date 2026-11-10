@@ -1,6 +1,6 @@
 {
-  "summary":  "Architectural implementation plan for fixing code line spacing, MIUI-style floating window presets, native file extensions (.kt, .py, .java, etc.) in xScribe containers, accurate multi-language syntax debugging, right-shifted cursor suggestions, IDE features tracker (IDE.md), extension rename guard, and sliding bottom command/debug drawer.",
-  "updatedAt":  "2026-11-09T07:22:32.076209001Z",
+  "summary":  "Implementation plan for pixel-locked gutter & code line heights, moving language switching exclusively into File Settings with a mandatory confirmation warning popup, reorganizing primary actions into the Top Row and editor/export tools into the Left Rail, and implementing full Export/Share & Copy functionality with toast confirmation.",
+  "updatedAt":  "2026-11-10T12:57:56.214684212Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

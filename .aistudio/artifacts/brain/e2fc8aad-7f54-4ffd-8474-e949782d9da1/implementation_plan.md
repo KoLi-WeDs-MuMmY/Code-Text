@@ -1,167 +1,95 @@
-# IDE Engine & Workspace Architecture Plan
+# KtScribe IDE — Precision Line Alignment, File Settings Language Guard, Top/Left Toolbar Re-Architecture & Export Flow
 
-## Executive Summary
-This update refines the code editor typography and gutter line alignment, implements MIUI/HyperOS-style vertical and horizontal floating window presets with smooth spring physics, establishes real language file packaging inside `.xScribe` containers (`main.py`, `main.kt`, `Main.java` + `explanation.txt`), rebuilds the multi-language compiler & debugger engine with accurate syntax validation, shifts the floating autocomplete popup further right to keep the typing area unobstructed, introduces the permanent `IDE.md` registry with strict update protocols, adds extension rename locks with warning modals, and delivers a desktop-IDE bottom drawer with Terminal, Debugger, and Problems tabs.
-
----
+This update eliminates the vertical drift between gutter line numbers and code text, removes the accidental single-click language switcher from the main editor header in favor of a confirmation-guarded selector inside File Settings, consolidates primary workspace actions (`Explain`, `Files`, `Terminal`, `Run`, `Settings`) into the Top Bar while placing secondary editor/export tools in the Left Rail, and wires working Android Share/Save and Clipboard export actions with visual toast confirmation.
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> The following user preferences were confirmed in Phase 1 clarification:
-> - **Floating Presets**: Toggle button in window header plus auto-snap by drag aspect ratio (Vertical portrait preset ~340x520dp vs. Horizontal landscape preset ~560x360dp, matching user screenshots).
-> - **Bottom Command Block**: IDE bottom drawer sliding up from the downside with dedicated tabs for **Terminal**, **Debugger**, and **Problems**.
-> - **File Structure**: File tabs and headers display the native code file (`main.kt`, `main.py`, `Main.java`, etc.) with language color badges, while the parent container manages the `.xScribe` package.
+> All core UX and functional decisions have been confirmed and incorporated into this plan:
+
+- **Confirmed Decision 1 (Language Change Behavior)**: Changing a file's language/extension is removed from the main code card header and restricted to **File Settings**. Selecting a new language in File Settings triggers a mandatory confirmation warning popup explaining that the existing code may not compile or run under the new language syntax; upon confirmation, the existing code is preserved as-is and the file extension and language syntax are updated.
+- **Confirmed Decision 2 (Top Row vs. Left Rail Hierarchy)**:
+  - **Top Row**: `Explain`, `Files`, `Terminal` (toggles the bottom IDE drawer for Terminal/Debugger/Problems), `Run ▶`, `⌘P`, and `Settings` (opens File Settings). The redundant bottom status bar is removed so `Terminal` is never hidden at the very bottom corner.
+  - **Left Rail**: Editor and file tools including `{ }` Format, `!` Diagnostics/Problems, `🔍` Find & Structure, `⌘/` Line Actions, `🎨` Color Picker, `✨` AI Tools, `📤` Export/Copy File, `+` New File, and `↶` Undo.
+- **Confirmed Decision 3 (Export & Copy Delivery)**: Triggering Export or Copy both copies the formatted payload to the system clipboard with an immediate confirmation banner and launches the Android system Share/Save sheet (`Intent.ACTION_SEND`) so the user can save or share the `.kt`, `.py`, `.java`, `.ktscribe`, or `.md` file directly.
 
 ---
 
 ## 1. Overview & Core Concept
 
-### What It Delivers
-1. **Pixel-Perfect Typography & Zero Drift**:
-   - Unifies `BasicTextField` and line gutter font metrics using identical `PlatformTextStyle(includeFontPadding = false)`, `LineHeightStyle(alignment = Center, trim = None)`, and line height (`22.sp`).
-   - Eliminates excessive blank line gaps and vertical cursor displacement shown in screenshot Image 4.
-2. **MIUI / HyperOS Floating Window Presets**:
-   - **Vertical Portrait Preset** (~340dp × 520dp, ~9:16 aspect ratio): Ideal for mobile code previews, AI chat, and document notes.
-   - **Horizontal Landscape Preset** (~560dp × 360dp, ~16:9 aspect ratio): Ideal for wide code terminals, split diffs, and side-by-side inspection.
-   - **Mini & Full Tiers**: Compact pill preview and maximized workspace.
-   - **Smooth Spring Physics**: Window snaps cleanly to the nearest dimension preset upon release, avoiding awkward intermediate sizes.
-   - **Header Toggle**: One-tap `⬍ Vertical` / `⬌ Horizontal` switch button in the window header.
-3. **Real Language File Extensions & xScribe Container Model**:
-   - **Container**: `ProjectName.xScribe` (e.g. `MyProject.ktscribe`, `Script.pyscribe`, `App.javascribe`).
-   - **Code File**: Native code file with real extension: `main.kt`, `main.py`, `Main.java`, `main.cpp`, `main.dart`, `main.rs`.
-   - **Explanation File**: `explanation.txt` (or `.md`).
-   - Editor tabs and window headers display the native filename with its language badge color.
-4. **Accurate Multi-Language Debugger & Compiler Diagnostics**:
-   - Real syntax checking for Python (indentation, colons, def/class signatures), Java (class declarations, semicolons, brackets), Kotlin, C++, Dart, and Rust.
-   - Inline error squiggles, gutter warning icons, and direct error jumping.
-   - Debug execution simulation reporting exact line errors, stack trace, and execution metrics.
-5. **Right-Shifted Autocomplete Popup**:
-   - Autocomplete suggestions are anchored `+28.dp` to the right of the cursor caret with bounds clamping, ensuring the word being typed remains 100% visible.
-6. **Dedicated `IDE.md` Feature Tracker**:
-   - Creates `/IDE.md` documenting all implemented IDE features and queued upcoming features.
-   - Embedded prompt directive requiring AI updates on every subsequent turn.
-7. **Extension Rename Protection**:
-   - When renaming files, the extension is locked. If the user attempts to alter the extension, a warning dialog appears: *"File extension cannot be changed. Modifying the file type will break compilation and debugging because syntax and runtimes differ."*
-8. **Sliding Bottom Command & Debug Drawer**:
-   - Replaces the floating command window with a sliding IDE bottom drawer.
-   - Three tabs: **Terminal** (build & run output), **Debugger** (variable inspector, step simulation), and **Problems** (live syntax errors).
-   - Expandable heights: Minimized bar (36dp), Half (40% screen), and Full (72% screen).
+- **What It Does**: Fixes the visual line-height mismatch between the gutter numbers and `BasicTextField` code lines, prevents accidental single-tap language switches on the main canvas, elevates Terminal/Debug access to the top bar, and makes every Copy/Export button deliver immediate clipboard + Android Share sheet output with toast feedback.
+- **Key Value**: Gives developers rock-solid cursor and line-number alignment at any system font scale, safe language configuration inside File Settings, and ergonomic access to Terminal and Export tools.
 
 ---
 
 ## 2. User Experience & Visual Design
 
-### A. Code Editor Typography & Spacing
-- **Gutter & Text Synchronization**:
-  - Gutter numbers and code text share identical line height (`22.sp`), padding (`0.dp` vertical inside line container), and font metrics (`JetBrains Mono`, `13.5.sp`, `includeFontPadding = false`).
-  - Gutter row background highlights the active cursor line seamlessly across both the gutter and editor text.
-- **Unobstructed Floating Suggestion Box**:
-  - Placed at `cursorRect.right + 28.dp`.
-  - JetBrains-style badges (`{}`, `K`, `PY`, `v`, `m`) with dark obsidian elevation and cyan/amber highlights.
-
-### B. MIUI / HyperOS Floating Window Presets
-- Modeled after the user's uploaded MIUI floating window screenshots:
-  - **Portrait Mode**: 340dp width × 520dp height.
-  - **Landscape Mode**: 560dp width × 360dp height.
-  - Smooth scale and translation animations powered by Compose `spring(dampingRatio = 0.82f, stiffness = 380f)`.
-  - Top header features: Traffic light dots (Close, Minimize, Expand), Mode Toggle (`⬍ / ⬌`), and Title badge.
-
-### C. Bottom Command & Debug Drawer
-- Slides up from the bottom edge with a sleek drag handle:
-  - **Tabs Bar**: `[ >_ Terminal ]` `[ 🪲 Debugger (0) ]` `[ ⚠ Problems (1) ]`.
-  - **Controls**: Run button (`▶`), Clear output (`⊘`), Expand/Collapse toggle (`▲ / ▼`), Close (`✕`).
-  - Dark terminal theme with colored syntax output (`stdout` in emerald/cream, `stderr` in crimson).
+- **Pixel-Locked Gutter & Code Line Alignment**:
+  - Previously, the gutter row height used `22.dp` (density-independent pixels) while `BasicTextField` used `lineHeight = 22.sp` (scaled pixels) with `fontSize = 13.5.sp`, causing cumulative vertical drift across lines (`1.` through `9.`).
+  - Now, every gutter number row reads the exact rendered line top and height directly from `TextLayoutResult.getLineTop(i)` and `getLineBottom(i)` (with an exact `with(density) { 22.sp.toDp() }` fallback before initial layout), guaranteeing 1:1 pixel alignment between every line number and its corresponding code line—even when lines wrap or system font scaling is active.
+- **Read-Only Language Badge on Main Canvas + Guarded Switcher in File Settings**:
+  - On the main editor card, the language badge (`KT`, `PY`, `JAVA`, `C++`, `DART`, `RS`) is a clean indicator pill without a dropdown arrow; tapping it opens **File Settings**.
+  - Inside **File Settings**, tapping a different language opens a dedicated **Language & Extension Change Warning Dialog** warning: *"Changing the file type from Kotlin (.kt) to Python (.py) means existing code contents may not compile or run under the new language syntax. Do you want to proceed?"*
+- **Top Bar & Left Rail Ergonomics**:
+  - The bottom-right status bar (`>_ Terminal` at the very bottom edge) is removed so it never gets cut off by screen curves or gesture bars.
+  - The **Top Bar** houses the primary workspace pills: `Explain`, `Files`, `Terminal` (opens/toggles the IDE Terminal/Debugger/Problems drawer), `Run ▶`, `⌘P`, and `⚙ File Settings`.
+  - The **Left Circular IDE Rail** houses the secondary coding and file utilities: `{ }` Format, `!` Diagnostics, `🔍` Find/Replace, `⌘/` Line Actions, `🎨` Color Palette, `✨` AI Assistant Menu, `📤` Export & Copy File, `+` New File, and `↶` Undo.
 
 ---
 
-## 3. Architecture & Component Diagram
+## 3. Key Product Decisions & Trade-Offs
+
+- **Decision 1: `TextLayoutResult`-Driven Gutter Positioning**
+  - *Chosen Approach*: Drive each gutter line number's vertical height from `codeLayoutResult.getLineBottom(lineIdx) - codeLayoutResult.getLineTop(lineIdx)` converted via `LocalDensity`, and ensure both gutter `Text` and `BasicTextField` share identical `fontSize = 13.sp` and `lineHeight = 22.sp`.
+  - *Why*: `dp` and `sp` diverge whenever Android's system font scale is not `1.0` (e.g. `1.15x` or `1.3x` on tablets/phones). Measuring directly from `TextLayoutResult` eliminates any possibility of drift.
+- **Decision 2: Confirmation-Guarded Language Change in File Settings**
+  - *Chosen Approach*: Require explicit confirmation in File Settings before switching `LanguageType`, preserving the user's code while updating the language extension and syntax highlighter.
+  - *Why*: Prevents accidental single-click language changes while editing code and warns the user about syntax/compiler mismatches without destroying their written code.
+
+---
+
+## 4. Technical Architecture & Data Strategy
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        DocumentEditorScreen                            │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │ SketchTopBarWithFourPills (Files, Explain, AI Guide, Run, Vault) │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │ Native File Switcher Tabs: [ main.kt ] [ main.py ] [ Main.java ] │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│  ┌─────────────────────────────────┬────────────────────────────────┐  │
-│  │       KotlinCodeSectionCard     │    MacDraggableFloatingWindow  │  │
-│  │  ┌──────────┬────────────────┐  │    (MIUI Presets: ⬍ / ⬌)       │  │
-│  │  │ Gutter   │ BasicTextField │  │    - Explanation (.txt)        │  │
-│  │  │ (Ln 1..) │ (Zero Drift)   │  │    - AI Guide                  │  │
-│  │  └──────────┴────────────────┘  │    - Files Explorer            │  │
-│  │       ▲                         │                                │  │
-│  │  [Right-Shifted Autocomplete]   │                                │  │
-│  └─────────────────────────────────┴────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │             Sliding IDE Bottom Command & Debug Drawer            │  │
-│  │  [ Terminal ]  [ Debugger ]  [ Problems (0) ]           [ ▲ / ▼ ]│  │
-│  │  - Kotlinc / Python3 / Javac / G++ compilation output & traces   │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────┬─────────────────────────────────────┘
-                                   │
-                                   ▼
-          ┌─────────────────────────────────────────────────┐
-          │               CodeLanguageEngine                │
-          │  - Multi-language AST syntax validator          │
-          │  - Diagnostics engine (line/col/severity)       │
-          │  - Debugger simulation & compiler runner        │
-          └─────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│                             TOP WORKSPACE BAR                              │
+│  [← File.kt] [Vault]      [Explain] [Files] [>_ Terminal] [Run ▶] [⌘P] [⚙] │
+└──────────────────────────────────────┬─────────────────────────────────────┘
+                                       │
+       ┌───────────────────────────────┴───────────────────────────────┐
+       ▼                                                               ▼
+┌──────────────────────────┐                           ┌─────────────────────┐
+│   LEFT CIRCULAR RAIL     │                           │  FILE SETTINGS (⚙)  │
+│  • { } Format Code       │                           │  • File Name Input  │
+│  • !   Diagnostics       │                           │  • Language Picker  │
+│  • 🔍  Find & Replace    │                           │    └─► Warning Popup│
+│  • ⌘/  Line Actions      │                           │        (Keep Code & │
+│  • 🎨  Color Picker      │                           │         Switch Ext) │
+│  • ✨  AI Actions        │                           │  • Theme Override   │
+│  • 📤  Export / Copy     │                           │  • Export & Share   │
+│  • +   New Code File     │                           └─────────────────────┘
+│  • ↶   Undo              │
+└────────────┬─────────────┘
+             │
+             ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                   CODE EDITOR CANVAS (TextLayoutResult Sync)               │
+│  Gutter Line [i] Height == codeLayoutResult.getLineBottom(i) - LineTop(i)  │
+│  1.  sealed interface NoteUiState {                                        │
+│  2.      data object Loading : NoteUiState                                 │
+│  3.  }                                                                     │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## 4. Technical Strategy & Implementation Details
-
-### 1. Typography & Spacing Fix
-- In `KotlinCodeSectionCard.kt`:
-  - Set `TextStyle(fontFamily = JetBrainsMonoFontFamily, fontSize = 13.5.sp, lineHeight = 22.sp, platformStyle = PlatformTextStyle(includeFontPadding = false), lineHeightStyle = LineHeightStyle(alignment = Alignment.Center, trim = Trim.None))`.
-  - Apply the exact same `TextStyle` to the gutter line numbers.
-  - Remove rogue vertical padding inside `Row` and `decorationBox` that caused line offsets.
-
-### 2. MIUI Floating Presets in `MacFloatingIslandComponents.kt`
-- Define `enum class WindowOrientationPreset { VERTICAL, HORIZONTAL }`.
-- Preset dimensions:
-  - Vertical: `widthDp = 340f`, `heightDp = 520f`.
-  - Horizontal: `widthDp = 560f`, `heightDp = 360f`.
-- Drag release calculates aspect ratio (`width / height`). If ratio > 1.25 -> snaps to `HORIZONTAL`; else snaps to `VERTICAL`.
-- Header button allows direct toggle between `VERTICAL` and `HORIZONTAL`.
-
-### 3. Native File Naming in `EditorModels.kt`
-- Add `val nativeFileName: String` to `CodeSectionUiModel`:
-  - Default: `main.kt` for Kotlin, `main.py` for Python, `Main.java` for Java, `main.cpp` for C++, `main.dart` for Dart, `main.rs` for Rust.
-- Rename handler verifies extension: if extension changes, triggers `showExtensionLockedAlert = true`.
-
-### 4. Compiler & Debugger Engine in `CodeLanguageEngine.kt`
-- Enhance syntax validation for Python, Java, Kotlin, C++, Dart, Rust:
-  - Python: Validates indent levels, missing `:` on def/if/for/while, unclosed strings.
-  - Java: Validates class declaration, main method signature, semicolons, brackets.
-  - Kotlin: Validates braces, keyword syntax, string templates.
-- Returns rich `LanguageDiagnostic` items with line numbers, error descriptions, and quick fixes.
-
-### 5. Right-Shifted Autocomplete Popup
-- Position calculation: `popupX = cursorRect.right + 28.dp`.
-- Width: `240.dp`, clamped within container width so it never overflows off-screen.
-
-### 6. Sliding Bottom Command & Debug Drawer in `DocumentEditorScreen.kt`
-- Replace floating run window with a docked bottom sheet / drawer:
-  - Header: Tabs (`Terminal`, `Debugger`, `Problems`), Run button, Clear, Minimize/Expand, Close.
-  - Terminal view: shows compiler execution, standard output, error streams, timing, exit code.
-  - Debugger view: shows line execution status, simulated local variables, call stack.
-  - Problems view: lists all syntax errors with clickable navigation to jump straight to the offending line.
-
-### 7. Feature Tracker Registry `/IDE.md`
-- Create `/IDE.md` with:
-  - Implemented IDE Features checklist.
-  - Planned IDE Features queue.
-  - AI maintenance instruction block.
-
----
-
-## 5. Verification & Test Plan
-- **Typography Check**: Ensure 1st, 10th, and 50th line numbers match text lines with 0px offset.
-- **MIUI Preset Check**: Drag corner or tap header toggle to verify smooth snap between portrait (340x520) and landscape (560x360).
-- **Extension Lock Check**: Attempt to rename `.py` to `.kt` and verify the warning modal appears.
-- **Compilation & Test**: Run `compile_applet` and `gradle :app:testDebugUnitTest` to guarantee clean build.
+### Interactive Component & State Mapping
+1. **Gutter & Code Line Sync**:
+   - Both gutter and `BasicTextField` use `fontSize = 13.sp`, `lineHeight = 22.sp`, `PlatformTextStyle(includeFontPadding = false)`, and `LineHeightStyle(Alignment.Center, Trim.None)`.
+   - Each gutter row for `lineNum` (`1..visibleLines`) calculates its exact height from `codeLayoutResult`: if `lineIndex < layout.lineCount`, height is `with(density) { (layout.getLineBottom(lineIndex) - layout.getLineTop(lineIndex)).toDp() }`; otherwise `with(density) { 22.sp.toDp() }`.
+2. **Guarded Language Change in File Settings**:
+   - Main editor card header removes the `DropdownMenu` from the language badge; clicking the badge opens `FileSettingsDialog`.
+   - In `FileSettingsDialog`, clicking another `LanguageType` sets `pendingLanguageChange = lang`, opening an `AlertDialog` warning that existing file contents may not run or compile under the new extension. Confirming calls `onUpdateLanguage(lang)` (which preserves `codeContent` as-is and updates `language`) and shows a status banner.
+3. **Top Bar & Left Rail Consolidation**:
+   - Remove `IdeBottomStatusBar` from `DocumentEditorScreen`'s `Scaffold.bottomBar`.
+   - Add `>_ Terminal` pill to `SketchTopBarWithFourPills` to toggle `IdeBottomDrawer`, and move the clutter of small right-side card icons into `SketchLeftCircularIdeRail` (`COLOR_PALETTE`, `AI_TOOLS`, `EXPORT_COPY`).
+4. **Export & Copy Execution**:
+   - Add `exportAndShareText(context, fileName, content)` helper using `Intent.ACTION_SEND` (`text/plain`) + `Intent.createChooser` alongside `clipboardManager.setText(AnnotatedString(content))` and `onShowStatusBanner("Copied & ready to share/save $fileName")`.

@@ -76,6 +76,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
@@ -102,7 +103,6 @@ import com.example.ui.components.CommandPaletteDropdownContent
 import com.example.ui.components.ExplanationWindowBodyContent
 import com.example.ui.components.FolderAndSectionsDropdownContent
 import com.example.ui.components.IdeBottomDrawer
-import com.example.ui.components.IdeBottomStatusBar
 import com.example.ui.components.KotlinCodeSectionCard
 import com.example.ui.components.FileSettingsDialog
 import com.example.ui.components.LeftRailIdeTool
@@ -110,6 +110,7 @@ import com.example.ui.components.MacDraggableFloatingWindow
 import com.example.ui.components.ResizableIslandDropdownWindow
 import com.example.ui.components.SketchLeftCircularIdeRail
 import com.example.ui.components.SketchTopBarWithFourPills
+import com.example.ui.components.exportOrCopyCodePayload
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.Tier0OuterTrenchBg
 import com.example.ui.theme.Tier2CompletionSelectedBg
@@ -183,8 +184,10 @@ fun DocumentEditorScreen(
     onSetBottomDrawerHeightFraction: (Float) -> Unit = {},
     onClearTerminal: () -> Unit = {},
     onDismissExtensionRenameWarning: () -> Unit = {},
+    onShowStatusToast: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val clipboardManager = LocalClipboardManager.current
     val density = LocalDensity.current
@@ -245,17 +248,21 @@ fun DocumentEditorScreen(
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 // 1. Bezel-Safe Top Frame Bar:
-                // Left back arrow `←` + `.ktscribe` file badge + Top-Right 4 horizontal oval pills
+                // Left back arrow `←` + `.ktscribe` file badge + Top-Right Primary Workspace Row (Explain, Files, Terminal, Run, AI Guide, ⌘P, Settings)
                 SketchTopBarWithFourPills(
                     activeFolder = document,
                     activeSection = activeSection,
                     openFloatingWindows = uiState.openFloatingWindows,
                     activeDropdown = uiState.activeIslandDropdown,
+                    isBottomDrawerOpen = uiState.isBottomDrawerOpen,
                     syntaxErrorCount = syntaxErrors.size,
                     hasUnsavedChanges = uiState.hasUnsavedChanges,
                     secondsUntilAutoSave = uiState.secondsUntilAutoSave,
                     onBackToFolders = onCloseDocument,
                     onToggleFloatingWindow = onToggleFloatingWindow,
+                    onToggleTerminalDrawer = {
+                        onToggleBottomDrawer(uiState.activeBottomDrawerTab)
+                    },
                     onToggleCommandPalette = {
                         onToggleIslandDropdown(IslandDropdownMenu.COMMAND_PALETTE)
                     },
@@ -349,7 +356,7 @@ fun DocumentEditorScreen(
                             }
                         }
 
-                        // Copy Active `.ktscribe` File Bundle or Full Folder
+                        // Export / Share & Copy Active File Bundle
                         Surface(
                             color = Color(0xFF1F1C1A),
                             shape = RoundedCornerShape(8.dp),
@@ -359,9 +366,15 @@ fun DocumentEditorScreen(
                                 .clickable {
                                     val payload = activeSection?.toKtScribeFilePayload(document.title)
                                         ?: onExportMarkdown()
-                                    if (payload.isNotBlank()) {
-                                        clipboardManager.setText(AnnotatedString(payload))
-                                    }
+                                    val fileName = activeSection?.containerFileName ?: "${document.title}.md"
+                                    exportOrCopyCodePayload(
+                                        context = context,
+                                        clipboardManager = clipboardManager,
+                                        fileName = fileName,
+                                        content = payload,
+                                        launchShareSheet = true,
+                                        onStatusBanner = onShowStatusToast
+                                    )
                                 }
                                 .testTag("export_markdown_button")
                         ) {
@@ -370,14 +383,14 @@ fun DocumentEditorScreen(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Copy .ktscribe File",
-                                    tint = Color(0xFFA39C93),
+                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    contentDescription = "Export or Share File",
+                                    tint = Color(0xFFD4883A),
                                     modifier = Modifier.size(11.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Copy .ktscribe",
+                                    text = "Export / Copy",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 10.sp,
                                     color = Color(0xFFE6E1DC)
@@ -431,14 +444,6 @@ fun DocumentEditorScreen(
                     }
                 }
             }
-        },
-        bottomBar = {
-            IdeBottomStatusBar(
-                activeSection = activeSection,
-                isDrawerOpen = uiState.isBottomDrawerOpen,
-                activeTab = uiState.activeBottomDrawerTab,
-                onToggleDrawer = onToggleBottomDrawer
-            )
         },
         modifier = modifier
             .fillMaxSize()
@@ -508,7 +513,17 @@ fun DocumentEditorScreen(
                                 }
                             }
                         },
-                        onInsertNewSection = onInsertCodeBlock
+                        onInsertNewSection = onInsertCodeBlock,
+                        onExportOrCopyFile = {
+                            exportOrCopyCodePayload(
+                                context = context,
+                                clipboardManager = clipboardManager,
+                                fileName = activeSection.nativeFileName,
+                                content = activeSection.codeContent,
+                                launchShareSheet = true,
+                                onStatusBanner = onShowStatusToast
+                            )
+                        }
                     )
 
                     // Main Full-Screen Code Block / Adjustable Split-Screen Workspace
@@ -559,7 +574,21 @@ fun DocumentEditorScreen(
                                             onRequestAiRefactor = onRequestAiRefactor,
                                             onRequestAiKDoc = onRequestAiKDoc,
                                             onToggleSectionDivider = onToggleSectionDivider,
-                                            onDeleteSection = onDeleteSection
+                                            onDeleteSection = onDeleteSection,
+                                            onSelectLanguage = { lang -> onUpdateSectionLanguage(activeSection.id, lang) },
+                                            onSelectThemeOverride = { theme -> onUpdateSectionThemeOverride(activeSection.id, theme) },
+                                            onOpenFileSettings = { showFileSettingsDialog = true },
+                                            onRunCode = onRunActiveSectionInTerminal,
+                                            onExportOrCopyFile = { openShare ->
+                                                exportOrCopyCodePayload(
+                                                    context = context,
+                                                    clipboardManager = clipboardManager,
+                                                    fileName = activeSection.nativeFileName,
+                                                    content = activeSection.codeContent,
+                                                    launchShareSheet = openShare,
+                                                    onStatusBanner = onShowStatusToast
+                                                )
+                                            }
                                         )
                                     }
 
@@ -692,7 +721,21 @@ fun DocumentEditorScreen(
                                             onRequestAiRefactor = onRequestAiRefactor,
                                             onRequestAiKDoc = onRequestAiKDoc,
                                             onToggleSectionDivider = onToggleSectionDivider,
-                                            onDeleteSection = onDeleteSection
+                                            onDeleteSection = onDeleteSection,
+                                            onSelectLanguage = { lang -> onUpdateSectionLanguage(activeSection.id, lang) },
+                                            onSelectThemeOverride = { theme -> onUpdateSectionThemeOverride(activeSection.id, theme) },
+                                            onOpenFileSettings = { showFileSettingsDialog = true },
+                                            onRunCode = onRunActiveSectionInTerminal,
+                                            onExportOrCopyFile = { openShare ->
+                                                exportOrCopyCodePayload(
+                                                    context = context,
+                                                    clipboardManager = clipboardManager,
+                                                    fileName = activeSection.nativeFileName,
+                                                    content = activeSection.codeContent,
+                                                    launchShareSheet = openShare,
+                                                    onStatusBanner = onShowStatusToast
+                                                )
+                                            }
                                         )
                                     }
 
@@ -832,7 +875,19 @@ fun DocumentEditorScreen(
                                     onToggleSectionDivider = onToggleSectionDivider,
                                     onDeleteSection = onDeleteSection,
                                     onSelectLanguage = { lang -> onUpdateSectionLanguage(activeSection.id, lang) },
-                                    onSelectThemeOverride = { theme -> onUpdateSectionThemeOverride(activeSection.id, theme) }
+                                    onSelectThemeOverride = { theme -> onUpdateSectionThemeOverride(activeSection.id, theme) },
+                                    onOpenFileSettings = { showFileSettingsDialog = true },
+                                    onRunCode = onRunActiveSectionInTerminal,
+                                    onExportOrCopyFile = { openShare ->
+                                        exportOrCopyCodePayload(
+                                            context = context,
+                                            clipboardManager = clipboardManager,
+                                            fileName = activeSection.nativeFileName,
+                                            content = activeSection.codeContent,
+                                            launchShareSheet = openShare,
+                                            onStatusBanner = onShowStatusToast
+                                        )
+                                    }
                                 )
                             }
                         }
@@ -1027,14 +1082,35 @@ fun DocumentEditorScreen(
             onUpdateFileName = { name -> onUpdateSectionTitle(activeSection.id, name) },
             onCopyFileBundle = {
                 val payload = activeSection.toKtScribeFilePayload(document.title)
-                clipboardManager.setText(AnnotatedString(payload))
+                exportOrCopyCodePayload(
+                    context = context,
+                    clipboardManager = clipboardManager,
+                    fileName = activeSection.containerFileName,
+                    content = payload,
+                    launchShareSheet = true,
+                    onStatusBanner = onShowStatusToast
+                )
             },
             onCopyRawCode = {
-                clipboardManager.setText(AnnotatedString(activeSection.codeContent))
+                exportOrCopyCodePayload(
+                    context = context,
+                    clipboardManager = clipboardManager,
+                    fileName = activeSection.nativeFileName,
+                    content = activeSection.codeContent,
+                    launchShareSheet = true,
+                    onStatusBanner = onShowStatusToast
+                )
             },
             onCopyFolderMarkdown = {
                 val md = onExportMarkdown()
-                clipboardManager.setText(AnnotatedString(md))
+                exportOrCopyCodePayload(
+                    context = context,
+                    clipboardManager = clipboardManager,
+                    fileName = "${document.title}.md",
+                    content = md,
+                    launchShareSheet = true,
+                    onStatusBanner = onShowStatusToast
+                )
             },
             onRequestAiNaming = { onRequestAiNaming(activeSection.id) },
             onRequestAiExplain = { onRequestAiExplain(activeSection.id) },
@@ -1535,7 +1611,10 @@ private fun FullScreenAppleCmdSectionEditor(
     onToggleSectionDivider: (Long) -> Unit,
     onDeleteSection: (Long) -> Unit,
     onSelectLanguage: (com.example.model.LanguageType) -> Unit = {},
-    onSelectThemeOverride: (com.example.ui.theme.AppThemeId?) -> Unit = {}
+    onSelectThemeOverride: (com.example.ui.theme.AppThemeId?) -> Unit = {},
+    onOpenFileSettings: () -> Unit = {},
+    onRunCode: () -> Unit = {},
+    onExportOrCopyFile: (Boolean) -> Unit = {}
 ) {
     KotlinCodeSectionCard(
         section = section,
@@ -1577,6 +1656,9 @@ private fun FullScreenAppleCmdSectionEditor(
         onToggleDivider = { onToggleSectionDivider(section.id) },
         onDeleteSection = { onDeleteSection(section.id) },
         onSelectLanguage = onSelectLanguage,
-        onSelectThemeOverride = onSelectThemeOverride
+        onSelectThemeOverride = onSelectThemeOverride,
+        onOpenFileSettings = onOpenFileSettings,
+        onRunCode = onRunCode,
+        onExportOrCopyFile = onExportOrCopyFile
     )
 }

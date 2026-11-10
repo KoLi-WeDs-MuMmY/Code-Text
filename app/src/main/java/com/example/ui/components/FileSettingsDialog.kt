@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,12 +23,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -51,7 +56,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,10 +69,56 @@ import com.example.ui.theme.AppThemeId
 import com.example.ui.theme.JetBrainsMonoFontFamily
 
 /**
+ * Shared utility for exporting, saving via Android Share/Save dialog, and copying code/bundle files
+ * with immediate Toast and status banner confirmation.
+ */
+fun exportOrCopyCodePayload(
+    context: android.content.Context,
+    clipboardManager: ClipboardManager,
+    fileName: String,
+    content: String,
+    launchShareSheet: Boolean,
+    onStatusBanner: (String) -> Unit = {}
+) {
+    val safeContent = content.ifBlank { "// Empty file: $fileName" }
+    clipboardManager.setText(AnnotatedString(safeContent))
+
+    val feedbackMessage = if (launchShareSheet) {
+        "✓ Exported & copied $fileName (${safeContent.lines().size} lines)"
+    } else {
+        "✓ Copied $fileName to clipboard (${safeContent.lines().size} lines)"
+    }
+    onStatusBanner(feedbackMessage)
+
+    try {
+        Toast.makeText(context, feedbackMessage, Toast.LENGTH_SHORT).show()
+    } catch (_: Exception) {
+        // Ignore in headless Robolectric/unit test environments
+    }
+
+    if (launchShareSheet) {
+        try {
+            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TITLE, fileName)
+                putExtra(Intent.EXTRA_SUBJECT, fileName)
+                putExtra(Intent.EXTRA_TEXT, safeContent)
+            }
+            val chooser = Intent.createChooser(sendIntent, "Save or Share $fileName").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+        } catch (_: Exception) {
+            // Safe fallback if no activity handles chooser in test environment
+        }
+    }
+}
+
+/**
  * File-specific settings dialog.
  * Differs from Main Studio Settings by focusing exclusively on active file properties:
  * - Active file name & extension
- * - Language selection & dedicated language directory (src/kotlin/, src/java/, src/python/, src/dart/)
+ * - Language selection & dedicated language directory (guarded by confirmation warning popup)
  * - Per-file theme override
  * - File formatting & export options
  */
@@ -88,6 +142,8 @@ fun FileSettingsDialog(
     var selectedIndentSpaces by remember { mutableStateOf(4) }
     var showLineNumbers by remember { mutableStateOf(true) }
     var wordWrapEnabled by remember { mutableStateOf(true) }
+    var pendingLanguageChange by remember { mutableStateOf<LanguageType?>(null) }
+    var exportStatusFeedback by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -221,7 +277,9 @@ fun FileSettingsDialog(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
                                 .clickable {
-                                    onUpdateLanguage(lang)
+                                    if (lang != activeSection.language) {
+                                        pendingLanguageChange = lang
+                                    }
                                 }
                                 .testTag("file_settings_lang_${lang.id}")
                         ) {
@@ -244,14 +302,14 @@ fun FileSettingsDialog(
                                     )
                                     Column {
                                         Text(
-                                            text = "${lang.displayName} (${lang.extension})",
+                                            text = "${lang.displayName} (${lang.nativeExtension})",
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.5.sp,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
-                                            text = "Directory: ${lang.directoryPath}",
+                                            text = "Directory: ${lang.directoryPath} • Bundle: ${lang.containerExtension}",
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 9.5.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -406,38 +464,76 @@ fun FileSettingsDialog(
 
                 HorizontalDivider()
 
-                // 5. EXPORT & SHARING
+                // 6. EXPORT & SHARING
                 Text(
-                    text = "Export Actions",
+                    text = "Export & Copy Actions",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
 
+                exportStatusFeedback?.let { statusMsg ->
+                    Surface(
+                        color = Color(0xFF1E3323),
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color(0xFF81C784),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = statusMsg,
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.5.sp,
+                                color = Color(0xFFE6E1DC),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    OutlinedButton(
-                        onClick = onCopyFileBundle,
+                    Button(
+                        onClick = {
+                            exportStatusFeedback = "Exported & copied ${activeSection.containerFileName} bundle!"
+                            onCopyFileBundle()
+                        },
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth().testTag("file_copy_bundle_btn")
                     ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Copy .ktscribe File Bundle", fontSize = 11.sp)
+                        Text("Export & Copy ${activeSection.containerFileName} Bundle", fontSize = 11.sp)
                     }
                     OutlinedButton(
-                        onClick = onCopyRawCode,
+                        onClick = {
+                            exportStatusFeedback = "Exported & copied ${activeSection.nativeFileName} raw code!"
+                            onCopyRawCode()
+                        },
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth().testTag("file_copy_raw_btn")
                     ) {
                         Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Copy Clean Raw Code (${activeSection.language.displayName})", fontSize = 11.sp)
+                        Text("Export & Copy Raw Code (${activeSection.nativeFileName})", fontSize = 11.sp)
                     }
                     OutlinedButton(
-                        onClick = onCopyFolderMarkdown,
+                        onClick = {
+                            exportStatusFeedback = "Exported & copied Folder Markdown (${folderTitle}.md)!"
+                            onCopyFolderMarkdown()
+                        },
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth().testTag("file_copy_md_btn")
                     ) {
@@ -449,7 +545,7 @@ fun FileSettingsDialog(
 
                 HorizontalDivider()
 
-                // 6. LINK TO GLOBAL STUDIO SETTINGS
+                // 7. LINK TO GLOBAL STUDIO SETTINGS
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
                     shape = RoundedCornerShape(10.dp),
@@ -506,4 +602,75 @@ fun FileSettingsDialog(
             }
         }
     )
+
+    // Mandatory Confirmation Warning Popup before changing File Extension / Language Type
+    pendingLanguageChange?.let { targetLang ->
+        AlertDialog(
+            onDismissRequest = { pendingLanguageChange = null },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = Color(0xFFFFB86C),
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        text = "Change File Type to ${targetLang.nativeExtension}?",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = Color(0xFFF1FA8C)
+                    )
+                }
+            },
+            text = {
+                Text(
+                    text = "You are changing '${activeSection.nativeFileName}' from ${activeSection.language.displayName} (${activeSection.language.nativeExtension}) to ${targetLang.displayName} (${targetLang.nativeExtension}).\n\n" +
+                        "• Your existing code contents will be kept as-is.\n" +
+                        "• Warning: The current file contents may not run, compile, or debug for ${targetLang.nativeExtension} because the syntax and runtime language differ.\n\n" +
+                        "Do you want to change the file extension to ${targetLang.nativeExtension}?",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    color = Color(0xFFE6E1DC)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onUpdateLanguage(targetLang)
+                        fileNameInput = "${activeSection.nativeFileName.substringBeforeLast(".")}${targetLang.nativeExtension}"
+                        pendingLanguageChange = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4883A)),
+                    modifier = Modifier.testTag("confirm_language_change_btn")
+                ) {
+                    Text(
+                        text = "Change to ${targetLang.nativeExtension}",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF161412)
+                    )
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { pendingLanguageChange = null },
+                    modifier = Modifier.testTag("cancel_language_change_btn")
+                ) {
+                    Text(
+                        text = "Cancel",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        color = Color(0xFFE6E1DC)
+                    )
+                }
+            },
+            containerColor = Color(0xFF1F1C1A),
+            tonalElevation = 10.dp
+        )
+    }
 }

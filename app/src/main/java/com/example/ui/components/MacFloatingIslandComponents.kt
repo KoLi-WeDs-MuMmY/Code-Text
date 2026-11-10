@@ -63,12 +63,14 @@ import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OpenInFull
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.VerticalSplit
 import androidx.compose.material3.AlertDialog
@@ -191,6 +193,8 @@ fun SketchTopBarWithFourPills(
     onToggleCommandPalette: () -> Unit,
     onOpenVaultModal: () -> Unit,
     onOpenSettings: () -> Unit,
+    isBottomDrawerOpen: Boolean = false,
+    onToggleTerminalDrawer: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -272,14 +276,13 @@ fun SketchTopBarWithFourPills(
             }
         }
 
-        // Top-Right: 4 Horizontal Oval Pills (matching the 4 green ovals at the top-right of Sketch 1 & 2)
-        // + Command Block (`⌘P`) and Settings
+        // Top-Right Primary Workspace Row: Explain, Files, Terminal, Run ▶, AI Guide, ⌘P, File Settings
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Oval Pill 1: Explain Floating Window
+            // Pill 1: Explain Floating Window
             TopRightOvalWindowPill(
                 label = FloatingWindowType.EXPLANATION.pillLabel,
                 badge = activeSection?.let { "§${it.orderIndex + 1}" },
@@ -289,7 +292,7 @@ fun SketchTopBarWithFourPills(
                 testTag = "island_explanation_window_toggle"
             )
 
-            // Oval Pill 2: Folders & Sections Floating Window
+            // Pill 2: Files & Folders Floating Window
             TopRightOvalWindowPill(
                 label = FloatingWindowType.FOLDERS.pillLabel,
                 badge = "${activeFolder.sections.size}",
@@ -299,7 +302,27 @@ fun SketchTopBarWithFourPills(
                 testTag = "island_folder_dropdown_button"
             )
 
-            // Oval Pill 3: AI Guide Floating Window
+            // Pill 3: Terminal / Debugger / Problems Drawer Toggle (Elevated to Top Row!)
+            TopRightOvalWindowPill(
+                label = ">_ Terminal",
+                badge = if (syntaxErrorCount > 0) "!$syntaxErrorCount" else null,
+                isOpen = isBottomDrawerOpen,
+                isTopWindow = isBottomDrawerOpen,
+                onClick = onToggleTerminalDrawer,
+                testTag = "island_terminal_drawer_button"
+            )
+
+            // Pill 4: Run ▶ Output Floating Window
+            TopRightOvalWindowPill(
+                label = FloatingWindowType.RUN_OUTPUT.pillLabel,
+                badge = null,
+                isOpen = FloatingWindowType.RUN_OUTPUT in openFloatingWindows,
+                isTopWindow = openFloatingWindows.lastOrNull() == FloatingWindowType.RUN_OUTPUT,
+                onClick = { onToggleFloatingWindow(FloatingWindowType.RUN_OUTPUT) },
+                testTag = "island_run_code_button"
+            )
+
+            // Pill 5: AI Guide Floating Window
             TopRightOvalWindowPill(
                 label = FloatingWindowType.AI_STUDIO.pillLabel,
                 badge = null,
@@ -307,16 +330,6 @@ fun SketchTopBarWithFourPills(
                 isTopWindow = openFloatingWindows.lastOrNull() == FloatingWindowType.AI_STUDIO,
                 onClick = { onToggleFloatingWindow(FloatingWindowType.AI_STUDIO) },
                 testTag = "island_ai_studio_button"
-            )
-
-            // Oval Pill 4: Run Output Floating Window
-            TopRightOvalWindowPill(
-                label = FloatingWindowType.RUN_OUTPUT.pillLabel,
-                badge = if (syntaxErrorCount > 0) "!$syntaxErrorCount" else null,
-                isOpen = FloatingWindowType.RUN_OUTPUT in openFloatingWindows,
-                isTopWindow = openFloatingWindows.lastOrNull() == FloatingWindowType.RUN_OUTPUT,
-                onClick = { onToggleFloatingWindow(FloatingWindowType.RUN_OUTPUT) },
-                testTag = "island_run_code_button"
             )
 
             // Command Block Trigger (`⌘P`, exempt from the 2-window limit)
@@ -343,18 +356,35 @@ fun SketchTopBarWithFourPills(
                 )
             }
 
-            IconButton(
-                onClick = onOpenSettings,
+            // File & Studio Settings Button (Opens FileSettingsDialog)
+            Surface(
+                color = PillSurfaceBg,
+                shape = RoundedCornerShape(18.dp),
                 modifier = Modifier
-                    .size(28.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .border(1.dp, PillBorderColor, RoundedCornerShape(18.dp))
+                    .clickable(onClick = onOpenSettings)
                     .testTag("editor_shortcut_settings_button")
             ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "IDE Settings",
-                    tint = MutedTaupeText,
-                    modifier = Modifier.size(16.dp)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "File Settings",
+                        tint = WarmAmberAccent,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Settings",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = WarmCreamText
+                    )
+                }
             }
         }
     }
@@ -441,6 +471,7 @@ fun SketchLeftCircularIdeRail(
     onSelectTool: (LeftRailIdeTool) -> Unit,
     onApplyQuickFixOrDiagnostics: () -> Unit,
     onInsertNewSection: () -> Unit,
+    onExportOrCopyFile: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var isRailCollapsed by remember { mutableStateOf(false) }
@@ -480,7 +511,7 @@ fun SketchLeftCircularIdeRail(
         }
 
         if (!isRailCollapsed) {
-            // Circle 1: Format Kotlin Code (`{ }`) — Undoable via `↶` below
+            // Circle 1: Format Code (`{ }`) — Undoable via `↶` below
             LeftRailCircleButton(
                 textSymbol = "{ }",
                 icon = null,
@@ -534,18 +565,67 @@ fun SketchLeftCircularIdeRail(
                 testTag = "left_rail_line_actions_button"
             )
 
-            // Circle 5: Add New `.ktscribe` File in Folder (`+`)
+            // Circle 5: Color Literal Palette Picker (`🎨`) — Tap again to turn OFF
+            LeftRailCircleButton(
+                textSymbol = null,
+                icon = Icons.Default.Palette,
+                tooltip = "Color Literal Picker (Tap again to turn off)",
+                isSelected = activeTool == LeftRailIdeTool.COLOR_PALETTE,
+                accentColor = WarmAmberAccent,
+                onClick = {
+                    onSelectTool(
+                        if (activeTool == LeftRailIdeTool.COLOR_PALETTE) LeftRailIdeTool.NONE
+                        else LeftRailIdeTool.COLOR_PALETTE
+                    )
+                },
+                testTag = "left_rail_color_palette_button"
+            )
+
+            // Circle 6: AI Assistant Actions (`✨`) — Tap again to turn OFF
+            LeftRailCircleButton(
+                textSymbol = null,
+                icon = Icons.Default.AutoAwesome,
+                tooltip = "AI Assistant Tools (Tap again to turn off)",
+                isSelected = activeTool == LeftRailIdeTool.AI_ASSISTANT,
+                accentColor = WarmAmberAccent,
+                onClick = {
+                    onSelectTool(
+                        if (activeTool == LeftRailIdeTool.AI_ASSISTANT) LeftRailIdeTool.NONE
+                        else LeftRailIdeTool.AI_ASSISTANT
+                    )
+                },
+                testTag = "left_rail_ai_tools_button"
+            )
+
+            // Circle 7: Export & Copy File (`📤`)
+            LeftRailCircleButton(
+                textSymbol = null,
+                icon = Icons.Default.Share,
+                tooltip = "Export & Copy File",
+                isSelected = activeTool == LeftRailIdeTool.EXPORT_AND_COPY,
+                accentColor = MutedSageAccent,
+                onClick = {
+                    onExportOrCopyFile()
+                    onSelectTool(
+                        if (activeTool == LeftRailIdeTool.EXPORT_AND_COPY) LeftRailIdeTool.NONE
+                        else LeftRailIdeTool.EXPORT_AND_COPY
+                    )
+                },
+                testTag = "left_rail_export_copy_button"
+            )
+
+            // Circle 8: Add New File in Folder (`+`)
             LeftRailCircleButton(
                 textSymbol = null,
                 icon = Icons.Default.Add,
-                tooltip = "New .ktscribe File in Folder",
+                tooltip = "New Code File in Folder",
                 isSelected = false,
                 accentColor = MutedSageAccent,
                 onClick = onInsertNewSection,
                 testTag = "toolbar_insert_code_block_button"
             )
 
-            // Circle 6: Dedicated Undo (`↶`) Button for undoing any Left-Rail action or code edit
+            // Circle 9: Dedicated Undo (`↶`) Button
             LeftRailCircleButton(
                 textSymbol = "↶",
                 icon = null,

@@ -787,14 +787,20 @@ class EditorViewModel(
         }
     }
 
+    fun showStatusToast(message: String) {
+        _uiState.update { it.copy(aiStatusMessage = message, aiErrorBanner = null) }
+    }
+
     fun updateSectionLanguage(sectionId: Long, language: com.example.model.LanguageType) {
         mutateActiveDocument(recordUndo = true) { doc ->
             doc.copy(
                 sections = doc.sections.map { sec ->
                     if (sec.id == sectionId) {
-                        val currentExt = sec.language.extension
-                        val baseName = sec.sectionTitle.removeSuffix(currentExt).ifBlank { "Main" }
-                        val newTitle = "$baseName${language.extension}"
+                        val rawStem = sec.nativeFileName
+                            .substringBeforeLast(".")
+                            .trim()
+                            .ifBlank { "Main" }
+                        val newTitle = "$rawStem${language.nativeExtension}"
                         sec.copy(
                             language = language,
                             sectionTitle = newTitle,
@@ -804,6 +810,12 @@ class EditorViewModel(
                         sec
                     }
                 }
+            )
+        }
+        _uiState.update {
+            it.copy(
+                aiStatusMessage = "✓ Switched file type to ${language.displayName} (${language.nativeExtension}) — code preserved",
+                aiErrorBanner = null
             )
         }
     }
