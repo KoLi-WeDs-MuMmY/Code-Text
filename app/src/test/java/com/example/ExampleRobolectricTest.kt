@@ -6,6 +6,7 @@ import com.example.code.KotlinSuggestion
 import com.example.model.CodeSectionUiModel
 import com.example.model.DocumentDetailUiModel
 import com.example.model.LanguageType
+import com.example.model.PluginCategory
 import com.example.model.TextFormattingStyle
 import com.example.model.ToolchainPluginItem
 import org.junit.Assert.assertEquals
@@ -205,4 +206,88 @@ class ExampleRobolectricTest {
         assertTrue(explanation.contains("Concept Learned"))
         assertTrue(explanation.contains("Python"))
     }
+
+    @Test
+    fun `on-device ast interpreter executes functions recursion loops conditionals and termux bridge`() {
+        // 1. All 6 language engines + 4 plugins are built-in and active by default (zero fake download)
+        val catalog = ToolchainPluginItem.defaultCatalog()
+        val languageSdks = catalog.filter { it.category == PluginCategory.LANGUAGE_SDK }
+        assertEquals(6, languageSdks.size)
+        assertTrue(languageSdks.all { it.isInstalled && it.sizeLabel == "On-Device" })
+
+        // 2. Kotlin recursive function + for-range loop + string interpolation
+        val ktProgram = """
+            fun fib(n: Int): Int {
+                if (n <= 1) {
+                    return n
+                }
+                return fib(n - 1) + fib(n - 2)
+            }
+            fun main() {
+                var sum = 0
+                for (i in 1..5) {
+                    sum = sum + fib(i)
+                }
+                println("FibSum=" + sum)
+            }
+        """.trimIndent()
+        val ktRes = CodeLanguageEngine.executeAndDebug(
+            code = ktProgram,
+            language = LanguageType.KOTLIN,
+            isSdkInstalled = true
+        )
+        assertEquals(0, ktRes.exitCode)
+        // fib(1..5) = 1 + 1 + 2 + 3 + 5 = 12
+        assertTrue("Expected FibSum=12 in output:\n${ktRes.output}", ktRes.output.contains("FibSum=12"))
+        assertEquals("12", ktRes.variables["sum"])
+
+        // 3. Python loop + elif branching + input()
+        val pyProgram = """
+            limit = int(input())
+            total = 0
+            for i in range(1, limit):
+                if i % 2 == 0:
+                    total += i
+            print("EvenSum:", total)
+        """.trimIndent()
+        val pyRes = CodeLanguageEngine.executeAndDebug(
+            code = pyProgram,
+            language = LanguageType.PYTHON,
+            isSdkInstalled = true,
+            stdinInput = "6"
+        )
+        assertEquals(0, pyRes.exitCode)
+        // 2 + 4 = 6
+        assertTrue("Expected EvenSum: 6 in output:\n${pyRes.output}", pyRes.output.contains("EvenSum: 6"))
+
+        // 4. C++ for loop + cout
+        val cppProgram = """
+            #include <iostream>
+            int main() {
+                int acc = 0;
+                for (int i = 1; i <= 4; i++) {
+                    acc = acc + i;
+                }
+                std::cout << "Acc=" << acc << std::endl;
+                return 0;
+            }
+        """.trimIndent()
+        val cppRes = CodeLanguageEngine.executeAndDebug(
+            code = cppProgram,
+            language = LanguageType.CPP,
+            isSdkInstalled = true
+        )
+        assertEquals(0, cppRes.exitCode)
+        assertTrue("Expected Acc=10 in output:\n${cppRes.output}", cppRes.output.contains("Acc=10"))
+
+        // 5. Termux native compiler export command builds valid heredoc shell command
+        val termuxCmd = CodeLanguageEngine.buildTermuxNativeCommand(
+            fileName = "Main.kt",
+            code = ktProgram,
+            language = LanguageType.KOTLIN
+        )
+        assertTrue(termuxCmd.contains("cat << 'KTSCRIBE_EOF' > \"Main.kt\""))
+        assertTrue(termuxCmd.contains("kotlinc \"Main.kt\" -include-runtime -d out.jar && java -jar out.jar"))
+    }
 }
+

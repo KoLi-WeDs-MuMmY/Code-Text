@@ -141,3 +141,12 @@ app/src/main/java/com/example/
 - `CodeLanguageEngine.formatCodeForLanguage`, `toggleLineCommentForLanguage`, and `getLiveTemplatesForLanguage` provide native formatting, commenting (`#` vs `//`), and live templates per language.
 - `EditorUiState.localSnapshotsBySectionId` powers the `⏱ History` pill (`local_history_button_${orderIndex}`) for instant on-device checkpoints and 1-tap rollback.
 
+---
+
+## 12. Real On-Device Interpreter, Honest Engine State & Termux Export
+
+- `code/OnDeviceInterpreter.kt`: Real multi-language statement/expression interpreter supporting recursion, loops, conditionals, arrays/lists, string interpolation, and interactive `stdin` across Kotlin, Java, Python, C++, Dart, and Rust. Wired through `CodeLanguageEngine.executeAndDebug`.
+- `EditorViewModel.kt` / `ToolchainPluginItem`: Zero fake download delays; all built-in AST engines & IDE plugins are enabled out-of-the-box and persist toggle state immediately in `SharedPreferences`.
+- `CodeLanguageEngine.buildTermuxNativeCommand` & `IdeBottomDrawer.kt` (`terminal_copy_termux_cmd_button`): Zero-permission `Termux Cmd` clipboard bridge generating heredoc + native compiler execution commands (`kotlinc`, `javac`, `python3`, `g++`, `dart`, `rustc`) for external bare-metal compilation in Termux.
+
+

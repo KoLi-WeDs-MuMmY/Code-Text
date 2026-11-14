@@ -135,7 +135,7 @@ fun ShortcutAndSettingsDialog(
                         border = BorderStroke(0.5.dp, Color(0xFF6A8759))
                     ) {
                         Text(
-                            text = "$installedSdkCount/${languageSdks.size} SDKs Ready",
+                            text = "$installedSdkCount/${languageSdks.size} Engines Active",
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold,
@@ -201,12 +201,12 @@ fun ShortcutAndSettingsDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // =========================================================================
-                // GROUP 1: SDK & PLUGIN TOOLCHAIN MANAGER (Compilers, Debuggers & Extensions)
+                // GROUP 1: ON-DEVICE LANGUAGE ENGINES & PLUGIN MODULES
                 // =========================================================================
                 if (activeCategory == StudioSettingsCategory.ALL || activeCategory == StudioSettingsCategory.SDK_PLUGINS) {
                     IosSettingsGroupCard(
-                        headerTitle = "SDK & COMPILER TOOLCHAIN MANAGER",
-                        headerSubtitle = "Install compilers, runtimes & debuggers (LLDB, JDWP, debugpy, Kotlin/Java/Python/C++/Dart/Rust)",
+                        headerTitle = "ON-DEVICE LANGUAGE ENGINES & PLUGINS",
+                        headerSubtitle = "All 6 engines execute variables, loops, functions & stdin natively on-device via our built-in AST interpreter (zero fake downloads).",
                         trailingAction = {
                             if (languageSdks.any { !it.isInstalled }) {
                                 Surface(
@@ -224,13 +224,13 @@ fun ShortcutAndSettingsDialog(
                                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.CloudDownload,
-                                            contentDescription = "Install All SDKs",
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = "Enable All Engines",
                                             tint = Color(0xFFD4883A),
                                             modifier = Modifier.size(11.dp)
                                         )
                                         Text(
-                                            text = "Install All SDKs",
+                                            text = "Enable All",
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 9.sp,
                                             fontWeight = FontWeight.Bold,
@@ -242,8 +242,34 @@ fun ShortcutAndSettingsDialog(
                         }
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Surface(
+                                color = Color(0xFF1A1E24),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(0.75.dp, Color(0xFF334155)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "Why no 90MB compiler download?",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF7CB7FF)
+                                    )
+                                    Text(
+                                        text = "Android W^X / SELinux & Google Play policy block apps from downloading & executing raw desktop compiler binaries (gcc, rustc, python3) in app storage. KtScribe bundles a real multi-language AST interpreter on-device, and provides 1-tap 'Termux Cmd' export in Terminal if you want bare-metal Linux binaries via Termux:\n$ pkg install openjdk-17 kotlin python clang rust dart",
+                                        fontSize = 10.sp,
+                                        lineHeight = 14.sp,
+                                        color = Color(0xFFC5BEB6)
+                                    )
+                                }
+                            }
+
                             Text(
-                                text = "Language Compilers & Debuggers",
+                                text = "Built-in Language Engines",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
@@ -261,7 +287,7 @@ fun ShortcutAndSettingsDialog(
                             Spacer(modifier = Modifier.height(2.dp))
 
                             Text(
-                                text = "IDE Extensions & Helper Plugins",
+                                text = "Built-in IDE Modules",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
@@ -751,13 +777,13 @@ fun ToolchainPluginRowItem(
                             modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
                         ) {
                             Icon(
-                                imageVector = if (plugin.isInstalled) Icons.Default.CheckCircle else Icons.Default.CloudDownload,
+                                imageVector = Icons.Default.CheckCircle,
                                 contentDescription = null,
                                 tint = if (plugin.isInstalled) Color(0xFF81C784) else Color(0xFF161412),
                                 modifier = Modifier.size(12.dp)
                             )
                             Text(
-                                text = if (plugin.isInstalled) "Installed" else "Download",
+                                text = if (plugin.isInstalled) "Active" else "Enable",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,

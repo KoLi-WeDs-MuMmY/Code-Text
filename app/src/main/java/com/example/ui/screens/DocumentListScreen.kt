@@ -851,7 +851,7 @@ private fun HeroWorkspaceBanner(
                                     modifier = Modifier.size(11.dp)
                                 )
                                 Text(
-                                    text = "$installedSdkCount/$totalSdkCount SDKs Ready",
+                                    text = "$installedSdkCount/$totalSdkCount Engines Active",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 9.5.sp,
                                     color = Color(0xFF81C784),
@@ -900,7 +900,7 @@ private fun HeroWorkspaceBanner(
                                     .clickable(onClick = onInstallAllSdks)
                             ) {
                                 Text(
-                                    text = "Install All SDKs",
+                                    text = "Enable All",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,

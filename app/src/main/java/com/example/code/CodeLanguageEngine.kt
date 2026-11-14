@@ -679,146 +679,71 @@ object CodeLanguageEngine {
             )
         }
 
-        fun evaluatePrintedArg(rawArg: String): String {
-            val cleaned = rawArg.trim()
-            if (cleaned.isEmpty()) return ""
-            // Direct variable reference
-            variables[cleaned]?.let { return it.removeSurrounding("\"").removeSurrounding("'") }
-            // Python f-string `f"Hello {name}"` or Rust `"{name}"`
-            var text = cleaned.removePrefix("f\"").removePrefix("f'").removeSurrounding("\"").removeSurrounding("'")
-            variables.forEach { (k, v) ->
-                val cleanVal = v.removeSurrounding("\"").removeSurrounding("'")
-                text = text
-                    .replace("\${$k}", cleanVal)
-                    .replace("\$$k", cleanVal)
-                    .replace("{$k}", cleanVal)
-            }
-            // Handle string concatenation like `"Sum: " + total`
-            if (cleaned.contains("+") && (cleaned.contains("\"") || cleaned.contains("'"))) {
-                return cleaned.split("+").joinToString("") { part ->
-                    val p = part.trim()
-                    variables[p]?.removeSurrounding("\"")?.removeSurrounding("'")
-                        ?: p.removeSurrounding("\"").removeSurrounding("'")
-                }
-            }
-            return evaluateWatchExpression(cleaned, variables).let { eval ->
-                if (eval.startsWith("unresolved:")) text else eval.removeSurrounding("\"")
-            }
+        val interpreterResult = OnDeviceInterpreter.execute(
+            code = code,
+            language = language,
+            stdinLines = stdinLines
+        )
+        val mergedVariables = LinkedHashMap<String, String>(variables)
+        interpreterResult.variables.forEach { (k, v) -> mergedVariables[k] = v }
+
+        val mergedCallStack = if (interpreterResult.callStack.isNotEmpty()) {
+            interpreterResult.callStack
+        } else {
+            callStack
         }
 
-        // Success execution output
+        val cmdHeader = when (language) {
+            LanguageType.KOTLIN -> "$ kotlinc ${language.defaultFileName} && kotlin MainKt"
+            LanguageType.JAVA -> "$ javac ${language.defaultFileName} && java Main"
+            LanguageType.PYTHON -> "$ python3 ${language.defaultFileName}"
+            LanguageType.DART -> "$ dart run ${language.defaultFileName}"
+            LanguageType.CPP -> "$ g++ ${language.defaultFileName} -o main && ./main"
+            LanguageType.RUST -> "$ rustc ${language.defaultFileName} && ./main"
+        }
+
         val output = buildString {
+            appendLine("[On-Device AST Interpreter • Zero Server]")
             if (stdinLines.isNotEmpty()) {
                 appendLine("[stdin] ${stdinLines.joinToString(" | ")}")
             }
-            when (language) {
-                LanguageType.KOTLIN -> {
-                    // Replace readln() calls with supplied stdin before simulating Kotlin execution
-                    var effectiveKotlin = code
-                    if (code.contains("readln") || code.contains("readLine")) {
-                        var idx = 0
-                        effectiveKotlin = Regex("""read(?:ln|Line)\s*\(\s*\)""").replace(code) {
-                            val v = stdinLines.getOrElse(idx++) { "KtScribeInput" }
-                            "\"$v\""
-                        }
-                    }
-                    append(KotlinCodeEngine.simulateKotlinExecution(effectiveKotlin))
+            appendLine(cmdHeader)
+            if (interpreterResult.runtimeError != null) {
+                appendLine("Runtime Error: ${interpreterResult.runtimeError}")
+                append("\nProcess finished with exit code 1 (${interpreterResult.stepsExecuted} steps)")
+            } else {
+                if (interpreterResult.stdoutLines.isEmpty()) {
+                    appendLine("(Executed ${interpreterResult.stepsExecuted} step(s) cleanly with no stdout)")
+                } else {
+                    interpreterResult.stdoutLines.forEach { appendLine(it) }
                 }
-                LanguageType.JAVA -> {
-                    val printMatches = Regex("""System\.(?:out|err)\.print(?:ln)?\s*\(([^)]*)\)""").findAll(trimmed)
-                    val outputs = printMatches.map { evaluatePrintedArg(it.groupValues[1]) }.toList()
-                    appendLine("$ javac Main.java && java Main")
-                    if (outputs.isEmpty()) {
-                        appendLine("(Process executed without printing to standard output)")
-                    } else {
-                        outputs.forEach { appendLine(it) }
-                    }
-                    append("\nProcess finished with exit code 0")
-                }
-                LanguageType.PYTHON -> {
-                    val printMatches = Regex("""print\s*\(([^)]*)\)""").findAll(trimmed)
-                    val outputs = printMatches.map { evaluatePrintedArg(it.groupValues[1]) }.toList()
-                    appendLine("$ python3 main.py")
-                    if (outputs.isEmpty()) {
-                        appendLine("(Script finished with no output)")
-                    } else {
-                        outputs.forEach { appendLine(it) }
-                    }
-                    append("\nProcess finished with exit code 0")
-                }
-                LanguageType.DART -> {
-                    val printMatches = Regex("""print\s*\(([^)]*)\)""").findAll(trimmed)
-                    val outputs = printMatches.map { evaluatePrintedArg(it.groupValues[1]) }.toList()
-                    appendLine("$ dart run main.dart")
-                    if (outputs.isEmpty()) {
-                        appendLine("(Dart program exited cleanly)")
-                    } else {
-                        outputs.forEach { appendLine(it) }
-                    }
-                    append("\nProcess finished with exit code 0")
-                }
-                LanguageType.CPP -> {
-                    val printMatches = Regex("""(?:std::)?cout\s*<<\s*([^;]+)""").findAll(trimmed)
-                    val outputs = printMatches.map { match ->
-                        match.groupValues[1]
-                            .split("<<")
-                            .map { it.trim() }
-                            .filter { it != "std::endl" && it != "endl" && it != "\"\\n\"" && it != "'\\n'" }
-                            .joinToString("") { evaluatePrintedArg(it) }
-                    }.toList()
-                    appendLine("$ g++ main.cpp -o main && ./main")
-                    if (outputs.isEmpty()) {
-                        appendLine("(Binary executed successfully with no output)")
-                    } else {
-                        outputs.forEach { appendLine(it) }
-                    }
-                    append("\nProcess finished with exit code 0")
-                }
-                LanguageType.RUST -> {
-                    val printMatches = Regex("""println!\s*\(([^)]*)\)""").findAll(trimmed)
-                    val outputs = printMatches.map { match ->
-                        val args = match.groupValues[1].split(",").map { it.trim() }
-                        if (args.size > 1 && args[0].contains("{}")) {
-                            var fmt = args[0].removeSurrounding("\"")
-                            for (arg in args.drop(1)) {
-                                fmt = fmt.replaceFirst("{}", evaluatePrintedArg(arg))
-                            }
-                            fmt
-                        } else {
-                            evaluatePrintedArg(match.groupValues[1])
-                        }
-                    }.toList()
-                    appendLine("$ rustc main.rs && ./main")
-                    if (outputs.isEmpty()) {
-                        appendLine("(Rust binary exited cleanly)")
-                    } else {
-                        outputs.forEach { appendLine(it) }
-                    }
-                    append("\nProcess finished with exit code 0")
-                }
+                append("\nProcess finished with exit code 0 (${interpreterResult.stepsExecuted} steps)")
             }
         }
 
         val logcat = buildList {
-            add("I/Toolchain: Verified $sdkTitle")
-            add("I/Compiler: Indexed & compiled ${language.defaultFileName} in 142ms")
+            add("I/OnDeviceRuntime: Active $sdkTitle (${interpreterResult.stepsExecuted} AST steps)")
             if (stdinLines.isNotEmpty()) {
-                add("D/StdinPipe: Fed ${stdinLines.size} line(s) into standard input stream")
+                add("D/StdinPipe: Consumed ${stdinLines.size} line(s) from standard input")
             }
-            add("D/Debugger: Attached to process PID 4821 (${variables.size} active local symbol(s))")
+            add("D/Debugger: Captured ${mergedVariables.size} live runtime variable(s)")
             diagnostics.filter { it.severity == DiagnosticSeverity.WARNING }.forEach { warn ->
                 add("W/Linter: Ln ${warn.line}: ${warn.message}")
             }
-            add("I/Process: Process finished with exit code 0")
+            if (interpreterResult.runtimeError != null) {
+                add("E/Runtime: ${interpreterResult.runtimeError}")
+            } else {
+                add("I/Process: Process finished with exit code 0")
+            }
         }
 
         return DebugSessionInfo(
             output = output,
-            hasErrors = false,
-            exitCode = 0,
-            variables = variables,
+            hasErrors = interpreterResult.runtimeError != null,
+            exitCode = if (interpreterResult.runtimeError != null) 1 else 0,
+            variables = mergedVariables,
             diagnostics = diagnostics,
-            callStack = callStack,
+            callStack = mergedCallStack,
             logcatEntries = logcat,
             toolchainInstalled = true,
             requiredSdkName = sdkTitle
@@ -826,7 +751,28 @@ object CodeLanguageEngine {
     }
 
     /**
-     * Simulates terminal script execution for the given language.
+     * Generates a genuine copy-and-run command for users who want bare-metal Linux binaries
+     * in Termux (`com.termux`) locally on Android without paying for a remote compiler server.
+     */
+    fun buildTermuxNativeCommand(
+        fileName: String,
+        code: String,
+        language: LanguageType
+    ): String {
+        val cleanName = fileName.ifBlank { language.defaultFileName }
+        val runStep = when (language) {
+            LanguageType.KOTLIN -> "kotlinc \"$cleanName\" -include-runtime -d out.jar && java -jar out.jar"
+            LanguageType.JAVA -> "javac \"$cleanName\" && java ${cleanName.removeSuffix(".java")}"
+            LanguageType.PYTHON -> "python3 \"$cleanName\""
+            LanguageType.CPP -> "g++ \"$cleanName\" -std=c++20 -o main && ./main"
+            LanguageType.DART -> "dart run \"$cleanName\""
+            LanguageType.RUST -> "rustc \"$cleanName\" -o main && ./main"
+        }
+        return "cat << 'KTSCRIBE_EOF' > \"$cleanName\"\n$code\nKTSCRIBE_EOF\n$runStep"
+    }
+
+    /**
+     * Simulates or runs terminal script execution for the given language on-device.
      */
     fun simulateExecutionForLanguage(code: String, language: LanguageType, stdinInput: String = ""): String {
         return executeAndDebug(code, language, isSdkInstalled = true, stdinInput = stdinInput).output

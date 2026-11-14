@@ -68,7 +68,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import android.widget.Toast
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -254,10 +259,10 @@ fun IdeBottomDrawer(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         val statusText = when {
-                            !isSdkInstalled -> "Missing SDK"
+                            !isSdkInstalled -> "Disabled"
                             problemCount > 0 -> "Failed ($problemCount)"
                             executionOutput != null -> "Finished (0)"
-                            else -> "Idle"
+                            else -> "On-Device Ready"
                         }
                         val statusColor = when {
                             !isSdkInstalled -> Color(0xFFFFB86C)
@@ -490,50 +495,37 @@ fun IdeBottomDrawer(
                                     )
                                     Column {
                                         Text(
-                                            text = "${activeLanguage.displayName} Toolchain Not Installed (${matchingSdkPlugin.name})",
+                                            text = "${activeLanguage.displayName} Engine Disabled (${matchingSdkPlugin.name})",
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFFF5E6D3)
                                         )
                                         Text(
-                                            text = "Install ${matchingSdkPlugin.binaryCommand} (${matchingSdkPlugin.sizeLabel}) to enable real-time compilation & ${matchingSdkPlugin.debuggerName}.",
+                                            text = "Enable built-in ${matchingSdkPlugin.name} to run on-device or export a native Termux shell command below.",
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 9.5.sp,
                                             color = Color(0xFFC4B6A6)
                                         )
-                                        if (matchingSdkPlugin.isDownloading) {
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            LinearProgressIndicator(
-                                                progress = { matchingSdkPlugin.downloadProgress },
-                                                color = Color(0xFFD4883A),
-                                                trackColor = Color(0xFF3E3227),
-                                                modifier = Modifier
-                                                    .fillMaxWidth(0.7f)
-                                                    .height(4.dp)
-                                                    .clip(RoundedCornerShape(2.dp))
-                                            )
-                                        }
                                     }
                                 }
 
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Button(
                                         onClick = { onInstallPlugin(matchingSdkPlugin.id) },
-                                        enabled = !matchingSdkPlugin.isDownloading,
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4883A)),
                                         shape = RoundedCornerShape(8.dp),
                                         modifier = Modifier.testTag("drawer_install_sdk_button")
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.Download,
+                                            imageVector = Icons.Default.CheckCircle,
                                             contentDescription = null,
                                             tint = Color(0xFF181412),
                                             modifier = Modifier.size(13.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = if (matchingSdkPlugin.isDownloading) "Installing…" else "Install SDK",
+                                            text = "Enable Engine",
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
@@ -549,7 +541,7 @@ fun IdeBottomDrawer(
                                             .clickable(onClick = onOpenPluginManager)
                                     ) {
                                         Text(
-                                            text = "SDK Manager",
+                                            text = "Toolchain Info",
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.SemiBold,
@@ -795,6 +787,9 @@ private fun TerminalTabContent(
             }
         }
 
+        val clipboardManager = LocalClipboardManager.current
+        val context = LocalContext.current
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -803,22 +798,76 @@ private fun TerminalTabContent(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(bottom = 6.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(if (isError) Color(0xFFFF5F56) else Color(0xFF27C93F))
-                )
-                Text(
-                    text = "${activeSection?.language?.displayName ?: "Kotlin"} Console • ${sdkPlugin?.name ?: "Standard Toolchain"} • ${if (isError) "Process Failed" else "Ready"}",
-                    fontFamily = JetBrainsMonoFontFamily,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFA39C93)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(if (isError) Color(0xFFFF5F56) else Color(0xFF27C93F))
+                    )
+                    Text(
+                        text = "${activeSection?.language?.displayName ?: "Kotlin"} Console • ${sdkPlugin?.name ?: "On-Device AST"} • ${if (isError) "Process Failed" else "Ready"}",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFA39C93),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (activeSection != null) {
+                    Surface(
+                        color = Color(0xFF24201E),
+                        shape = RoundedCornerShape(999.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF5A4E46)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable {
+                                val cmd = CodeLanguageEngine.buildTermuxNativeCommand(
+                                    fileName = activeSection.nativeFileName,
+                                    code = activeSection.codeContent,
+                                    language = activeSection.language
+                                )
+                                clipboardManager.setText(AnnotatedString(cmd))
+                                Toast.makeText(
+                                    context,
+                                    "Copied native ${activeSection.language.displayName} Termux command",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                            .testTag("terminal_copy_termux_cmd_button")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy Termux Native Command",
+                                tint = Color(0xFFD4883A),
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Text(
+                                text = "Termux Cmd",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFD4883A)
+                            )
+                        }
+                    }
+                }
             }
 
             if (filteredLines.isEmpty()) {

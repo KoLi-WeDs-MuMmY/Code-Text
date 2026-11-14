@@ -577,7 +577,7 @@ fun FileSettingsDialog(
                                 color = Color(0xFFE6E1DC)
                             )
                             Text(
-                                text = "Download compilers/debuggers, global themes, shortcuts & RPM quota",
+                                text = "Toggle built-in engines, Termux export guide, themes & RPM quota",
                                 fontSize = 10.sp,
                                 color = Color(0xFFA39C93)
                             )

@@ -2403,7 +2403,7 @@ private fun CodeAssistSidePanel(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Compilers & Debuggers",
+                                text = "On-Device Engines",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
@@ -2418,7 +2418,7 @@ private fun CodeAssistSidePanel(
                                     .clickable(onClick = onInstallAllSdks)
                             ) {
                                 Text(
-                                    text = "Install All",
+                                    text = "Enable All",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 8.5.sp,
                                     fontWeight = FontWeight.Bold,

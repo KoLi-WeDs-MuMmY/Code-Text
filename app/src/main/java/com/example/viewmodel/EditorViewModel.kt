@@ -614,73 +614,44 @@ class EditorViewModel(
     fun installOrTogglePlugin(pluginId: String) {
         val currentList = _uiState.value.toolchainPlugins
         val target = currentList.find { it.id == pluginId } ?: return
-        if (target.isDownloading) return
 
-        if (target.isInstalled) {
-            // Uninstall / disable plugin
-            val updated = currentList.map {
-                if (it.id == pluginId) it.copy(isInstalled = false, isDownloading = false, downloadProgress = 0f) else it
-            }
-            val installedIds = updated.filter { it.isInstalled }.map { it.id }.toSet()
-            repository.setInstalledPluginIds(installedIds)
-            _uiState.update {
+        val nextInstalled = !target.isInstalled
+        val updated = currentList.map {
+            if (it.id == pluginId) {
                 it.copy(
-                    toolchainPlugins = updated,
-                    aiStatusMessage = "Removed ${target.name}"
+                    isInstalled = nextInstalled,
+                    isDownloading = false,
+                    downloadProgress = if (nextInstalled) 1f else 0f
                 )
+            } else {
+                it
             }
-        } else {
-            // Download and install with animated progress
-            viewModelScope.launch {
-                _uiState.update { state ->
-                    state.copy(
-                        toolchainPlugins = state.toolchainPlugins.map {
-                            if (it.id == pluginId) it.copy(isDownloading = true, downloadProgress = 0.25f) else it
-                        },
-                        aiStatusMessage = "⬇ Downloading ${target.name} (${target.sizeLabel})…"
-                    )
+        }
+        val installedIds = updated.filter { it.isInstalled }.map { it.id }.toSet()
+        repository.setInstalledPluginIds(installedIds)
+        _uiState.update {
+            it.copy(
+                toolchainPlugins = updated,
+                aiStatusMessage = if (nextInstalled) {
+                    "✓ Enabled built-in ${target.name}"
+                } else {
+                    "Disabled built-in ${target.name}"
                 }
-                delay(180)
-                _uiState.update { state ->
-                    state.copy(
-                        toolchainPlugins = state.toolchainPlugins.map {
-                            if (it.id == pluginId) it.copy(isDownloading = true, downloadProgress = 0.72f) else it
-                        }
-                    )
-                }
-                delay(180)
-                val updated = _uiState.value.toolchainPlugins.map {
-                    if (it.id == pluginId) {
-                        it.copy(isInstalled = true, isDownloading = false, downloadProgress = 1f)
-                    } else {
-                        it
-                    }
-                }
-                val installedIds = updated.filter { it.isInstalled }.map { it.id }.toSet()
-                repository.setInstalledPluginIds(installedIds)
-                _uiState.update {
-                    it.copy(
-                        toolchainPlugins = updated,
-                        aiStatusMessage = "✓ Installed ${target.name} (${target.version}) — Debugger & Compiler Ready"
-                    )
-                }
-            }
+            )
         }
     }
 
     fun installAllLanguageSdks() {
-        viewModelScope.launch {
-            val allUpdated = _uiState.value.toolchainPlugins.map {
-                it.copy(isInstalled = true, isDownloading = false, downloadProgress = 1f)
-            }
-            val installedIds = allUpdated.map { it.id }.toSet()
-            repository.setInstalledPluginIds(installedIds)
-            _uiState.update {
-                it.copy(
-                    toolchainPlugins = allUpdated,
-                    aiStatusMessage = "✓ All 6 Language SDKs & IDE Debugger Plugins installed"
-                )
-            }
+        val allUpdated = _uiState.value.toolchainPlugins.map {
+            it.copy(isInstalled = true, isDownloading = false, downloadProgress = 1f)
+        }
+        val installedIds = allUpdated.map { it.id }.toSet()
+        repository.setInstalledPluginIds(installedIds)
+        _uiState.update {
+            it.copy(
+                toolchainPlugins = allUpdated,
+                aiStatusMessage = "✓ All 6 built-in On-Device Language Engines & Plugins enabled"
+            )
         }
     }
 

@@ -114,3 +114,17 @@
 - **On-Device Local Version History & 1-Tap Rollback (`KotlinCodeSectionCard.kt`, `EditorViewModel.kt`)**:
   - Added a **`⏱ History` pill** in the editor breadcrumb bar and a collapsible **Local Snapshots** drawer for manual checkpoints (`+ Save Snapshot`), automatic pre-refactor/pre-docstring checkpoints, and 1-tap rollback.
 
+---
+
+## 12. Real On-Device AST Statement & Expression Interpreter + Termux Bridge
+
+- **Real On-Device Multi-Language Interpreter (`OnDeviceInterpreter.kt`)**:
+  - Replaced regex-only output simulation with a real statement & expression AST interpreter supporting Kotlin, Java, Python, C++, Dart, and Rust.
+  - Evaluates arithmetic/boolean/string expressions, `if`/`elif`/`else` branches, `for` ranges/iterables/C-style `for (init; cond; upd)`, `while` loops (with step safety guard), `break`/`continue`, user-defined functions with recursion & `return`, lists/indexing, string templates, and interactive `stdin` consumption while recording live variables and call stack frames.
+- **Honest Built-In Engine Toggles (`EditorModels.kt`, `EditorViewModel.kt`, `ShortcutAndSettingsDialog.kt`)**:
+  - Removed the fake 360ms download simulation and misleading desktop binary sizes. All 6 language engines (`On-Device`) and 4 IDE extensions (`Built-in`) are active out of the box and toggle instantaneously.
+  - Added an explicit technical notice in Settings explaining Android SELinux/`W^X` and Google Play Dynamic Code Loading restrictions.
+- **1-Tap `Termux Cmd` Native Compiler Bridge (`CodeLanguageEngine.kt`, `IdeBottomDrawer.kt`)**:
+  - Added a `Termux Cmd` pill in the Terminal drawer header that copies a ready-to-paste shell heredoc (`cat << 'KTSCRIBE_EOF' > ...` + `kotlinc`/`javac`/`python3`/`g++`/`dart`/`rustc`) for users who want bare-metal Linux compilation in Termux without Play-restricted permissions.
+
+
