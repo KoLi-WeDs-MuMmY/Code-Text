@@ -24,27 +24,39 @@ KtScribe is a desktop-grade mobile IDE and dual-layer code editor built with Jet
 
 ```
 app/src/main/java/com/example/
+├── compiler/
+│   ├── CompilerModels.kt         # Lexer tokens, AST nodes, KtVM opcodes, CompilationArtifact & ReplHistoryEntry
+│   ├── KotlinCompilerPlugin.kt   # Bundled 4-stage Kotlin compiler (Lexer -> Parser -> Semantic -> Bytecode Emitter)
+│   └── KtBytecodeVm.kt           # Stack-based KtVM, DebugSession (breakpoints/step/trace), & persistent ReplSession
 ├── model/
-│   └── EditorModels.kt           # All domain models, LanguageType, WindowPresetTier, BottomDrawerTab, rename validator
+│   └── EditorModels.kt           # Domain models, LanguageType, WindowPresetTier, BottomDrawerTab, LocalCodeSnapshot
 ├── viewmodel/
-│   └── EditorViewModel.kt        # Central state holder (EditorUiState), file I/O, showStatusToast, updateSectionLanguage
+│   └── EditorViewModel.kt        # Central state holder (EditorUiState), KtVM debug/REPL/diff actions, tab reorder
 ├── code/
-│   ├── CodeLanguageEngine.kt     # Multi-language tokenizer, snippets, syntax checks & debug simulator
-│   └── KotlinCodeEngine.kt       # Deep Kotlin lexer, syntax diagnostics (diagnoseKotlinSyntax), symbols
+│   ├── CodeLanguageEngine.kt     # Multi-language diagnostics, formatting, snippets & AST/VM execution bridge
+│   ├── KotlinCodeEngine.kt       # Deep Kotlin lexer, syntax diagnostics (diagnoseKotlinSyntax), symbols
+│   ├── BracketPairColorizer.kt   # Depth-aware rainbow bracket colorizer + cursor pair & unmatched highlights
+│   ├── DiffEngine.kt             # Pure Kotlin LCS line diff engine powering Visual Git Diff & History
+│   └── OnDeviceInterpreter.kt    # Companion multi-language AST statement/expression interpreter
 ├── ui/
 │   ├── components/
-│   │   ├── KotlinCodeSectionCard.kt   # Core code editor, TextLayoutResult-locked gutter synchronization, caret-anchored suggestions (+28dp)
-│   │   ├── IdeBottomDrawer.kt         # Sliding bottom drawer (Terminal, Debugger, Problems)
-│   │   ├── MacFloatingIslandComponents.kt # Top bar pills, Left circular IDE tool rail, and MIUI floating windows
-│   │   ├── FileSettingsDialog.kt      # File settings (confirmation-guarded language switcher, Android Share/Copy export, theme overrides)
-│   │   └── AnimatedBackground.kt      # Particle/ambient animated background
+│   │   ├── KotlinCodeSectionCard.kt   # Core code editor, TextLayoutResult-locked gutter, bracket coloring, autocomplete
+│   │   ├── IdeBottomDrawer.kt         # Bottom drawer (Terminal, Problems, Debugger, Logcat, REPL, Bytecode/AST, Git Diff)
+│   │   ├── MacFloatingIslandComponents.kt # Top bar pills, Left circular IDE rail, viewport-clamped MIUI floating windows
+│   │   ├── FileSettingsDialog.kt      # File settings (confirmation-guarded language switcher, Android Share/Copy export)
+│   │   ├── ShortcutAndSettingsDialog.kt # Categorized M3 Settings, Built-in Kotlin Compiler Plugin status, Display Profile
+│   │   └── ModernFloatingMeshBackground.kt # Adaptive ambient background
 │   ├── screens/
-│   │   ├── DocumentListScreen.kt      # Project gallery, search, trichrome logo, new folder creation
-│   │   └── DocumentEditorScreen.kt    # Main workspace assembling top bar, left rail, editor card, bottom drawer & modals
+│   │   ├── DocumentListScreen.kt      # Adaptive Project Home (M3 NavigationRail on wide screens, ModalBottomSheet/grid)
+│   │   └── DocumentEditorScreen.kt    # Main workspace, portrait overflow/sheet adaptation, Fuzzy Command Palette
 │   └── theme/
-│       ├── Theme.kt & Color.kt        # 6 Curated IDE Themes (Darcula, Monokai Pro, GitHub Dark, Nord Frost, etc.)
-│       └── Type.kt                    # Typography using JetBrains Mono font
-└── MainActivity.kt                    # Application entry point, system bars, permission handling & screen switching
+│       ├── ScreenProfile.kt           # Zero-permission WindowMetrics/DisplayMetrics classifier & AdaptiveThemeSpec
+│       ├── CompactPortraitTheme.kt    # Narrow portrait phone theme specs
+│       ├── CompactLandscapeTheme.kt   # Landscape phone theme specs
+│       ├── MediumFoldableTheme.kt     # Foldable / 600dp+ medium theme specs
+│       ├── ExpandedTabletTheme.kt     # Tablet / 840dp+ expanded theme specs
+│       ├── Theme.kt, AppThemeId.kt, Color.kt & Type.kt # M3 tonal dark/light schemes + 6 IDE palettes
+└── MainActivity.kt                    # Entry point, BoxWithConstraints ScreenRatioClassifier, Compose navigation
 ```
 
 ---
@@ -53,15 +65,18 @@ app/src/main/java/com/example/
 
 | File | What It Does | When to Modify |
 |---|---|---|
-| `model/EditorModels.kt` | Defines `CodeSectionUiModel`, `DocumentDetailUiModel`, `LanguageType` enum, `WindowPresetTier`, `BottomDrawerTab`, `validateFileExtensionRename`, and file serialization. | Adding new languages, extensions, window presets, or bundle formats. |
-| `viewmodel/EditorViewModel.kt` | Manages `EditorUiState`, undo/redo, auto-save timers, terminal outputs, bottom drawer visibility, `updateSectionLanguage` (keeps code as-is), and `showStatusToast`. | Adding new state mutations, actions, or document commands. |
-| `code/CodeLanguageEngine.kt` | Multi-language syntax parsing (Python colons, Java semicolons, C++ headers, Dart/Rust brackets), autocomplete dictionary, and `executeAndDebug`. | Adding snippets, syntax rules, or compiler diagnostic logic. |
+| `compiler/KotlinCompilerPlugin.kt` & `KtBytecodeVm.kt` | Bundled 4-stage Kotlin compiler (`compile`) + stack VM (`DebugSession`, `ReplSession`). | Extending Kotlin syntax parsing, bytecode opcodes, or VM debugging/REPL. |
+| `code/BracketPairColorizer.kt` & `DiffEngine.kt` | Depth-aware bracket pair highlighting & LCS line diffing (`computeLineDiff`). | Adjusting bracket depth colors or snapshot diff visualization. |
+| `ui/theme/ScreenProfile.kt` & `*Theme.kt` | Zero-permission aspect-ratio classifier + 4 screen-size theme files (`CompactPortrait`, `CompactLandscape`, `MediumFoldable`, `ExpandedTablet`). | Tuning responsive padding, rail vs bottom sheet behavior, or typography scaling per screen tier. |
+| `model/EditorModels.kt` | Defines `CodeSectionUiModel`, `DocumentDetailUiModel`, `LanguageType`, `WindowPresetTier`, `BottomDrawerTab`, `LocalCodeSnapshot`. | Adding new languages, extensions, window presets, or bundle formats. |
+| `viewmodel/EditorViewModel.kt` | Manages `EditorUiState`, undo/redo, KtVM debug/REPL/compile state, snapshot restore, tab reordering, and status toasts. | Adding new state mutations, actions, or document commands. |
+| `code/CodeLanguageEngine.kt` | Multi-language syntax parsing, autocomplete, formatting, and AST/VM execution bridge. | Adding snippets, syntax rules, or compiler diagnostic logic. |
 | `code/KotlinCodeEngine.kt` | Tokenizer and Kotlin-specific syntax rules, bracket counting, and diagnostic generation (`diagnoseKotlinSyntax`). | Improving Kotlin syntax analysis or symbol detection. |
-| `ui/components/KotlinCodeSectionCard.kt` | Text editing surface with `BasicTextField`, `TextLayoutResult`-synchronized line numbers gutter, read-only language chip (opens File Settings), and floating suggestion overlay. | Adjusting font metrics, cursor positions, or gutter alignment. |
-| `ui/components/FileSettingsDialog.kt` | File Settings modal with confirmation-guarded language switching (`pendingLanguageChange`) and `exportOrCopyCodePayload` (Android Share chooser + Clipboard + Toast). | Updating per-file settings, export formats, or language switch warnings. |
-| `ui/components/IdeBottomDrawer.kt` | Sliding bottom drawer containing Terminal, Debugger, and Problems tabs. | Adding debugger features (breakpoints, step execution) or terminal tools. |
-| `ui/components/MacFloatingIslandComponents.kt` | Top Bar primary pills (`SketchTopBarWithFourPills`), Left Circular IDE Rail (`SketchLeftCircularIdeRail`), and draggable floating windows. | Tweaking top bar pills, left rail tools, or floating window geometry. |
-| `ui/screens/DocumentEditorScreen.kt` | The master workspace composable hosting the top bar, tab switcher, left rail, code card, drawer, and alerts. | Changing overall screen layout, adding dialogs, or keyboard shortcuts. |
+| `ui/components/KotlinCodeSectionCard.kt` | Text editing surface with `BasicTextField`, `TextLayoutResult`-synchronized gutter, bracket colorizer, inline breadcrumb + `Ln/Col`, and suggestions. | Adjusting font metrics, cursor positions, or gutter alignment. |
+| `ui/components/FileSettingsDialog.kt` | File Settings modal with confirmation-guarded language switching (`pendingLanguageChange`) and `exportOrCopyCodePayload`. | Updating per-file settings, export formats, or language switch warnings. |
+| `ui/components/IdeBottomDrawer.kt` | Sliding bottom drawer containing Terminal, Problems, Debugger, Logcat, REPL, Bytecode/AST, and Git Diff tabs. | Adding debugger features, bytecode views, or REPL/diff controls. |
+| `ui/components/MacFloatingIslandComponents.kt` | Top Bar primary pills, Left Circular IDE Rail, and viewport-clamped MIUI floating windows. | Tweaking top bar pills, left rail tools, or floating window geometry. |
+| `ui/screens/DocumentEditorScreen.kt` | Adaptive workspace with portrait overflow menu + `ModalBottomSheet`, reorderable tabs, Fuzzy Command Palette, and bottom drawer. | Changing overall screen layout, adding dialogs, or keyboard shortcuts. |
 | `IDE.md` | Feature registry tracking implemented and upcoming IDE features. | **Must be updated every time IDE features are added or planned.** |
 
 ---
@@ -149,4 +164,23 @@ app/src/main/java/com/example/
 - `EditorViewModel.kt` / `ToolchainPluginItem`: Zero fake download delays; all built-in AST engines & IDE plugins are enabled out-of-the-box and persist toggle state immediately in `SharedPreferences`.
 - `CodeLanguageEngine.buildTermuxNativeCommand` & `IdeBottomDrawer.kt` (`terminal_copy_termux_cmd_button`): Zero-permission `Termux Cmd` clipboard bridge generating heredoc + native compiler execution commands (`kotlinc`, `javac`, `python3`, `g++`, `dart`, `rustc`) for external bare-metal compilation in Termux.
 
+---
+
+## 13. Built-In Kotlin Compiler Plugin, KtBytecodeVm, M3 Tonal UI & Screen-Ratio Theme Dispatch
+
+### 13.1 Built-In Kotlin Compiler Plugin & Stack Bytecode VM (`compiler/`)
+- `KotlinCompilerPlugin.compile(code, language)` runs a deterministic 4-stage pipeline in-app: Lexer → Recursive-Descent Parser (`ProgramAst`) → Semantic Analyzer (`SymbolEntry`, `KotlinDiagnostic`) → Stack Bytecode Emitter (`BytecodeInstruction`, constant pool, function/class maps).
+- `sdk_kotlin` (`Kotlin Compiler Plugin`) is pre-bundled inside app source (`isInstalled = true`, permanently active, zero server roundtrips). Companion languages (Java, Python, C++, Dart, Rust) also transpile into the unified `ProgramAst` for symbol & bytecode inspection.
+- `KtBytecodeVm.DebugSession` drives real breakpoint pausing (`runUntilBreakpoint`), `stepOver()`, trace stepping (`resetTrace()`), live operand stack, heap object map, and call-frame snapshots directly from compiled artifacts.
+- `KtBytecodeVm.ReplSession` powers the persistent Kotlin REPL drawer tab (`BottomDrawerTab.REPL`).
+
+### 13.2 Material 3 Tonal Dark UI & Separate Screen-Size Themes (`ui/theme/`)
+- `ScreenRatioClassifier` computes device/window aspect ratio & tier from `WindowMetrics`/`DisplayMetrics` + `BoxWithConstraints` with **zero extra Android permissions**, providing `LocalAdaptiveThemeSpec` via `CompositionLocalProvider`.
+- Four dedicated theme files (`CompactPortraitTheme.kt`, `CompactLandscapeTheme.kt`, `MediumFoldableTheme.kt`, `ExpandedTabletTheme.kt`) govern padding, spacing, card elevation, `useNavigationRail`, `useCompactTopActions`, grid columns, and `maxContentWidth`.
+- M3 tonal surface layering (`surfaceContainerLowest`..`surfaceContainerHighest`), single-line badges, portrait `ModalBottomSheet` side tools, and portrait `"⋮"` overflow menu resolve narrow-screen clipping & vertical-wrap overlaps cleanly.
+
+### 13.3 Bracket Colorizer, Fuzzy Command Palette, Bytecode Inspector & Git Diff
+- `BracketPairColorizer`: Rainbow depth styling + cursor pair highlight + unmatched red highlighting while preserving 1:1 `TextLayoutResult` gutter synchronization.
+- `DocumentEditorScreen`: Subsequence fuzzy `⌘P` Command Palette + reorderable multi-file project tabs (`◀`/`▶` + `+` language menu).
+- `IdeBottomDrawer`: `REPL`, `AST_BYTECODE` (Bytecode vs AST/Symbols segmented viewer), and `GIT_DIFF` (`DiffEngine.computeLineDiff` LCS visual diff against `LocalCodeSnapshot`s with create/restore controls).
 

@@ -34,12 +34,14 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LocalAdaptiveThemeSpec
 
-// Trichrome Color Palette requested by user
+// Trichrome Color Palette
 val TrichromeEmerald = Color(0xFF10B981) // Neon Emerald
 val TrichromeCyan = Color(0xFF06B6D4)    // Electric Cyan
 val TrichromeAmber = Color(0xFFF59E0B)   // Warm Amber
@@ -137,7 +139,7 @@ fun TrichromeStudioLogo(
                 )
             )
 
-            // 3. Neon Emerald Core (Dynamic central slash slash/spark)
+            // 3. Neon Emerald Core (Dynamic central slash/spark)
             val centerSlash = Path().apply {
                 moveTo(w * 0.60f, h * 0.22f)
                 lineTo(w * 0.40f, h * 0.78f)
@@ -167,20 +169,22 @@ fun TrichromeStudioLogo(
 }
 
 /**
- * Top-bar brand banner combining the Trichrome studio mark, title, and live compiler badge.
+ * Top-bar brand banner combining the Trichrome studio mark, single-line title, and adaptive badge.
  */
 @Composable
 fun TrichromeBrandHeader(
     appName: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showSubtitle: Boolean = LocalAdaptiveThemeSpec.current.showBrandSubtitle,
+    compact: Boolean = LocalAdaptiveThemeSpec.current.useCompactTopActions
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
     ) {
-        TrichromeStudioLogo(sizeDp = 36.dp)
+        TrichromeStudioLogo(sizeDp = if (compact) 30.dp else 36.dp)
 
-        Spacer(modifier = Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(if (compact) 8.dp else 10.dp))
 
         androidx.compose.foundation.layout.Column {
             Row(
@@ -191,44 +195,56 @@ fun TrichromeBrandHeader(
                     text = appName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = (-0.3).sp
+                    letterSpacing = (-0.3).sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
                 )
 
-                // Trichrome micro badge
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    TrichromeEmerald.copy(alpha = 0.2f),
-                                    TrichromeCyan.copy(alpha = 0.2f)
+                // Trichrome micro badge (hidden on ultra-compact header to keep title crisp)
+                if (!compact) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        TrichromeEmerald.copy(alpha = 0.2f),
+                                        TrichromeCyan.copy(alpha = 0.2f)
+                                    )
                                 )
                             )
+                            .border(
+                                0.8.dp,
+                                TrichromeCyan.copy(alpha = 0.45f),
+                                RoundedCornerShape(5.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "KtVM • M3",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TrichromeCyan,
+                            maxLines = 1,
+                            softWrap = false
                         )
-                        .border(
-                            0.8.dp,
-                            TrichromeCyan.copy(alpha = 0.45f),
-                            RoundedCornerShape(5.dp)
-                        )
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "IDE v2.2",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TrichromeCyan
-                    )
+                    }
                 }
             }
 
-            Text(
-                text = "Multi-Language Floating Studio • Island OS",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp
-            )
+            if (showSubtitle && !compact) {
+                Text(
+                    text = "On-Device Kotlin Compiler & Adaptive IDE",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

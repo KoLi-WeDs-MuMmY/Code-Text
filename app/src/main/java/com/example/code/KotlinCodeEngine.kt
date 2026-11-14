@@ -1217,6 +1217,13 @@ object KotlinCodeEngine {
                 }
             }
 
+            BracketPairColorizer.applyToBuilder(
+                builder = this,
+                code = code,
+                cursorOffset = cursorOffset,
+                isPython = false
+            )
+
             if (matchedBrackets != null) {
                 val (openIdx, closeIdx) = matchedBrackets
                 val bracketHighlight = SpanStyle(

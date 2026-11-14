@@ -186,6 +186,13 @@ object CodeLanguageEngine {
                     }
                 }
             }
+
+            BracketPairColorizer.applyToBuilder(
+                builder = this,
+                code = code,
+                cursorOffset = cursorOffset,
+                isPython = (language == LanguageType.PYTHON)
+            )
         }
     }
 
@@ -249,7 +256,10 @@ object CodeLanguageEngine {
         val callStack: List<String> = emptyList(),
         val logcatEntries: List<String> = emptyList(),
         val toolchainInstalled: Boolean = true,
-        val requiredSdkName: String = ""
+        val requiredSdkName: String = "",
+        val compilationArtifact: com.example.compiler.CompilationArtifact? = null,
+        val vmState: com.example.compiler.VmExecutionState? = null,
+        val vmTrace: List<com.example.compiler.VmExecutionState> = emptyList()
     )
 
     /**
@@ -312,6 +322,22 @@ object CodeLanguageEngine {
             KotlinCodeEngine.diagnoseKotlinSyntax(code).toMutableList()
         } else {
             diagnoseNonKotlinSyntax(code, language).toMutableList()
+        }
+
+        // Merge real Kotlin Compiler Plugin semantic diagnostics (val reassignment, arity, type mismatch, / by zero)
+        if (language == LanguageType.KOTLIN && code.isNotBlank()) {
+            val compilerDiags = com.example.compiler.KotlinCompilerPlugin
+                .compile(code, LanguageType.KOTLIN)
+                .diagnostics
+            compilerDiags.forEach { cDiag ->
+                val alreadyExists = baseDiagnostics.any { existing ->
+                    existing.line == cDiag.line &&
+                        (existing.severity == DiagnosticSeverity.ERROR || existing.message == cDiag.message)
+                }
+                if (!alreadyExists && !cDiag.message.startsWith("Syntax error near")) {
+                    baseDiagnostics.add(cDiag)
+                }
+            }
         }
 
         // Append CodeAssist Auto-Import quick fixes for unimported stdlib/framework symbols
@@ -613,6 +639,8 @@ object CodeLanguageEngine {
             )
         }
 
+        val compilationArtifact = com.example.compiler.KotlinCompilerPlugin.compile(code, language)
+
         if (errors.isNotEmpty()) {
             val firstErr = errors.first()
             val fileName = language.defaultFileName
@@ -653,7 +681,7 @@ object CodeLanguageEngine {
                         appendLine("\nProcess finished with exit code 1 (compilation failed)")
                     }
                     LanguageType.KOTLIN -> {
-                        appendLine("$ kotlinc $fileName")
+                        appendLine("$ kotlinc $fileName  [Built-in Plugin]")
                         appendLine("$fileName:${firstErr.line}:1: ${firstErr.message}")
                         appendLine("\nProcess finished with exit code 1 (compilation failed)")
                     }
@@ -675,7 +703,73 @@ object CodeLanguageEngine {
                 callStack = callStack,
                 logcatEntries = logcat,
                 toolchainInstalled = true,
-                requiredSdkName = sdkTitle
+                requiredSdkName = sdkTitle,
+                compilationArtifact = compilationArtifact
+            )
+        }
+
+        // For Kotlin, execute via our real 100% on-device Compiler Plugin + KtVM Stack Bytecode VM
+        if (language == LanguageType.KOTLIN && compilationArtifact.success) {
+            val vmSession = com.example.compiler.KtBytecodeVm.DebugSession(compilationArtifact, stdinLines)
+            val vmState = vmSession.runToEnd()
+            val vmTrace = vmSession.getTrace()
+
+            val mergedVariables = LinkedHashMap<String, String>(variables)
+            vmState.variables.forEach { (k, v) -> mergedVariables[k] = v }
+
+            val mergedCallStack = if (vmState.callStack.isNotEmpty()) vmState.callStack else callStack
+            val hasRuntimeErr = vmState.exitCode != 0 || vmState.stderr.isNotEmpty()
+            val output = buildString {
+                appendLine("[Kotlin Built-in Compiler Plugin + KtVM Bytecode VM • Zero Server]")
+                appendLine("Compiled ${compilationArtifact.astSummaryLines.size} AST node(s) -> ${compilationArtifact.bytecode.size} bytecode op(s) in ${compilationArtifact.compileTimeMs}ms")
+                if (stdinLines.isNotEmpty()) {
+                    appendLine("[stdin] ${stdinLines.joinToString(" | ")}")
+                }
+                appendLine("$ kotlinc ${language.defaultFileName} && ktvm MainKt")
+                if (hasRuntimeErr) {
+                    vmState.stderr.forEach { appendLine("Runtime Error: $it") }
+                    vmState.stdout.forEach { appendLine(it) }
+                    append("\nProcess finished with exit code ${vmState.exitCode.coerceAtLeast(1)} (${vmState.stepsExecuted} VM steps)")
+                } else {
+                    if (vmState.stdout.isEmpty()) {
+                        appendLine("(Executed ${vmState.stepsExecuted} VM step(s) cleanly with no stdout)")
+                    } else {
+                        vmState.stdout.forEach { appendLine(it) }
+                    }
+                    append("\nProcess finished with exit code 0 (${vmState.stepsExecuted} VM steps)")
+                }
+            }
+
+            val logcat = buildList {
+                add("I/KtCompilerPlugin: Compiled ${compilationArtifact.bytecode.size} bytecode ops, ${compilationArtifact.symbols.size} symbols (${compilationArtifact.compileTimeMs}ms)")
+                add("I/KtVM: Executed ${vmState.stepsExecuted} step(s), ${vmTrace.size} debug trace snapshot(s)")
+                if (stdinLines.isNotEmpty()) {
+                    add("D/StdinPipe: Consumed ${stdinLines.size} line(s) from standard input")
+                }
+                add("D/Debugger: Captured ${mergedVariables.size} live runtime variable(s)")
+                diagnostics.filter { it.severity == DiagnosticSeverity.WARNING }.forEach { warn ->
+                    add("W/Compiler: Ln ${warn.line}: ${warn.message}")
+                }
+                if (hasRuntimeErr) {
+                    vmState.stderr.forEach { add("E/KtVM: $it") }
+                } else {
+                    add("I/Process: Process finished with exit code 0")
+                }
+            }
+
+            return DebugSessionInfo(
+                output = output,
+                hasErrors = hasRuntimeErr,
+                exitCode = if (hasRuntimeErr) vmState.exitCode.coerceAtLeast(1) else 0,
+                variables = mergedVariables,
+                diagnostics = diagnostics,
+                callStack = mergedCallStack,
+                logcatEntries = logcat,
+                toolchainInstalled = true,
+                requiredSdkName = sdkTitle,
+                compilationArtifact = compilationArtifact,
+                vmState = vmState,
+                vmTrace = vmTrace
             )
         }
 
@@ -703,7 +797,7 @@ object CodeLanguageEngine {
         }
 
         val output = buildString {
-            appendLine("[On-Device AST Interpreter • Zero Server]")
+            appendLine("[On-Device AST & Bytecode Engine • ${compilationArtifact.bytecode.size} IR ops • Zero Server]")
             if (stdinLines.isNotEmpty()) {
                 appendLine("[stdin] ${stdinLines.joinToString(" | ")}")
             }
@@ -722,7 +816,7 @@ object CodeLanguageEngine {
         }
 
         val logcat = buildList {
-            add("I/OnDeviceRuntime: Active $sdkTitle (${interpreterResult.stepsExecuted} AST steps)")
+            add("I/OnDeviceRuntime: Active $sdkTitle (${interpreterResult.stepsExecuted} AST steps, ${compilationArtifact.bytecode.size} IR ops)")
             if (stdinLines.isNotEmpty()) {
                 add("D/StdinPipe: Consumed ${stdinLines.size} line(s) from standard input")
             }
@@ -746,7 +840,8 @@ object CodeLanguageEngine {
             callStack = mergedCallStack,
             logcatEntries = logcat,
             toolchainInstalled = true,
-            requiredSdkName = sdkTitle
+            requiredSdkName = sdkTitle,
+            compilationArtifact = compilationArtifact
         )
     }
 

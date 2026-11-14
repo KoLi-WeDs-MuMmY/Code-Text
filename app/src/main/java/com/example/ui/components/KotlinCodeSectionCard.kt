@@ -81,6 +81,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -113,6 +114,7 @@ import com.example.ui.theme.IdeInlineErrorPillBg
 import com.example.ui.theme.IdeInlineErrorPillBorder
 import com.example.ui.theme.IdeInlineErrorPillText
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LocalAdaptiveThemeSpec
 import com.example.ui.theme.Tier1CodeBevelTop
 import com.example.ui.theme.Tier1CodeCanvasBg
 import com.example.ui.theme.Tier1CodeGutterBg
@@ -217,6 +219,7 @@ fun KotlinCodeSectionCard(
     modifier: Modifier = Modifier
 ) {
     val defaultSyntaxColors = com.example.ui.theme.LocalKotlinSyntaxColors.current
+    val adaptiveSpec = LocalAdaptiveThemeSpec.current
     val activeSyntaxColors = section.themeOverride?.toSyntaxColors() ?: defaultSyntaxColors
     val terminalSyntaxColors = activeSyntaxColors
     val clipboardManager = LocalClipboardManager.current
@@ -229,6 +232,13 @@ fun KotlinCodeSectionCard(
     val coroutineScope = rememberCoroutineScope()
 
     var codeViewportHeightPx by remember { mutableIntStateOf(0) }
+    var codeViewportWidthPx by remember { mutableIntStateOf(0) }
+    val codeFontSp = remember(adaptiveSpec.codeFontDeltaSp) {
+        (13 + adaptiveSpec.codeFontDeltaSp).coerceIn(11, 15).sp
+    }
+    val codeLineHeightSp = remember(codeFontSp) {
+        (codeFontSp.value * 1.69f).sp
+    }
     var showColorPalettePicker by remember { mutableStateOf(false) }
     var showFindReplaceBar by remember { mutableStateOf(false) }
     var showLiveTemplatesBar by remember { mutableStateOf(false) }
@@ -355,7 +365,7 @@ fun KotlinCodeSectionCard(
             try {
                 // Allow a brief layout pass so codeLayoutResult reflects the newly typed character/line
                 delay(16)
-                val linePx = with(density) { 22.sp.toPx() }
+                val linePx = with(density) { codeLineHeightSp.toPx() }
                 val layout = codeLayoutResult
                 val cursorRect = if (layout != null && currentText.isNotEmpty()) {
                     try {
@@ -534,7 +544,7 @@ fun KotlinCodeSectionCard(
 
     val currentCodeLineCount = maxOf(codeFieldValue.text.count { it == '\n' } + 1, section.lineCount)
     val visibleLines = maxOf(currentCodeLineCount, 4)
-    val lineHeightDp = with(density) { 22.sp.toDp() }
+    val lineHeightDp = with(density) { codeLineHeightSp.toDp() }
     val minCodeEditorHeight = (lineHeightDp * visibleLines) + 24.dp
 
     androidx.compose.runtime.CompositionLocalProvider(
@@ -580,14 +590,14 @@ fun KotlinCodeSectionCard(
             }
         }
 
-        // 2. Clean CodeAssist + iOS Glass Surface
+        // 2. Material 3 Tonal CodeAssist Surface with Elevation
         Card(
-            shape = RoundedCornerShape(if (isSingleSectionFocusMode) 12.dp else 18.dp),
+            shape = RoundedCornerShape(if (isSingleSectionFocusMode) 14.dp else adaptiveSpec.cardCornerRadius),
             colors = CardDefaults.cardColors(
                 containerColor = DarculaCanvasBg
             ),
             elevation = CardDefaults.cardElevation(
-                defaultElevation = if (isSingleSectionFocusMode) 2.dp else 6.dp
+                defaultElevation = if (isSingleSectionFocusMode) adaptiveSpec.cardElevation else adaptiveSpec.cardElevation + 3.dp
             ),
             modifier = Modifier
                 .then(
@@ -596,11 +606,11 @@ fun KotlinCodeSectionCard(
                 .border(
                     width = 1.dp,
                     color = if (diagnostics.any { it.severity == DiagnosticSeverity.ERROR }) {
-                        IdeInlineErrorPillBorder.copy(alpha = 0.7f)
+                        IdeInlineErrorPillBorder.copy(alpha = 0.75f)
                     } else {
-                        Color(0xFF2D2724)
+                        MaterialTheme.colorScheme.outlineVariant
                     },
-                    shape = RoundedCornerShape(if (isSingleSectionFocusMode) 12.dp else 18.dp)
+                    shape = RoundedCornerShape(if (isSingleSectionFocusMode) 14.dp else adaptiveSpec.cardCornerRadius)
                 )
         ) {
             Column(
@@ -608,22 +618,24 @@ fun KotlinCodeSectionCard(
             ) {
                 // =========================================================================
                 // A. CODEASSIST BREADCRUMB & COMPACT IDE BAR (`app > src > kotlin > Main.kt`)
+                // Clipped with trailing gap so path NEVER overlaps `Ln X, Col Y`
                 // =========================================================================
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1E1A18))
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Left: CodeAssist Path Breadcrumb (`app > src > kotlin > Main.kt`)
+                    // Left: Clipped, scrollable CodeAssist Path Breadcrumb
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
                         modifier = Modifier
                             .weight(1f)
+                            .clipToBounds()
                             .horizontalScroll(rememberScrollState())
+                            .padding(end = 6.dp)
                     ) {
                         val breadcrumbSegments = remember(section.language, section.nativeFileName) {
                             listOf("app") +
@@ -634,18 +646,22 @@ fun KotlinCodeSectionCard(
                                 text = seg,
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 11.sp,
+                                maxLines = 1,
+                                softWrap = false,
                                 color = DarculaMutedText
                             )
                             Text(
                                 text = "›",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 11.sp,
+                                maxLines = 1,
+                                softWrap = false,
                                 color = DarculaMutedText.copy(alpha = 0.6f)
                             )
                         }
 
                         // Editable native file name right inside the breadcrumb!
-                        Box(modifier = Modifier.widthIn(min = 80.dp, max = 220.dp)) {
+                        Box(modifier = Modifier.widthIn(min = 60.dp, max = 148.dp)) {
                             BasicTextField(
                                 value = section.sectionTitle,
                                 onValueChange = onSectionTitleChange,
@@ -664,6 +680,8 @@ fun KotlinCodeSectionCard(
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 11.5.sp,
                                             fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            softWrap = false,
                                             color = DarculaBrightText
                                         )
                                     }
@@ -673,7 +691,7 @@ fun KotlinCodeSectionCard(
                             )
                         }
 
-                        // Read-Only Language Badge (Click opens File Settings where language change requires warning confirmation)
+                        // Read-Only Language Badge
                         Surface(
                             color = section.language.badgeColor.copy(alpha = 0.18f),
                             shape = RoundedCornerShape(6.dp),
@@ -687,6 +705,8 @@ fun KotlinCodeSectionCard(
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
+                                maxLines = 1,
+                                softWrap = false,
                                 color = section.language.badgeColor,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
@@ -694,11 +714,11 @@ fun KotlinCodeSectionCard(
 
                         // Learned Concept Tag Chip
                         Surface(
-                            color = Color(0xFF282320),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             shape = RoundedCornerShape(6.dp),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .border(0.8.dp, Color(0xFF3E3631), RoundedCornerShape(6.dp))
+                                .border(0.8.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
                                 .clickable { isEditingConceptTag = !isEditingConceptTag }
                                 .testTag("learned_concept_badge_${section.orderIndex}")
                         ) {
@@ -720,13 +740,16 @@ fun KotlinCodeSectionCard(
                                     fontWeight = FontWeight.SemiBold,
                                     color = DarculaBrightText,
                                     maxLines = 1,
+                                    softWrap = false,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
                     }
 
-                    // Right: Compact CodeAssist Action Strip (`Ln/Col`, Diagnostics status, Run, AI, Tools)
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Right: Protected non-wrapping Action Strip (`Ln/Col`, Diagnostics, Fold, Focus, Delete)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -735,8 +758,10 @@ fun KotlinCodeSectionCard(
                             text = "Ln ${cursorInfo.line}, Col ${cursorInfo.column}",
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 10.sp,
+                            maxLines = 1,
+                            softWrap = false,
                             color = DarculaMutedText,
-                            modifier = Modifier.padding(end = 4.dp)
+                            modifier = Modifier.padding(end = 3.dp)
                         )
 
                         val hasError = diagnostics.any { it.severity == DiagnosticSeverity.ERROR }
@@ -746,12 +771,12 @@ fun KotlinCodeSectionCard(
                             else -> DarculaSageGreen
                         }
                         Surface(
-                            color = if (hasError) IdeInlineErrorPillBg else Color(0xFF282320),
+                            color = if (hasError) IdeInlineErrorPillBg else MaterialTheme.colorScheme.surfaceContainerHigh,
                             shape = RoundedCornerShape(6.dp),
                             modifier = Modifier
                                 .border(
                                     width = 0.8.dp,
-                                    color = if (hasError) IdeInlineErrorPillBorder else Color(0xFF3E3934),
+                                    color = if (hasError) IdeInlineErrorPillBorder else MaterialTheme.colorScheme.outlineVariant,
                                     shape = RoundedCornerShape(6.dp)
                                 )
                                 .clickable { showMetricsBar = !showMetricsBar }
@@ -775,6 +800,8 @@ fun KotlinCodeSectionCard(
                                     text = if (diagnostics.isEmpty()) "OK" else "${diagnostics.size}",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 9.5.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     color = statusColor,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -783,7 +810,7 @@ fun KotlinCodeSectionCard(
 
                         // Fold / Unfold Code toggle
                         Surface(
-                            color = if (isCodeFolded) Color(0xFF3E3227) else Color(0xFF282320),
+                            color = if (isCodeFolded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
                             shape = RoundedCornerShape(6.dp),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
@@ -798,6 +825,8 @@ fun KotlinCodeSectionCard(
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false,
                                 color = DarculaWarmAmber,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
@@ -2002,7 +2031,10 @@ fun KotlinCodeSectionCard(
                                 }
                             )
                             .background(DarculaCanvasBg)
-                            .onSizeChanged { codeViewportHeightPx = it.height }
+                            .onSizeChanged {
+                                codeViewportHeightPx = it.height
+                                codeViewportWidthPx = it.width
+                            }
                     ) {
                         // Compute logical line character ranges (`\n`-delimited) so each gutter number row
                         // is mathematically locked to the exact rendered pixel height of its corresponding
@@ -2122,8 +2154,8 @@ fun KotlinCodeSectionCard(
                                         Text(
                                             text = "$lineNum.",
                                             fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 13.sp,
-                                            lineHeight = 22.sp,
+                                            fontSize = codeFontSp,
+                                            lineHeight = codeLineHeightSp,
                                             style = androidx.compose.ui.text.TextStyle(
                                                 platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
                                                 lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
@@ -2202,8 +2234,8 @@ fun KotlinCodeSectionCard(
                                     },
                                     textStyle = TextStyle(
                                         fontFamily = JetBrainsMonoFontFamily,
-                                        fontSize = 13.sp,
-                                        lineHeight = 22.sp,
+                                        fontSize = codeFontSp,
+                                        lineHeight = codeLineHeightSp,
                                         color = DarculaBrightText,
                                         platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
                                         lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
@@ -2224,8 +2256,8 @@ fun KotlinCodeSectionCard(
                                                 Text(
                                                     text = section.language.starterCode,
                                                     fontFamily = JetBrainsMonoFontFamily,
-                                                    fontSize = 13.sp,
-                                                    lineHeight = 22.sp,
+                                                    fontSize = codeFontSp,
+                                                    lineHeight = codeLineHeightSp,
                                                     style = androidx.compose.ui.text.TextStyle(
                                                         platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
                                                         lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
@@ -2257,14 +2289,19 @@ fun KotlinCodeSectionCard(
                                         null
                                     }
                                 }
+                                val maxOverlayX = if (codeViewportWidthPx > 0) {
+                                    with(density) { (codeViewportWidthPx.toDp() - 220.dp).coerceAtLeast(24.dp) }
+                                } else 180.dp
 
                                 // 1. CodeAssist Inline Error Pill + 1-Tap Auto-Import / Quick-Fix Chip on the active/error line
                                 val activeLineDiagnostic = diagnostics.firstOrNull { it.line == cursorInfo.line }
                                     ?: diagnostics.firstOrNull()
                                 if (activeLineDiagnostic != null && cursorRect != null) {
                                     val errLineIdx = (activeLineDiagnostic.line - 1).coerceAtLeast(0)
-                                    val errY = with(density) { (errLineIdx * 22.sp.toPx()).toDp() }
-                                    val errX = with(density) { (cursorRect.right.toDp() + 24.dp).coerceAtLeast(140.dp) }
+                                    val errY = with(density) { (errLineIdx * codeLineHeightSp.toPx()).toDp() }
+                                    val errX = with(density) {
+                                        (cursorRect.right.toDp() + 20.dp).coerceIn(64.dp, maxOverlayX)
+                                    }
                                     Surface(
                                         color = Color(0xFF3D2222),
                                         shape = RoundedCornerShape(999.dp),
@@ -2356,7 +2393,9 @@ fun KotlinCodeSectionCard(
 
                                 // 3. CodeAssist Contextual Autocomplete Popup (Shifted +28dp right of cursor) + Side Doc Card
                                 if (showCursorCompletionPopup && cursorRect != null) {
-                                    val popupX = with(density) { (cursorRect.right.toDp() + 28.dp).coerceAtLeast(16.dp) }
+                                    val popupX = with(density) {
+                                        (cursorRect.right.toDp() + 20.dp).coerceIn(12.dp, maxOverlayX)
+                                    }
                                     val popupY = with(density) { (cursorRect.bottom.toDp() + 2.dp).coerceAtLeast(0.dp) }
                                     val selectedSugg = suggestions.getOrNull(selectedSuggestionIndex.coerceIn(0, suggestions.lastIndex))
 

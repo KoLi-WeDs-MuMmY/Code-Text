@@ -81,12 +81,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.code.CodeLanguageEngine
 import com.example.code.DiagnosticSeverity
+import com.example.code.DiffEngine
+import com.example.code.DiffLineKind
 import com.example.code.KotlinDiagnostic
+import com.example.compiler.CompilationArtifact
+import com.example.compiler.KotlinCompilerPlugin
+import com.example.compiler.ReplHistoryEntry
+import com.example.compiler.VmExecutionState
 import com.example.model.BottomDrawerTab
 import com.example.model.CodeSectionUiModel
+import com.example.model.LocalCodeSnapshot
 import com.example.model.LogFilterLevel
 import com.example.model.ToolchainPluginItem
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LocalAdaptiveThemeSpec
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * CodeAssist + iOS Glass Bottom-Anchored Build, Terminal, Problems, Debugger & Logcat Panel.
@@ -103,6 +114,12 @@ fun IdeBottomDrawer(
     activeBreakpoints: Set<Int> = emptySet(),
     watchExpressions: List<String> = emptyList(),
     stdinInput: String = "",
+    compilationArtifact: CompilationArtifact? = null,
+    vmDebugState: VmExecutionState? = null,
+    vmTrace: List<VmExecutionState> = emptyList(),
+    vmTraceIndex: Int = -1,
+    replHistory: List<ReplHistoryEntry> = emptyList(),
+    localSnapshots: List<LocalCodeSnapshot> = emptyList(),
     onUpdateStdinInput: (String) -> Unit = {},
     onTabSelected: (BottomDrawerTab) -> Unit,
     onHeightFractionChange: (Float) -> Unit,
@@ -116,8 +133,17 @@ fun IdeBottomDrawer(
     onAddWatchExpression: (String) -> Unit = {},
     onRemoveWatchExpression: (String) -> Unit = {},
     onApplyQuickFixCode: (String) -> Unit = {},
+    onCompileAstBytecode: () -> Unit = {},
+    onDebugResumeVm: () -> Unit = {},
+    onDebugStepOverVm: () -> Unit = {},
+    onDebugResetVm: () -> Unit = {},
+    onEvaluateRepl: (String) -> Unit = {},
+    onClearRepl: () -> Unit = {},
+    onCreateSnapshot: () -> Unit = {},
+    onRestoreSnapshot: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val adaptive = LocalAdaptiveThemeSpec.current
     var logFilterLevel by remember { mutableStateOf(LogFilterLevel.ALL) }
     var filterQuery by remember { mutableStateOf("") }
     var debugStepLine by remember(activeSection?.id, activeBreakpoints) {
@@ -144,6 +170,16 @@ fun IdeBottomDrawer(
         )
     }
 
+    val effectiveArtifact = remember(compilationArtifact, activeSection?.codeContent, activeSection?.language) {
+        if (compilationArtifact != null && compilationArtifact.language == activeLanguage) {
+            compilationArtifact
+        } else if (activeSection != null) {
+            KotlinCompilerPlugin.compile(activeSection.codeContent, activeSection.language)
+        } else {
+            null
+        }
+    }
+
     val problemCount = diagnostics.count { it.severity == DiagnosticSeverity.ERROR }
     val warningCount = diagnostics.count { it.severity == DiagnosticSeverity.WARNING }
 
@@ -162,25 +198,26 @@ fun IdeBottomDrawer(
             .fillMaxHeight(heightFraction.coerceIn(0.25f, 0.85f))
     ) {
         Surface(
-            color = Color(0xFF171312),
-            shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
-            shadowElevation = 28.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shadowElevation = adaptive.overlayElevation,
+            tonalElevation = 6.dp,
             modifier = Modifier
                 .fillMaxSize()
                 .border(
                     width = 1.dp,
-                    color = Color(0xFF332B28),
-                    shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
                 )
                 .testTag("ide_bottom_drawer")
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // 1. iOS-style Top Drag Grabber Handle
+                // 1. Top Drag Grabber Handle
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(14.dp)
-                        .background(Color(0xFF1E1917))
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
                         .draggable(
                             orientation = Orientation.Vertical,
                             state = rememberDraggableState { deltaY ->
@@ -192,29 +229,28 @@ fun IdeBottomDrawer(
                 ) {
                     Box(
                         modifier = Modifier
-                            .width(40.dp)
+                            .width(42.dp)
                             .height(4.dp)
                             .clip(RoundedCornerShape(2.dp))
-                            .background(Color(0xFF5C5049))
+                            .background(MaterialTheme.colorScheme.outline)
                     )
                 }
 
-                // 2. CodeAssist Header Bar: [Build] [Problems] [Debugger] [Logcat] ... [Idle/Ready] [▶] [▭] [—]
+                // 2. Header Bar: Tabs Strip ... [Status] [Run] [Clear] [Resize] [Close]
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1E1917))
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Left Tabs matching CodeAssist Build/Problems/Log/Logcat strip
                     Row(
                         modifier = Modifier
                             .weight(1f)
                             .horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         BottomDrawerTabChip(
                             label = "Build & Run",
@@ -226,21 +262,48 @@ fun IdeBottomDrawer(
                         )
 
                         BottomDrawerTabChip(
+                            label = "REPL",
+                            badgeText = "${replHistory.size}",
+                            isSelected = activeTab == BottomDrawerTab.REPL,
+                            badgeColor = Color(0xFFC084FC),
+                            onClick = { onTabSelected(BottomDrawerTab.REPL) },
+                            testTag = "drawer_tab_repl"
+                        )
+
+                        BottomDrawerTabChip(
+                            label = "Debugger",
+                            badgeText = if (vmDebugState != null) "PC:${vmDebugState.currentPc}" else "${debugInfo?.variables?.size ?: 0}",
+                            isSelected = activeTab == BottomDrawerTab.DEBUGGER,
+                            badgeColor = Color(0xFF10B981),
+                            onClick = { onTabSelected(BottomDrawerTab.DEBUGGER) },
+                            testTag = "drawer_tab_debugger"
+                        )
+
+                        BottomDrawerTabChip(
+                            label = "Bytecode",
+                            badgeText = "${effectiveArtifact?.bytecode?.size ?: 0}",
+                            isSelected = activeTab == BottomDrawerTab.AST_BYTECODE,
+                            badgeColor = Color(0xFF38BDF8),
+                            onClick = { onTabSelected(BottomDrawerTab.AST_BYTECODE) },
+                            testTag = "drawer_tab_bytecode"
+                        )
+
+                        BottomDrawerTabChip(
+                            label = "Git Diff",
+                            badgeText = "${localSnapshots.size}",
+                            isSelected = activeTab == BottomDrawerTab.GIT_DIFF,
+                            badgeColor = Color(0xFFF59E0B),
+                            onClick = { onTabSelected(BottomDrawerTab.GIT_DIFF) },
+                            testTag = "drawer_tab_git_diff"
+                        )
+
+                        BottomDrawerTabChip(
                             label = "Problems",
                             badgeText = if (problemCount + warningCount > 0) "${problemCount + warningCount}" else "0",
                             isSelected = activeTab == BottomDrawerTab.PROBLEMS,
                             badgeColor = if (problemCount > 0) Color(0xFFFF5F56) else Color(0xFF8FB975),
                             onClick = { onTabSelected(BottomDrawerTab.PROBLEMS) },
                             testTag = "drawer_tab_problems"
-                        )
-
-                        BottomDrawerTabChip(
-                            label = "Debugger",
-                            badgeText = "${debugInfo?.variables?.size ?: 0} vars",
-                            isSelected = activeTab == BottomDrawerTab.DEBUGGER,
-                            badgeColor = Color(0xFF10B981),
-                            onClick = { onTabSelected(BottomDrawerTab.DEBUGGER) },
-                            testTag = "drawer_tab_debugger"
                         )
 
                         BottomDrawerTabChip(
@@ -259,20 +322,22 @@ fun IdeBottomDrawer(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         val statusText = when {
-                            !isSdkInstalled -> "Disabled"
-                            problemCount > 0 -> "Failed ($problemCount)"
-                            executionOutput != null -> "Finished (0)"
-                            else -> "On-Device Ready"
+                            !isSdkInstalled -> "Off"
+                            problemCount > 0 -> "Err ($problemCount)"
+                            vmDebugState?.isPaused == true -> "Paused"
+                            executionOutput != null -> "OK (0)"
+                            else -> if (adaptive.useCompactTopActions) "KtVM" else "KtVM Ready"
                         }
                         val statusColor = when {
                             !isSdkInstalled -> Color(0xFFFFB86C)
                             problemCount > 0 -> Color(0xFFFF5F56)
+                            vmDebugState?.isPaused == true -> Color(0xFFFFBD2E)
                             executionOutput != null -> Color(0xFF6A9955)
                             else -> Color(0xFFA39C93)
                         }
 
                         Surface(
-                            color = Color(0xFF2B2421),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             shape = RoundedCornerShape(12.dp),
                             border = androidx.compose.foundation.BorderStroke(0.5.dp, statusColor.copy(alpha = 0.45f))
                         ) {
@@ -282,7 +347,9 @@ fun IdeBottomDrawer(
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = statusColor,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                             )
                         }
 
@@ -297,7 +364,7 @@ fun IdeBottomDrawer(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.PlayArrow,
@@ -305,14 +372,18 @@ fun IdeBottomDrawer(
                                     tint = Color(0xFF27C93F),
                                     modifier = Modifier.size(14.dp)
                                 )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(
-                                    text = "Run",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF27C93F)
-                                )
+                                if (!adaptive.useCompactTopActions) {
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "Run",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF27C93F),
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
                             }
                         }
 
@@ -560,7 +631,7 @@ fun IdeBottomDrawer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .background(Color(0xFF141110))
+                        .background(MaterialTheme.colorScheme.surfaceContainerLowest)
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     when (activeTab) {
@@ -576,22 +647,51 @@ fun IdeBottomDrawer(
                                 onRunWithInput = onRunCode
                             )
                         }
+                        BottomDrawerTab.REPL -> {
+                            ReplTabContent(
+                                history = replHistory,
+                                onEvaluate = onEvaluateRepl,
+                                onClear = onClearRepl
+                            )
+                        }
                         BottomDrawerTab.DEBUGGER -> {
                             DebuggerTabContent(
                                 debugInfo = debugInfo,
+                                vmDebugState = vmDebugState,
+                                vmTrace = vmTrace,
+                                vmTraceIndex = vmTraceIndex,
                                 activeSection = activeSection,
                                 sdkPlugin = matchingSdkPlugin,
-                                activeStepLine = debugStepLine,
+                                activeStepLine = vmDebugState?.currentLine ?: debugStepLine,
                                 activeBreakpoints = activeBreakpoints,
                                 watchExpressions = watchExpressions,
                                 onStepLineChange = { newLine ->
                                     debugStepLine = newLine
                                     onJumpToLine(newLine)
                                 },
+                                onResumeVm = onDebugResumeVm,
+                                onStepOverVm = onDebugStepOverVm,
+                                onResetVm = onDebugResetVm,
                                 onToggleBreakpoint = onToggleBreakpoint,
                                 onAddWatchExpression = onAddWatchExpression,
                                 onRemoveWatchExpression = onRemoveWatchExpression,
                                 onOpenPluginManager = onOpenPluginManager
+                            )
+                        }
+                        BottomDrawerTab.AST_BYTECODE -> {
+                            AstBytecodeTabContent(
+                                artifact = effectiveArtifact,
+                                activePc = vmDebugState?.currentPc,
+                                onRecompile = onCompileAstBytecode,
+                                onJumpToLine = onJumpToLine
+                            )
+                        }
+                        BottomDrawerTab.GIT_DIFF -> {
+                            GitDiffTabContent(
+                                activeSection = activeSection,
+                                snapshots = localSnapshots,
+                                onCreateSnapshot = onCreateSnapshot,
+                                onRestoreSnapshot = onRestoreSnapshot
                             )
                         }
                         BottomDrawerTab.PROBLEMS -> {
@@ -631,16 +731,18 @@ private fun BottomDrawerTabChip(
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .padding(horizontal = 7.dp, vertical = 4.dp)
             .testTag(testTag)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = label,
                 fontFamily = JetBrainsMonoFontFamily,
-                fontSize = 11.5.sp,
+                fontSize = 11.sp,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = if (isSelected) Color(0xFFF5EFEA) else Color(0xFF9E948B)
+                color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false
             )
             Spacer(modifier = Modifier.width(5.dp))
             Surface(
@@ -653,6 +755,8 @@ private fun BottomDrawerTabChip(
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
                     color = badgeColor,
+                    maxLines = 1,
+                    softWrap = false,
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                 )
             }
@@ -663,7 +767,7 @@ private fun BottomDrawerTabChip(
                 .width(if (isSelected) 32.dp else 0.dp)
                 .height(2.dp)
                 .clip(RoundedCornerShape(1.dp))
-                .background(if (isSelected) Color(0xFFD4883A) else Color.Transparent)
+                .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
         )
     }
 }
@@ -903,22 +1007,34 @@ private fun TerminalTabContent(
 @Composable
 private fun DebuggerTabContent(
     debugInfo: CodeLanguageEngine.DebugSessionInfo?,
+    vmDebugState: VmExecutionState? = null,
+    vmTrace: List<VmExecutionState> = emptyList(),
+    vmTraceIndex: Int = -1,
     activeSection: CodeSectionUiModel?,
     sdkPlugin: ToolchainPluginItem?,
     activeStepLine: Int,
     activeBreakpoints: Set<Int> = emptySet(),
     watchExpressions: List<String> = emptyList(),
     onStepLineChange: (Int) -> Unit,
+    onResumeVm: () -> Unit = {},
+    onStepOverVm: () -> Unit = {},
+    onResetVm: () -> Unit = {},
     onToggleBreakpoint: (Int) -> Unit = {},
     onAddWatchExpression: (String) -> Unit = {},
     onRemoveWatchExpression: (String) -> Unit = {},
     onOpenPluginManager: () -> Unit
 ) {
-    val variables = debugInfo?.variables ?: emptyMap()
-    val callStack = debugInfo?.callStack.orEmpty()
-    val hasErrors = debugInfo?.hasErrors == true
+    val variables = remember(vmDebugState?.variables, debugInfo?.variables) {
+        linkedMapOf<String, String>().apply {
+            debugInfo?.variables?.let { putAll(it) }
+            vmDebugState?.variables?.let { putAll(it) }
+        }
+    }
+    val callStack = vmDebugState?.callStack?.ifEmpty { debugInfo?.callStack.orEmpty() }
+        ?: debugInfo?.callStack.orEmpty()
+    val hasErrors = (debugInfo?.hasErrors == true) || (vmDebugState?.exitCode ?: 0) != 0
     val totalLines = (activeSection?.lineCount ?: 1).coerceAtLeast(1)
-    val isPausedAtBreakpoint = activeStepLine in activeBreakpoints
+    val isPausedAtBreakpoint = vmDebugState?.isPaused == true || (activeStepLine in activeBreakpoints)
     var watchInput by remember { mutableStateOf("") }
 
     LazyColumn(
@@ -928,11 +1044,11 @@ private fun DebuggerTabContent(
         // Step Debugger Toolbar
         item {
             Surface(
-                color = if (isPausedAtBreakpoint) Color(0xFF2B1A19) else Color(0xFF1D1917),
+                color = if (isPausedAtBreakpoint) Color(0xFF2B1A19) else MaterialTheme.colorScheme.surfaceContainer,
                 shape = RoundedCornerShape(12.dp),
                 border = androidx.compose.foundation.BorderStroke(
                     1.dp,
-                    if (isPausedAtBreakpoint) Color(0xFFFF5F56) else Color(0xFF342C28)
+                    if (isPausedAtBreakpoint) Color(0xFFFF5F56) else MaterialTheme.colorScheme.outlineVariant
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -945,7 +1061,8 @@ private fun DebuggerTabContent(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
                         Box(
                             modifier = Modifier
@@ -959,68 +1076,78 @@ private fun DebuggerTabContent(
                                     }
                                 )
                         )
+                        val vmBadge = if (vmDebugState != null && vmTrace.isNotEmpty()) {
+                            "Step ${vmTraceIndex + 1}/${vmTrace.size} • PC=${vmDebugState.currentPc} • Ln $activeStepLine"
+                        } else if (isPausedAtBreakpoint) {
+                            "Paused • Ln $activeStepLine/$totalLines"
+                        } else {
+                            "${sdkPlugin?.debuggerName ?: "KtVM Debugger"} • Ln $activeStepLine/$totalLines"
+                        }
                         Text(
-                            text = if (isPausedAtBreakpoint) {
-                                "● Paused at Breakpoint • Ln $activeStepLine/$totalLines"
-                            } else {
-                                "${sdkPlugin?.debuggerName ?: "JDWP Debugger"} • Line $activeStepLine/$totalLines"
-                            },
+                            text = vmBadge,
                             fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 10.5.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isPausedAtBreakpoint) Color(0xFFFFB4AB) else Color(0xFFE6E1DC)
+                            color = if (isPausedAtBreakpoint) Color(0xFFFFB4AB) else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState())
                     ) {
-                        // Resume to Next Breakpoint (F9)
-                        if (activeBreakpoints.isNotEmpty()) {
-                            Surface(
-                                color = Color(0xFF233626),
-                                shape = RoundedCornerShape(8.dp),
-                                border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF6A8759)),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable {
+                        // Resume / Run KtVM Debugger (F9)
+                        Surface(
+                            color = Color(0xFF233626),
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF6A8759)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    onResumeVm()
+                                    if (activeBreakpoints.isNotEmpty()) {
                                         val sorted = activeBreakpoints.sorted()
                                         val nextBp = sorted.firstOrNull { it > activeStepLine } ?: sorted.first()
                                         onStepLineChange(nextBp)
                                     }
-                                    .testTag("debugger_resume_breakpoint_button")
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = "Resume to Next Breakpoint",
-                                        tint = Color(0xFF81C784),
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(
-                                        text = "Resume",
-                                        fontFamily = JetBrainsMonoFontFamily,
-                                        fontSize = 9.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF81C784)
-                                    )
                                 }
+                                .testTag("debugger_resume_breakpoint_button")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Resume KtVM Session",
+                                    tint = Color(0xFF81C784),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "Resume",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF81C784),
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
                             }
                         }
 
                         // Step Over (F8)
                         Surface(
-                            color = Color(0xFF2C2522),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF4A3F39)),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable {
+                                    onStepOverVm()
                                     val next = if (activeStepLine < totalLines) activeStepLine + 1 else 1
                                     onStepLineChange(next)
                                 }
@@ -1038,23 +1165,26 @@ private fun DebuggerTabContent(
                                 )
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text(
-                                    text = "Step Over",
+                                    text = "Step",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFE6E1DC)
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         }
 
                         // Step Into (F7)
                         Surface(
-                            color = Color(0xFF2C2522),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF4A3F39)),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable {
+                                    onStepOverVm()
                                     val next = (activeStepLine + 1).coerceAtMost(totalLines)
                                     onStepLineChange(next)
                                 }
@@ -1071,22 +1201,27 @@ private fun DebuggerTabContent(
                                 )
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text(
-                                    text = "Step Into",
+                                    text = "Into",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFE6E1DC)
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         }
 
                         // Reset Frame
                         Surface(
-                            color = Color(0xFF2C2522),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { onStepLineChange(1) }
+                                .clickable {
+                                    onResetVm()
+                                    onStepLineChange(1)
+                                }
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -1097,6 +1232,63 @@ private fun DebuggerTabContent(
                                     contentDescription = "Reset Debugger",
                                     tint = Color(0xFF8FB975),
                                     modifier = Modifier.size(13.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // KtVM Operand Stack & Frame Snapshots Preview
+        if (vmDebugState != null) {
+            item {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF10B981).copy(alpha = 0.45f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "KTVM TRACE • ${vmDebugState.stepsExecuted} VM steps • Exit ${vmDebugState.exitCode}",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF10B981)
+                        )
+                        if (vmDebugState.operandStackPreview.isNotEmpty()) {
+                            Text(
+                                text = "Operand Stack: [${vmDebugState.operandStackPreview.joinToString(", ")}]",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.sp,
+                                color = Color(0xFF93C5FD),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (vmDebugState.heapPreview.isNotEmpty()) {
+                            Text(
+                                text = "Heap Objects: ${vmDebugState.heapPreview.entries.joinToString(" | ") { "${it.key}=${it.value}" }}",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.sp,
+                                color = Color(0xFFFCD34D),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (vmDebugState.frameSnapshots.isNotEmpty()) {
+                            vmDebugState.frameSnapshots.forEach { snap ->
+                                Text(
+                                    text = "Frame ${snap.functionName} (Ln ${snap.line}): ${snap.locals.entries.joinToString(", ") { "${it.key}=${it.value}" }.ifEmpty { "no locals" }}",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 9.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -1589,6 +1781,683 @@ private fun LogcatTabContent(
     }
 }
 
+@Composable
+private fun ReplTabContent(
+    history: List<ReplHistoryEntry>,
+    onEvaluate: (String) -> Unit,
+    onClear: () -> Unit
+) {
+    var inputText by remember { mutableStateOf("") }
+    val presets = listOf(
+        "val x = 6 * 7; x",
+        "(1..5).map { it * it }",
+        "\"KtVM\".uppercase()",
+        "fun sq(n: Int) = n * n; sq(9)"
+    )
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Quick REPL Snippets Strip
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "λ Kotlin REPL",
+                fontFamily = JetBrainsMonoFontFamily,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFC084FC),
+                maxLines = 1,
+                softWrap = false
+            )
+            presets.forEach { snippet ->
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(999.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable { onEvaluate(snippet) }
+                ) {
+                    Text(
+                        text = snippet,
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 9.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+        }
+
+        // REPL Input Bar
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            shape = RoundedCornerShape(10.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "kt>",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFC084FC)
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                        .border(0.75.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                ) {
+                    BasicTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        cursorBrush = SolidColor(Color(0xFFC084FC)),
+                        decorationBox = { inner ->
+                            if (inputText.isEmpty()) {
+                                Text(
+                                    text = "Type Kotlin expr, val/var, or fun (persistent VM scope)...",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            inner()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("repl_input_field")
+                    )
+                }
+                Surface(
+                    color = Color(0xFFC084FC).copy(alpha = 0.22f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFC084FC)),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            if (inputText.isNotBlank()) {
+                                onEvaluate(inputText)
+                                inputText = ""
+                            }
+                        }
+                        .testTag("repl_eval_button")
+                ) {
+                    Text(
+                        text = "Eval ▶",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE9D5FF),
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                    )
+                }
+                if (history.isNotEmpty()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onClear)
+                    ) {
+                        Text(
+                            text = "Reset",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // REPL History List
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            if (history.isEmpty()) {
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "On-Device Kotlin REPL is ready. Expressions compile directly to KtVM bytecode and persist variables/functions across evaluations.",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+            } else {
+                items(history.reversed(), key = { it.id }) { entry ->
+                    Surface(
+                        color = if (entry.isError) Color(0xFF2B1817) else MaterialTheme.colorScheme.surfaceContainer,
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            0.75.dp,
+                            if (entry.isError) Color(0xFF6B312E) else MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "kt> ${entry.input}",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${entry.inferredType} • ${entry.compiledOpsCount} ops",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 9.sp,
+                                    color = Color(0xFFC084FC),
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                            Text(
+                                text = entry.output,
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 11.sp,
+                                color = if (entry.isError) Color(0xFFF2B8B5) else Color(0xFF8FB975)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AstBytecodeTabContent(
+    artifact: CompilationArtifact?,
+    activePc: Int?,
+    onRecompile: () -> Unit,
+    onJumpToLine: (Int) -> Unit
+) {
+    var showBytecodeMode by remember { mutableStateOf(true) }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (artifact == null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = "Open a source file to inspect AST & compiled KtVM bytecode.",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            return
+        }
+
+        // Top Inspector Summary & Toggle Bar
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState())
+            ) {
+                Surface(
+                    color = if (showBytecodeMode) Color(0xFF38BDF8).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(999.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.75.dp, if (showBytecodeMode) Color(0xFF38BDF8) else MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable { showBytecodeMode = true }
+                ) {
+                    Text(
+                        text = "Bytecode (${artifact.bytecode.size})",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (showBytecodeMode) Color(0xFF7DD3FC) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                    )
+                }
+
+                Surface(
+                    color = if (!showBytecodeMode) Color(0xFFD4883A).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(999.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.75.dp, if (!showBytecodeMode) Color(0xFFD4883A) else MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable { showBytecodeMode = false }
+                ) {
+                    Text(
+                        text = "AST (${artifact.astSummaryLines.size}) & Symbols (${artifact.symbols.size})",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (!showBytecodeMode) Color(0xFFFFC66D) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                    )
+                }
+
+                Text(
+                    text = "${artifact.compileTimeMs}ms • Pool ${artifact.constantPool.size}",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 9.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onRecompile)
+            ) {
+                Text(
+                    text = "⚙ Compile",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF7DD3FC),
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            if (showBytecodeMode) {
+                items(artifact.bytecode, key = { it.pc }) { instr ->
+                    val isCurrentPc = activePc == instr.pc
+                    Surface(
+                        color = if (isCurrentPc) Color(0xFF283A2C) else MaterialTheme.colorScheme.surfaceContainer,
+                        shape = RoundedCornerShape(6.dp),
+                        border = if (isCurrentPc) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981)) else null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onJumpToLine(instr.line) }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "%03d".format(instr.pc),
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 9.5.sp,
+                                color = if (isCurrentPc) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = instr.op.name,
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF7DD3FC),
+                                modifier = Modifier.width(104.dp)
+                            )
+                            Text(
+                                text = instr.operand.ifBlank { instr.comment },
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.sp,
+                                color = Color(0xFFFCD34D),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "L${instr.line}",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 9.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            } else {
+                item {
+                    Text(
+                        text = "AST NODES (${artifact.pluginName})",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFFC66D)
+                    )
+                }
+                items(artifact.astSummaryLines) { astLine ->
+                    Text(
+                        text = astLine,
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 10.5.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                if (artifact.symbols.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "SYMBOL TABLE (${artifact.symbols.size})",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF7DD3FC)
+                        )
+                    }
+                    items(artifact.symbols) { sym ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onJumpToLine(sym.line) }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${sym.kind} ${sym.name}: ${sym.inferredType}",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${sym.scope} • Ln ${sym.line}",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 9.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GitDiffTabContent(
+    activeSection: CodeSectionUiModel?,
+    snapshots: List<LocalCodeSnapshot>,
+    onCreateSnapshot: () -> Unit,
+    onRestoreSnapshot: (Long) -> Unit
+) {
+    var selectedSnapshotId by remember(activeSection?.id, snapshots.size) {
+        mutableStateOf(snapshots.firstOrNull()?.id)
+    }
+    val selectedSnapshot = snapshots.find { it.id == selectedSnapshotId } ?: snapshots.firstOrNull()
+    val currentCode = activeSection?.codeContent.orEmpty()
+    val diffResult = remember(selectedSnapshot?.codeContent, currentCode) {
+        val base = selectedSnapshot?.codeContent ?: currentCode
+        DiffEngine.computeLineDiff(base, currentCode)
+    }
+    val timeFormatter = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Snapshot & Revision Header Controls
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState())
+            ) {
+                Surface(
+                    color = Color(0xFF27C93F).copy(alpha = 0.16f),
+                    shape = RoundedCornerShape(999.dp)
+                ) {
+                    Text(
+                        text = "+${diffResult.additionsCount}",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF81C784),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Surface(
+                    color = Color(0xFFFF5F56).copy(alpha = 0.16f),
+                    shape = RoundedCornerShape(999.dp)
+                ) {
+                    Text(
+                        text = "-${diffResult.deletionsCount}",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFFB4AB),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+
+                snapshots.forEachIndexed { idx, snap ->
+                    val isSelected = selectedSnapshot?.id == snap.id
+                    Surface(
+                        color = if (isSelected) Color(0xFFF59E0B).copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(999.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            0.75.dp,
+                            if (isSelected) Color(0xFFF59E0B) else MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable { selectedSnapshotId = snap.id }
+                    ) {
+                        Text(
+                            text = "v${snapshots.size - idx} (${timeFormatter.format(Date(snap.timestampMs))})",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) Color(0xFFFCD34D) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Surface(
+                    color = Color(0xFFF59E0B).copy(alpha = 0.22f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFF59E0B)),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onCreateSnapshot)
+                        .testTag("git_diff_create_snapshot_button")
+                ) {
+                    Text(
+                        text = "+ Snapshot",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFCD34D),
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                    )
+                }
+
+                if (selectedSnapshot != null && diffResult.hasChanges) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onRestoreSnapshot(selectedSnapshot.id) }
+                            .testTag("git_diff_restore_snapshot_button")
+                    ) {
+                        Text(
+                            text = "↺ Restore",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF7DD3FC),
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        if (snapshots.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = "No snapshots saved yet for this file. Tap '+ Snapshot' to record a local Git-style revision baseline.",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                items(diffResult.lines) { line ->
+                    val rowBg = when (line.kind) {
+                        DiffLineKind.ADDED -> Color(0xFF1A2F1D)
+                        DiffLineKind.REMOVED -> Color(0xFF331B1A)
+                        DiffLineKind.UNCHANGED -> Color.Transparent
+                    }
+                    val marker = when (line.kind) {
+                        DiffLineKind.ADDED -> "+"
+                        DiffLineKind.REMOVED -> "-"
+                        DiffLineKind.UNCHANGED -> " "
+                    }
+                    val textColor = when (line.kind) {
+                        DiffLineKind.ADDED -> Color(0xFFA5D6A7)
+                        DiffLineKind.REMOVED -> Color(0xFFFFB4AB)
+                        DiffLineKind.UNCHANGED -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(rowBg, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = line.oldLineNumber?.toString()?.padStart(3) ?: "   ",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                        )
+                        Text(
+                            text = line.newLineNumber?.toString()?.padStart(3) ?: "   ",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                        )
+                        Text(
+                            text = marker,
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        Text(
+                            text = line.text,
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.5.sp,
+                            color = textColor,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 /**
  * Desktop IDE Status Bar along the bottom of the editor window.
  */
@@ -1608,8 +2477,8 @@ fun IdeBottomStatusBar(
     val warnCount = diagnostics.count { it.severity == DiagnosticSeverity.WARNING }
 
     Surface(
-        color = Color(0xFF141210),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF262320)),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier
             .fillMaxWidth()
             .height(28.dp)
@@ -1624,7 +2493,8 @@ fun IdeBottomStatusBar(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f, fill = false)
             ) {
                 if (activeSection != null) {
                     val langColor = activeSection.language.badgeColor
@@ -1638,6 +2508,8 @@ fun IdeBottomStatusBar(
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                             color = langColor,
+                            maxLines = 1,
+                            softWrap = false,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                         )
                     }
@@ -1645,18 +2517,21 @@ fun IdeBottomStatusBar(
                         text = activeSection.nativeFileName,
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 10.sp,
-                        color = Color(0xFFE6E1DC),
-                        fontWeight = FontWeight.Medium
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState())
             ) {
                 Surface(
-                    color = if (isDrawerOpen && activeTab == BottomDrawerTab.PROBLEMS) Color(0xFF2B241E) else Color.Transparent,
+                    color = if (isDrawerOpen && activeTab == BottomDrawerTab.PROBLEMS) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
                     shape = RoundedCornerShape(4.dp),
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
@@ -1672,52 +2547,80 @@ fun IdeBottomStatusBar(
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (errCount > 0) Color(0xFFFF5F56) else Color(0xFFA39C93)
+                            color = if (errCount > 0) Color(0xFFFF5F56) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false
                         )
                         Text(
                             text = "▲ $warnCount",
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (warnCount > 0) Color(0xFFFFBD2E) else Color(0xFFA39C93)
+                            color = if (warnCount > 0) Color(0xFFFFBD2E) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
 
-                Surface(
-                    color = if (isDrawerOpen && activeTab == BottomDrawerTab.TERMINAL) Color(0xFF2B241E) else Color.Transparent,
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable { onToggleDrawer(BottomDrawerTab.TERMINAL) }
-                ) {
-                    Text(
-                        text = ">_ Build",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (isDrawerOpen && activeTab == BottomDrawerTab.TERMINAL) Color(0xFFD4883A) else Color(0xFFA39C93),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-
-                Surface(
-                    color = if (isDrawerOpen && activeTab == BottomDrawerTab.DEBUGGER) Color(0xFF2B241E) else Color.Transparent,
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable { onToggleDrawer(BottomDrawerTab.DEBUGGER) }
-                ) {
-                    Text(
-                        text = "🪲 Debug",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (isDrawerOpen && activeTab == BottomDrawerTab.DEBUGGER) Color(0xFF10B981) else Color(0xFFA39C93),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
+                StatusBarQuickPill(
+                    label = ">_ Build",
+                    activeColor = Color(0xFFD4883A),
+                    isActive = isDrawerOpen && activeTab == BottomDrawerTab.TERMINAL,
+                    onClick = { onToggleDrawer(BottomDrawerTab.TERMINAL) }
+                )
+                StatusBarQuickPill(
+                    label = "λ REPL",
+                    activeColor = Color(0xFFC084FC),
+                    isActive = isDrawerOpen && activeTab == BottomDrawerTab.REPL,
+                    onClick = { onToggleDrawer(BottomDrawerTab.REPL) }
+                )
+                StatusBarQuickPill(
+                    label = "⛁ Bytecode",
+                    activeColor = Color(0xFF38BDF8),
+                    isActive = isDrawerOpen && activeTab == BottomDrawerTab.AST_BYTECODE,
+                    onClick = { onToggleDrawer(BottomDrawerTab.AST_BYTECODE) }
+                )
+                StatusBarQuickPill(
+                    label = "± Diff",
+                    activeColor = Color(0xFFF59E0B),
+                    isActive = isDrawerOpen && activeTab == BottomDrawerTab.GIT_DIFF,
+                    onClick = { onToggleDrawer(BottomDrawerTab.GIT_DIFF) }
+                )
+                StatusBarQuickPill(
+                    label = "Debug",
+                    activeColor = Color(0xFF10B981),
+                    isActive = isDrawerOpen && activeTab == BottomDrawerTab.DEBUGGER,
+                    onClick = { onToggleDrawer(BottomDrawerTab.DEBUGGER) }
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun StatusBarQuickPill(
+    label: String,
+    activeColor: Color,
+    isActive: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        color = if (isActive) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
+        shape = RoundedCornerShape(4.dp),
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Text(
+            text = label,
+            fontFamily = JetBrainsMonoFontFamily,
+            fontSize = 9.5.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (isActive) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
     }
 }

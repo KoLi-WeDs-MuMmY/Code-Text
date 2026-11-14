@@ -94,7 +94,13 @@ data class EditorUiState(
     // Interactive Standard Input (stdin) for readln() / input() / Scanner / std::cin
     val terminalStdinInput: String = "",
     // Local On-Device Version History Snapshots (`sectionId -> List<LocalCodeSnapshot>`)
-    val localSnapshotsBySectionId: Map<Long, List<com.example.model.LocalCodeSnapshot>> = emptyMap()
+    val localSnapshotsBySectionId: Map<Long, List<com.example.model.LocalCodeSnapshot>> = emptyMap(),
+    // Built-In Kotlin Compiler Plugin & Stack Bytecode VM State
+    val latestCompilation: com.example.compiler.CompilationArtifact? = null,
+    val vmDebugState: com.example.compiler.VmExecutionState? = null,
+    val vmTrace: List<com.example.compiler.VmExecutionState> = emptyList(),
+    val vmTraceIndex: Int = -1,
+    val replHistory: List<com.example.compiler.ReplHistoryEntry> = emptyList()
 ) {
     fun isLanguageSdkInstalled(language: com.example.model.LanguageType): Boolean {
         val sdkId = com.example.model.ToolchainPluginItem.sdkIdForLanguage(language)
@@ -241,6 +247,8 @@ class EditorViewModel(
     private val redoStack = ArrayDeque<DocumentDetailUiModel>()
     private var autoSaveTickerJob: Job? = null
     private val debouncedAiNamingJobs = mutableMapOf<Long, Job>()
+    private val replSession = com.example.compiler.KtBytecodeVm.ReplSession()
+    private var activeDebugSession: com.example.compiler.KtBytecodeVm.DebugSession? = null
 
     init {
         viewModelScope.launch {
@@ -518,12 +526,172 @@ class EditorViewModel(
             isSdkInstalled = isSdkReady,
             stdinInput = state.terminalStdinInput
         )
+        val existingSnapshots = state.localSnapshotsBySectionId[activeSec.id].orEmpty()
+        val updatedSnapshots = if (existingSnapshots.isEmpty() && activeSec.codeContent.isNotBlank()) {
+            val now = System.currentTimeMillis()
+            val snap = com.example.model.LocalCodeSnapshot(
+                id = now,
+                sectionId = activeSec.id,
+                label = "Baseline Run",
+                codeContent = activeSec.codeContent,
+                timestampMs = now
+            )
+            state.localSnapshotsBySectionId + (activeSec.id to listOf(snap))
+        } else {
+            state.localSnapshotsBySectionId
+        }
         _uiState.update { current ->
             current.copy(
                 terminalExecutionOutput = debugInfo.output,
+                latestCompilation = debugInfo.compilationArtifact,
+                vmDebugState = debugInfo.vmState,
+                vmTrace = debugInfo.vmTrace,
+                vmTraceIndex = (debugInfo.vmTrace.lastIndex).coerceAtLeast(-1),
+                localSnapshotsBySectionId = updatedSnapshots,
                 isBottomDrawerOpen = true,
                 activeBottomDrawerTab = com.example.model.BottomDrawerTab.TERMINAL
             )
+        }
+    }
+
+    fun compileActiveSection(openInspector: Boolean = false) {
+        val state = _uiState.value
+        val doc = state.activeDocument ?: return
+        val activeSec = doc.sections.find { it.id == state.focusedSectionId }
+            ?: doc.sections.firstOrNull()
+            ?: return
+        val artifact = com.example.compiler.KotlinCompilerPlugin.compile(
+            code = activeSec.codeContent,
+            language = activeSec.language
+        )
+        _uiState.update { current ->
+            current.copy(
+                latestCompilation = artifact,
+                aiStatusMessage = "⚙ Compiled ${activeSec.nativeFileName}: ${artifact.bytecode.size} bytecode ops in ${artifact.compileTimeMs}ms",
+                isBottomDrawerOpen = if (openInspector) true else current.isBottomDrawerOpen,
+                activeBottomDrawerTab = if (openInspector) com.example.model.BottomDrawerTab.AST_BYTECODE else current.activeBottomDrawerTab
+            )
+        }
+    }
+
+    fun startOrResumeDebugSession() {
+        val state = _uiState.value
+        val doc = state.activeDocument ?: return
+        val activeSec = doc.sections.find { it.id == state.focusedSectionId }
+            ?: doc.sections.firstOrNull()
+            ?: return
+        val stdinLines = state.terminalStdinInput.lines().filter { it.isNotEmpty() }
+        val artifact = com.example.compiler.KotlinCompilerPlugin.compile(activeSec.codeContent, activeSec.language)
+        val breakpoints = state.breakpointsBySectionId[activeSec.id].orEmpty()
+        val session = com.example.compiler.KtBytecodeVm.DebugSession(artifact, stdinLines)
+        activeDebugSession = session
+        val vmState = if (breakpoints.isNotEmpty()) {
+            session.runUntilBreakpoint(breakpoints)
+        } else {
+            session.runToEnd()
+        }
+        val trace = session.getTrace()
+        val traceIdx = trace.indexOfFirst { it.currentLine == vmState.currentLine && it.stepsExecuted == vmState.stepsExecuted }
+            .takeIf { it >= 0 } ?: (trace.lastIndex).coerceAtLeast(-1)
+        _uiState.update { current ->
+            current.copy(
+                latestCompilation = artifact,
+                vmDebugState = vmState,
+                vmTrace = trace,
+                vmTraceIndex = traceIdx,
+                requestedJumpLine = vmState.currentLine,
+                jumpLineTrigger = current.jumpLineTrigger + 1,
+                isBottomDrawerOpen = true,
+                activeBottomDrawerTab = com.example.model.BottomDrawerTab.DEBUGGER,
+                aiStatusMessage = if (vmState.isPaused) "⏸ Paused at Ln ${vmState.currentLine} (PC=${vmState.currentPc})" else "▶ Debug run finished (${vmState.stepsExecuted} steps)"
+            )
+        }
+    }
+
+    fun debugStepOver() {
+        val state = _uiState.value
+        val doc = state.activeDocument ?: return
+        val activeSec = doc.sections.find { it.id == state.focusedSectionId }
+            ?: doc.sections.firstOrNull()
+            ?: return
+        var session = activeDebugSession
+        if (session == null) {
+            val stdinLines = state.terminalStdinInput.lines().filter { it.isNotEmpty() }
+            val artifact = com.example.compiler.KotlinCompilerPlugin.compile(activeSec.codeContent, activeSec.language)
+            session = com.example.compiler.KtBytecodeVm.DebugSession(artifact, stdinLines)
+            activeDebugSession = session
+        }
+        val stepState = session.stepOver()
+        val trace = session.getTrace()
+        val traceIdx = trace.indexOfFirst { it.stepsExecuted == stepState.stepsExecuted && it.currentLine == stepState.currentLine }
+            .takeIf { it >= 0 } ?: (state.vmTraceIndex + 1).coerceIn(0, (trace.lastIndex).coerceAtLeast(0))
+        _uiState.update { current ->
+            current.copy(
+                latestCompilation = session.artifact,
+                vmDebugState = stepState,
+                vmTrace = trace,
+                vmTraceIndex = traceIdx,
+                requestedJumpLine = stepState.currentLine,
+                jumpLineTrigger = current.jumpLineTrigger + 1,
+                isBottomDrawerOpen = true,
+                activeBottomDrawerTab = com.example.model.BottomDrawerTab.DEBUGGER
+            )
+        }
+    }
+
+    fun debugReset() {
+        val session = activeDebugSession
+        if (session != null) {
+            val resetState = session.resetTrace()
+            _uiState.update {
+                it.copy(
+                    vmDebugState = resetState,
+                    vmTraceIndex = 0,
+                    requestedJumpLine = resetState.currentLine,
+                    jumpLineTrigger = it.jumpLineTrigger + 1,
+                    aiStatusMessage = "↺ Reset KtVM execution trace"
+                )
+            }
+        } else {
+            _uiState.update {
+                it.copy(vmDebugState = null, vmTrace = emptyList(), vmTraceIndex = -1)
+            }
+        }
+    }
+
+    fun evaluateRepl(input: String) {
+        val clean = input.trim()
+        if (clean.isEmpty()) return
+        val entry = replSession.evaluate(clean)
+        _uiState.update { current ->
+            current.copy(
+                replHistory = (current.replHistory + entry).takeLast(40),
+                isBottomDrawerOpen = true,
+                activeBottomDrawerTab = com.example.model.BottomDrawerTab.REPL
+            )
+        }
+    }
+
+    fun clearRepl() {
+        replSession.reset()
+        _uiState.update { current ->
+            current.copy(
+                replHistory = emptyList(),
+                aiStatusMessage = "λ Cleared Kotlin REPL session"
+            )
+        }
+    }
+
+    fun reorderEditorTab(sectionId: Long, delta: Int) {
+        mutateActiveDocument(recordUndo = false) { doc ->
+            val list = doc.sections.toMutableList()
+            val idx = list.indexOfFirst { it.id == sectionId }
+            if (idx < 0) return@mutateActiveDocument doc
+            val targetIdx = (idx + delta).coerceIn(0, list.lastIndex)
+            if (targetIdx == idx) return@mutateActiveDocument doc
+            val item = list.removeAt(idx)
+            list.add(targetIdx, item)
+            doc.copy(sections = list.mapIndexed { i, s -> s.copy(orderIndex = i) })
         }
     }
 
@@ -612,6 +780,12 @@ class EditorViewModel(
     }
 
     fun installOrTogglePlugin(pluginId: String) {
+        if (pluginId == "sdk_kotlin") {
+            _uiState.update {
+                it.copy(aiStatusMessage = "✓ Kotlin Compiler Plugin & KtVM are bundled permanently in app source")
+            }
+            return
+        }
         val currentList = _uiState.value.toolchainPlugins
         val target = currentList.find { it.id == pluginId } ?: return
 
@@ -725,7 +899,36 @@ class EditorViewModel(
     }
 
     fun setBottomDrawerTab(tab: com.example.model.BottomDrawerTab) {
-        _uiState.update { it.copy(activeBottomDrawerTab = tab, isBottomDrawerOpen = true) }
+        _uiState.update { current ->
+            val doc = current.activeDocument
+            val activeSec = doc?.sections?.find { it.id == current.focusedSectionId } ?: doc?.sections?.firstOrNull()
+            val refreshedArtifact = if (tab == com.example.model.BottomDrawerTab.AST_BYTECODE && activeSec != null) {
+                com.example.compiler.KotlinCompilerPlugin.compile(activeSec.codeContent, activeSec.language)
+            } else {
+                current.latestCompilation
+            }
+            val updatedSnapshots = if (tab == com.example.model.BottomDrawerTab.GIT_DIFF && activeSec != null &&
+                current.localSnapshotsBySectionId[activeSec.id].isNullOrEmpty() && activeSec.codeContent.isNotBlank()
+            ) {
+                val now = System.currentTimeMillis()
+                val snap = com.example.model.LocalCodeSnapshot(
+                    id = now,
+                    sectionId = activeSec.id,
+                    label = "Initial Buffer",
+                    codeContent = activeSec.codeContent,
+                    timestampMs = now
+                )
+                current.localSnapshotsBySectionId + (activeSec.id to listOf(snap))
+            } else {
+                current.localSnapshotsBySectionId
+            }
+            current.copy(
+                activeBottomDrawerTab = tab,
+                isBottomDrawerOpen = true,
+                latestCompilation = refreshedArtifact,
+                localSnapshotsBySectionId = updatedSnapshots
+            )
+        }
     }
 
     fun setBottomDrawerHeightFraction(fraction: Float) {

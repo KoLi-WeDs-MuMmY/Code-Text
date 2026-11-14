@@ -63,12 +63,12 @@
 
 ## 🔮 Upcoming Features Queue (Next to Implement)
 
-1. **Gutter Breakpoint Toggles & Step-Over Debugging**:
-   - Clickable gutter line markers (red dot breakpoints) enabling line-by-line pause, Step Over (`F8`), and Step Into (`F7`) in the Debugger tab.
-2. **Multi-File Project Tree with Tab Switching**:
-   - Ability to add multiple native code files (e.g., `utils.py`, `models.py`) inside the same `.xScribe` project bundle with draggable editor tabs.
-3. **Integrated Git Diff & History Bar**:
-   - File revision history tracker with visual side-by-side diffing and restore capabilities.
+1. **Interactive Call-Graph & Memory Allocation Flame Chart**:
+   - Visual timeline of function entry/exit depth and heap object allocations produced by `KtBytecodeVm`.
+2. **Gradle / Kotlin Multiplatform Project Export (.zip)**:
+   - Export multi-file `.xScribe` project folders as ready-to-build Gradle Kotlin projects.
+3. **Snippet & Live-Template Cloud/File Sharing**:
+   - Import/export custom user-defined live templates and syntax themes via `.json` via the Android Photo/File Picker.
 
 
 ---
@@ -127,4 +127,23 @@
 - **1-Tap `Termux Cmd` Native Compiler Bridge (`CodeLanguageEngine.kt`, `IdeBottomDrawer.kt`)**:
   - Added a `Termux Cmd` pill in the Terminal drawer header that copies a ready-to-paste shell heredoc (`cat << 'KTSCRIBE_EOF' > ...` + `kotlinc`/`javac`/`python3`/`g++`/`dart`/`rustc`) for users who want bare-metal Linux compilation in Termux without Play-restricted permissions.
 
+---
+
+## 13. Built-In Kotlin Compiler Plugin, KtBytecodeVm, M3 Tonal UI & Adaptive Screen-Ratio Themes
+
+- **Built-In On-Device Kotlin Compiler Plugin & Stack Bytecode VM (`compiler/KotlinCompilerPlugin.kt`, `compiler/KtBytecodeVm.kt`, `compiler/CompilerModels.kt`)**:
+  - `sdk_kotlin` (`Kotlin Compiler Plugin`) is bundled directly in the app source (`isInstalled = true`, permanently active, zero download or server calls).
+  - Real 4-stage pipeline: Lexer (`Token`) → Recursive-Descent Parser (`ProgramAst`) → Semantic Analyzer (`SymbolEntry`, diagnostics) → Stack Bytecode Emitter (`BytecodeInstruction`, constant pool, function/class metadata).
+  - `KtBytecodeVm.DebugSession` executes compiled artifacts on-device with breakpoint pause (`runUntilBreakpoint`), `stepOver()`, trace scrubbing (`resetTrace()`), call frame snapshots, operand stack preview, and heap object tracking.
+- **Material 3 Tonal Dark UI & Elevation Overhaul (`Theme.kt`, `AppThemeId.kt`, `DocumentListScreen.kt`, `DocumentEditorScreen.kt`, `IdeBottomDrawer.kt`)**:
+  - Migrated workspace surfaces to Material 3 tonal hierarchy (`surfaceContainerLowest`..`surfaceContainerHighest`, `outlineVariant`), elevation shadows, spring transitions, and single-line (`softWrap = false`) status/action pills across all 6 `AppThemeId` palettes.
+- **Dedicated Screen-Size Theme Files & Zero-Permission Ratio Adaptation (`ScreenProfile.kt`, `CompactPortraitTheme.kt`, `CompactLandscapeTheme.kt`, `MediumFoldableTheme.kt`, `ExpandedTabletTheme.kt`)**:
+  - `ScreenRatioClassifier` reads `WindowMetrics`/`DisplayMetrics` + `BoxWithConstraints` with **zero extra Android permissions** and dispatches tier-specific theme files (`CompactPortraitTheme.kt`, `CompactLandscapeTheme.kt`, `MediumFoldableTheme.kt`, `ExpandedTabletTheme.kt`).
+  - Narrow portrait phones use a compact single-row top bar + `⋮` overflow menu + `ModalBottomSheet` side tools; landscape phones, foldables, and tablets use M3 `NavigationRail`, multi-column project grids, and inline side panels.
+  - Fixed top bar pill wrapping (`✓ Indexed`, `Settings` clipping), breadcrumb vs `Ln/Col` overlap in `KotlinCodeSectionCard`, and floating window `Full` label wrapping & viewport-clamped dragging in `MacFloatingIslandComponents`.
+- **4 Newly Shipped IDE Features**:
+  - **Bracket Pair Colorizer & Fuzzy Command Palette (`BracketPairColorizer.kt`, `DocumentEditorScreen.kt`)**: Depth-aware rainbow coloring for `()`, `{}`, `[]` (skipping strings/comments) with cursor-adjacent pair highlights & unmatched red errors; `⌘P` Command Palette with subsequence fuzzy scoring and matched-character highlights.
+  - **Live Kotlin REPL Console (`IdeBottomDrawer.kt`, `KtBytecodeVm.ReplSession`)**: Persistent interactive Kotlin REPL drawer tab (`λ REPL`) retaining variables, functions, and data classes across evaluations with inferred return types and compiled op counts.
+  - **AST & Bytecode Inspector (`IdeBottomDrawer.kt`)**: Inspects compiled `KtVM` instructions (`pc`, `OpCode`, operand, line), constant pool, `ProgramAst` summary, and typed symbol table with live `activePc` highlighting and click-to-jump-line navigation.
+  - **Multi-File Reorderable Tabs & Visual Git Diff History (`DocumentEditorScreen.kt`, `IdeBottomDrawer.kt`, `DiffEngine.kt`)**: Tab bar supports `◀`/`▶` reordering and `+` language quick-picker; `± Git Diff` tab runs LCS line diffing (`DiffEngine.computeLineDiff`) between `LocalCodeSnapshot` revisions and the active editor buffer with 1-tap snapshot creation and restore.
 

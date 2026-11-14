@@ -109,11 +109,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -130,6 +134,7 @@ import com.example.model.IslandDropdownMenu
 import com.example.model.TextAlignmentChoice
 import com.example.model.TextFormattingStyle
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LocalAdaptiveThemeSpec
 import com.example.ui.theme.Tier0OuterTrenchBg
 import com.example.ui.theme.Tier2CompletionSelectedBg
 import com.example.ui.theme.Tier3FloatingWindowActiveBevel
@@ -732,20 +737,28 @@ fun MacDraggableFloatingWindow(
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current
+    val adaptiveSpec = LocalAdaptiveThemeSpec.current
+    val availWidthDp = with(density) { workspaceWidthPx.toDp().value }.coerceAtLeast(300f)
+    val availHeightDp = with(density) { workspaceHeightPx.toDp().value }.coerceAtLeast(280f)
+
     var offsetX by remember(windowType) {
-        mutableFloatStateOf(if (windowSlotIndex == 0) 0f else -56f)
+        mutableFloatStateOf(if (windowSlotIndex == 0) 0f else -24f)
     }
     var offsetY by remember(windowType) {
-        mutableFloatStateOf(if (windowSlotIndex == 0) 6f else 48f)
+        mutableFloatStateOf(if (windowSlotIndex == 0) 6f else 36f)
     }
-    // 4 Discrete Window Presets (Mini, Half, Two-Thirds, Full - MIUI / iOS / Harmony style)
+    // 4 Discrete Window Presets (Mini, Portrait, Landscape, Full)
     var currentTier by remember(windowType) { mutableStateOf(WindowPresetTier.HALF) }
     var isDraggingResize by remember { mutableStateOf(false) }
     var dragWidthDp by remember(windowType) { mutableFloatStateOf(windowType.getTierWidthDp(WindowPresetTier.HALF)) }
     var dragHeightDp by remember(windowType) { mutableFloatStateOf(windowType.getTierHeightDp(WindowPresetTier.HALF)) }
 
-    val targetWidth = if (isDraggingResize) dragWidthDp else windowType.getTierWidthDp(currentTier)
-    val targetHeight = if (isDraggingResize) dragHeightDp else windowType.getTierHeightDp(currentTier)
+    val maxSafeWidthDp = (availWidthDp - 16f).coerceAtLeast(240f)
+    val maxSafeHeightDp = (availHeightDp - 24f).coerceAtLeast(220f)
+    val targetWidth = (if (isDraggingResize) dragWidthDp else windowType.getTierWidthDp(currentTier))
+        .coerceIn(240f, maxSafeWidthDp)
+    val targetHeight = (if (isDraggingResize) dragHeightDp else windowType.getTierHeightDp(currentTier))
+        .coerceIn(220f, maxSafeHeightDp)
 
     val animatedWidthDp by animateFloatAsState(
         targetValue = targetWidth,
@@ -768,15 +781,17 @@ fun MacDraggableFloatingWindow(
         }
     }
 
-    val surfaceBg = if (isForegroundWindow) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant
-    val headerBg = if (isForegroundWindow) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
-    val topBevelColor = if (isForegroundWindow) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant
-    val elevationDp = if (isForegroundWindow) 24.dp else 12.dp
+    val surfaceBg = if (isForegroundWindow) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainer
+    val headerBg = if (isForegroundWindow) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.88f)
+    val topBevelColor = if (isForegroundWindow) MaterialTheme.colorScheme.primary.copy(alpha = 0.50f) else MaterialTheme.colorScheme.outlineVariant
+    val elevationDp = if (isForegroundWindow) adaptiveSpec.overlayElevation + 8.dp else adaptiveSpec.cardElevation + 6.dp
 
-    val maxDragLeftPx = -(workspaceWidthPx.coerceAtLeast(1200f) * 0.95f)
-    val maxDragRightPx = (workspaceWidthPx.coerceAtLeast(1200f) * 0.95f)
-    val maxDragUpPx = -(workspaceHeightPx.coerceAtLeast(1200f) * 0.85f)
-    val maxDragDownPx = (workspaceHeightPx.coerceAtLeast(1200f) * 0.85f)
+    val windowWidthPx = with(density) { animatedWidthDp.dp.toPx() }
+    val windowHeightPx = with(density) { animatedHeightDp.dp.toPx() }
+    val maxDragLeftPx = -((workspaceWidthPx - windowWidthPx * 0.35f).coerceAtLeast(160f))
+    val maxDragRightPx = (windowWidthPx * 0.25f).coerceAtLeast(48f)
+    val maxDragUpPx = -12f
+    val maxDragDownPx = (workspaceHeightPx - windowHeightPx * 0.45f).coerceAtLeast(140f)
 
     AnimatedVisibility(
         visible = isOpen,
@@ -800,23 +815,24 @@ fun MacDraggableFloatingWindow(
             .zIndex(if (isForegroundWindow) 20f else 10f)
             .offset {
                 IntOffset(
-                    x = (offsetX + shakeOffsetX.value).roundToInt(),
-                    y = offsetY.roundToInt()
+                    x = (offsetX.coerceIn(maxDragLeftPx, maxDragRightPx) + shakeOffsetX.value).roundToInt(),
+                    y = offsetY.coerceIn(maxDragUpPx, maxDragDownPx).roundToInt()
                 )
             }
     ) {
         Surface(
             color = surfaceBg,
-            shape = RoundedCornerShape(18.dp),
+            shape = RoundedCornerShape(adaptiveSpec.cardCornerRadius),
+            tonalElevation = if (isForegroundWindow) 6.dp else 2.dp,
             shadowElevation = elevationDp,
             modifier = Modifier
-                .padding(8.dp)
+                .padding(6.dp)
                 .width(animatedWidthDp.dp)
                 .height(animatedHeightDp.dp)
-                .tactileWindowDepth(isForeground = isForegroundWindow, cornerRadiusDp = 18f)
+                .tactileWindowDepth(isForeground = isForegroundWindow, cornerRadiusDp = adaptiveSpec.cardCornerRadius.value)
                 .shadow(
                     elevation = elevationDp,
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(adaptiveSpec.cardCornerRadius),
                     ambientColor = Color.Black,
                     spotColor = Color.Black
                 )
@@ -978,7 +994,8 @@ fun MacDraggableFloatingWindow(
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.horizontalScroll(rememberScrollState())
                         ) {
                             if (headerExtraActions != null) {
                                 headerExtraActions()
@@ -1001,49 +1018,48 @@ fun MacDraggableFloatingWindow(
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 8.5.sp,
                                     fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                                 )
                             }
 
                             // 4 Discrete Tier Snapping Pills (Mini, Portrait, Landscape, Full)
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(3.dp)
-                            ) {
-                                WindowPresetTier.entries.forEach { tier ->
-                                    val isSelected = currentTier == tier
-                                    Surface(
-                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                                        shape = RoundedCornerShape(6.dp),
-                                        border = androidx.compose.foundation.BorderStroke(
-                                            width = if (isSelected) 1.dp else 0.5.dp,
-                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-                                        ),
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .clickable {
-                                                isDraggingResize = false
-                                                currentTier = tier
-                                            }
-                                            .testTag("tier_${tier.name.lowercase()}_${windowType.name.lowercase()}")
-                                    ) {
-                                        Text(
-                                            text = "${tier.badge} ${tier.label}",
-                                            fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 8.5.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(horizontal = 4.5.dp, vertical = 2.dp)
-                                        )
-                                    }
+                            WindowPresetTier.entries.forEach { tier ->
+                                val isSelected = currentTier == tier
+                                Surface(
+                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        width = if (isSelected) 1.dp else 0.5.dp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                                    ),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable {
+                                            isDraggingResize = false
+                                            currentTier = tier
+                                        }
+                                        .testTag("tier_${tier.name.lowercase()}_${windowType.name.lowercase()}")
+                                ) {
+                                    Text(
+                                        text = "${tier.badge} ${tier.label}",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 8.5.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                    )
                                 }
                             }
 
                             // Option to convert ANY floating window into an Adjustable Split Screen (`◫ Split`)!
                             if (onDockToSplitScreen != null) {
                                 Surface(
-                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.75f),
                                     shape = RoundedCornerShape(7.dp),
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(7.dp))
@@ -1073,6 +1089,8 @@ fun MacDraggableFloatingWindow(
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 9.5.sp,
                                             fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            softWrap = false,
                                             color = MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                     }
@@ -1081,7 +1099,7 @@ fun MacDraggableFloatingWindow(
 
                             // Explicit Cancel / Close Window Button (`✕`)
                             Surface(
-                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
                                 shape = RoundedCornerShape(7.dp),
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(7.dp))
@@ -1105,6 +1123,8 @@ fun MacDraggableFloatingWindow(
                                         fontFamily = JetBrainsMonoFontFamily,
                                         fontSize = 9.5.sp,
                                         fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        softWrap = false,
                                         color = MaterialTheme.colorScheme.onErrorContainer
                                     )
                                 }
@@ -1124,32 +1144,38 @@ fun MacDraggableFloatingWindow(
                         content()
                     }
 
-                    // 3. Bottom Resize Bar with Preset Quick-Snaps & Bottom-Right Corner Drag (`⤡`)
+                    // 3. Bottom Resize Bar with HorizontalScroll Tier Snaps & Bottom-Right Corner Drag (`⤡`)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.90f))
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 6.dp)
+                                .horizontalScroll(rememberScrollState())
                         ) {
                             Text(
                                 text = "${animatedWidthDp.roundToInt()}×${animatedHeightDp.roundToInt()} dp",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
-                            // Quick discrete tier preset selector
+                            // Quick discrete tier preset selector (never wraps onto multiple lines)
                             WindowPresetTier.entries.forEach { tier ->
                                 val isSelected = currentTier == tier
                                 Surface(
-                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
                                     shape = RoundedCornerShape(4.dp),
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(4.dp))
@@ -1163,8 +1189,10 @@ fun MacDraggableFloatingWindow(
                                         fontFamily = JetBrainsMonoFontFamily,
                                         fontSize = 8.5.sp,
                                         fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        softWrap = false,
                                         color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
                             }
@@ -1238,27 +1266,23 @@ fun ResizableIslandDropdownWindow(
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current
+    val adaptiveSpec = LocalAdaptiveThemeSpec.current
     var heightDp by remember { mutableFloatStateOf(initialHeightDp) }
 
     Surface(
-        color = Tier3FloatingWindowActiveBg,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 12.dp, bottomEnd = 12.dp),
-        shadowElevation = 28.dp,
+        tonalElevation = 6.dp,
+        shadowElevation = adaptiveSpec.overlayElevation + 12.dp,
         modifier = Modifier
-            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .padding(horizontal = adaptiveSpec.screenPadding / 2, vertical = 4.dp)
             .fillMaxWidth()
             .heightIn(min = 190.dp, max = heightDp.dp)
             .tactileWindowDepth(isForeground = true, cornerRadiusDp = 20f)
             .border(
-                width = 1.5.dp,
-                color = Color(0xFF080707),
-                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 12.dp, bottomEnd = 12.dp)
-            )
-            .padding(1.dp)
-            .border(
                 width = 1.dp,
-                color = Tier3FloatingWindowActiveBevel,
-                shape = RoundedCornerShape(topStart = 19.dp, topEnd = 19.dp, bottomStart = 11.dp, bottomEnd = 11.dp)
+                color = MaterialTheme.colorScheme.outlineVariant,
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 12.dp, bottomEnd = 12.dp)
             )
             .testTag("resizable_island_dropdown_window")
     ) {
@@ -1267,7 +1291,7 @@ fun ResizableIslandDropdownWindow(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF1F1C1A))
+                    .background(MaterialTheme.colorScheme.surfaceContainerLowest)
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
@@ -1283,14 +1307,14 @@ fun ResizableIslandDropdownWindow(
                         .width(44.dp)
                         .height(3.5.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(WarmAmberAccent.copy(alpha = 0.7f))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.75f))
                 )
             }
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Tier3FloatingWindowActiveHeader)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -1361,7 +1385,38 @@ fun ResizableIslandDropdownWindow(
 }
 
 /**
- * Floating Command Palette Content (`⌘P`).
+ * Fuzzy subsequence scorer for the Command Palette (`⌘P`):
+ * matches characters in order, favoring consecutive matches and word starts.
+ */
+private data class FuzzyMatchResult(
+    val score: Int,
+    val matchedIndices: Set<Int>
+)
+
+private fun computeFuzzyMatch(query: String, target: String): FuzzyMatchResult? {
+    val cleanQuery = query.trim()
+    if (cleanQuery.isEmpty()) return FuzzyMatchResult(score = 0, matchedIndices = emptySet())
+    var qIdx = 0
+    var score = 0
+    var lastMatchIdx = -2
+    val matched = mutableSetOf<Int>()
+    for (i in target.indices) {
+        if (qIdx >= cleanQuery.length) break
+        if (target[i].equals(cleanQuery[qIdx], ignoreCase = true)) {
+            matched.add(i)
+            score += if (i == lastMatchIdx + 1) 12 else 4
+            if (i == 0 || !target[i - 1].isLetterOrDigit()) score += 8
+            lastMatchIdx = i
+            qIdx++
+        }
+    }
+    return if (qIdx == cleanQuery.length) {
+        FuzzyMatchResult(score = score - (target.length - cleanQuery.length), matchedIndices = matched)
+    } else null
+}
+
+/**
+ * Floating Command Palette Content (`⌘P`) with fuzzy subsequence matching and character highlights.
  */
 @Composable
 fun CommandPaletteDropdownContent(
@@ -1389,10 +1444,70 @@ fun CommandPaletteDropdownContent(
         buildList {
             add(
                 PaletteEntry(
+                    id = "cmd_run",
+                    category = CommandPaletteFilter.COMMANDS,
+                    title = "Compile & Execute in KtBytecode VM",
+                    subtitle = "100% on-device Lexer -> AST -> Bytecode -> KtVM execution",
+                    icon = Icons.Default.PlayArrow,
+                    action = { onExecuteCommand("run_code") }
+                )
+            )
+            add(
+                PaletteEntry(
+                    id = "cmd_debug_vm",
+                    category = CommandPaletteFilter.COMMANDS,
+                    title = "Step Debug in KtVM (Breakpoints & Stack Frames)",
+                    subtitle = "Starts on-device VM step debugger at current breakpoints",
+                    icon = Icons.Default.Terminal,
+                    action = { onExecuteCommand("debug_vm") }
+                )
+            )
+            add(
+                PaletteEntry(
+                    id = "cmd_open_repl",
+                    category = CommandPaletteFilter.COMMANDS,
+                    title = "Open Interactive Kotlin REPL Console",
+                    subtitle = "Evaluate live expressions, vals, and helper functions on-device",
+                    icon = Icons.Default.Code,
+                    action = { onExecuteCommand("open_repl") }
+                )
+            )
+            add(
+                PaletteEntry(
+                    id = "cmd_inspect_bytecode",
+                    category = CommandPaletteFilter.COMMANDS,
+                    title = "Inspect AST, Symbols & Bytecode",
+                    subtitle = "Opens parsed AST tree, symbol table, and VM opcode disassembly",
+                    icon = Icons.Default.Description,
+                    action = { onExecuteCommand("inspect_bytecode") }
+                )
+            )
+            add(
+                PaletteEntry(
+                    id = "cmd_open_git_diff",
+                    category = CommandPaletteFilter.COMMANDS,
+                    title = "Open Visual Git Diff & Revision History",
+                    subtitle = "Compare active file against saved snapshots (+add/-del hunks)",
+                    icon = Icons.Default.Restore,
+                    action = { onExecuteCommand("open_git_diff") }
+                )
+            )
+            add(
+                PaletteEntry(
+                    id = "cmd_display_profile",
+                    category = CommandPaletteFilter.COMMANDS,
+                    title = "Display Ratio & Adaptive Theme Profile",
+                    subtitle = "Inspect active screen tier theme file (Zero-Permission WindowMetrics)",
+                    icon = Icons.Default.Settings,
+                    action = { onExecuteCommand("display_profile") }
+                )
+            )
+            add(
+                PaletteEntry(
                     id = "cmd_ask_ai",
                     category = CommandPaletteFilter.COMMANDS,
                     title = "Ask AI: Write Thorough Explanation & Concept Tag",
-                    subtitle = "Gemini 3 Flash • Analyzes current Kotlin section",
+                    subtitle = "Gemini Flash • Analyzes current code section",
                     icon = Icons.Default.AutoAwesome,
                     action = { onExecuteCommand("ai_explain") }
                 )
@@ -1402,7 +1517,7 @@ fun CommandPaletteDropdownContent(
                     id = "cmd_refactor",
                     category = CommandPaletteFilter.COMMANDS,
                     title = "AI Refactor & Fix Syntax Errors",
-                    subtitle = "Converts code to idiomatic Kotlin",
+                    subtitle = "Converts code to idiomatic style",
                     icon = Icons.Default.AutoFixHigh,
                     action = { onExecuteCommand("ai_refactor") }
                 )
@@ -1432,27 +1547,17 @@ fun CommandPaletteDropdownContent(
                     id = "cmd_float",
                     category = CommandPaletteFilter.COMMANDS,
                     title = "Open Explanation Floating Window",
-                    subtitle = "Draggable & resizable Warm Mocha floating window",
+                    subtitle = "Draggable & resizable M3 tonal floating window",
                     icon = Icons.Default.Description,
                     action = { onExecuteCommand("float_explain") }
                 )
             )
             add(
                 PaletteEntry(
-                    id = "cmd_run",
-                    category = CommandPaletteFilter.COMMANDS,
-                    title = "Run Build & Execute in Apple cmd",
-                    subtitle = "Evaluates println() output and checks syntax",
-                    icon = Icons.Default.PlayArrow,
-                    action = { onExecuteCommand("run_code") }
-                )
-            )
-            add(
-                PaletteEntry(
                     id = "cmd_new_section",
                     category = CommandPaletteFilter.COMMANDS,
-                    title = "New Kotlin Code Section in Folder",
-                    subtitle = "Inserts a 4-line auto-expanding code block",
+                    title = "New Kotlin Code File in Folder",
+                    subtitle = "Inserts a multi-file tab in the workspace",
                     icon = Icons.Default.Add,
                     action = { onExecuteCommand("new_section") }
                 )
@@ -1462,7 +1567,7 @@ fun CommandPaletteDropdownContent(
                     id = "cmd_vault",
                     category = CommandPaletteFilter.COMMANDS,
                     title = "Hidden Vault ('xyz') Recovery & Storage Settings",
-                    subtitle = "Recover previous download data or manage hidden vault",
+                    subtitle = "Recover previous backup data or manage hidden vault",
                     icon = Icons.Default.Security,
                     action = { onExecuteCommand("open_vault") }
                 )
@@ -1474,7 +1579,7 @@ fun CommandPaletteDropdownContent(
                         id = "folder_${folder.id}",
                         category = CommandPaletteFilter.FOLDERS,
                         title = "Folder: ${folder.title}",
-                        subtitle = "${folder.sectionCount} Kotlin sections • ${folder.wordCount} words",
+                        subtitle = "${folder.sectionCount} code files • ${folder.wordCount} words",
                         icon = Icons.Default.Folder,
                         action = { onSelectFolder(folder.id) }
                     )
@@ -1494,7 +1599,7 @@ fun CommandPaletteDropdownContent(
                 )
             }
 
-            val symbolRegex = Regex("""\b(?:fun|class|interface|object|val|var)\s+([A-Za-z_][A-Za-z0-9_]*)""")
+            val symbolRegex = Regex("""\b(?:fun|class|interface|object|val|var|def)\s+([A-Za-z_][A-Za-z0-9_]*)""")
             activeFolder.sections.forEach { sec ->
                 symbolRegex.findAll(sec.codeContent).forEach { match ->
                     val sym = match.groupValues[1]
@@ -1513,12 +1618,22 @@ fun CommandPaletteDropdownContent(
         }
     }
 
-    val filtered = entries.filter { item ->
-        val matchesCategory = selectedFilter == CommandPaletteFilter.ALL || item.category == selectedFilter
-        val matchesQuery = query.isBlank() ||
-            item.title.contains(query, ignoreCase = true) ||
-            item.subtitle.contains(query, ignoreCase = true)
-        matchesCategory && matchesQuery
+    val filteredWithMatch = remember(entries, query, selectedFilter) {
+        entries.mapNotNull { item ->
+            val matchesCategory = selectedFilter == CommandPaletteFilter.ALL || item.category == selectedFilter
+            if (!matchesCategory) return@mapNotNull null
+            if (query.isBlank()) {
+                item to FuzzyMatchResult(0, emptySet())
+            } else {
+                val titleMatch = computeFuzzyMatch(query, item.title)
+                val subMatch = computeFuzzyMatch(query, item.subtitle)
+                when {
+                    titleMatch != null -> item to titleMatch
+                    subMatch != null -> item to FuzzyMatchResult(subMatch.score - 20, emptySet())
+                    else -> null
+                }
+            }
+        }.sortedByDescending { it.second.score }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1527,9 +1642,9 @@ fun CommandPaletteDropdownContent(
             onValueChange = { query = it },
             placeholder = {
                 Text(
-                    text = "Run a command, jump to a folder, section, or symbol...",
+                    text = "Fuzzy search commands, bytecode, REPL, diff, or symbols...",
                     fontFamily = JetBrainsMonoFontFamily,
-                    fontSize = 12.sp,
+                    fontSize = 11.5.sp,
                     color = MutedTaupeText
                 )
             },
@@ -1544,12 +1659,12 @@ fun CommandPaletteDropdownContent(
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color(0xFF191716),
-                unfocusedContainerColor = Color(0xFF191716),
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                 focusedTextColor = WarmCreamText,
                 unfocusedTextColor = WarmCreamText,
                 focusedBorderColor = WarmAmberAccent,
-                unfocusedBorderColor = Color(0xFF3E3832)
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
             ),
             modifier = Modifier
                 .fillMaxWidth()
@@ -1565,13 +1680,13 @@ fun CommandPaletteDropdownContent(
             CommandPaletteFilter.entries.forEach { filter ->
                 val selected = selectedFilter == filter
                 Surface(
-                    color = if (selected) Tier2CompletionSelectedBg else Color(0xFF211E1C),
+                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .clip(RoundedCornerShape(16.dp))
                         .border(
                             width = 1.dp,
-                            color = if (selected) WarmAmberAccent else Color(0xFF3E3832),
+                            color = if (selected) WarmAmberAccent else MaterialTheme.colorScheme.outlineVariant,
                             shape = RoundedCornerShape(16.dp)
                         )
                         .clickable { selectedFilter = filter }
@@ -1581,14 +1696,16 @@ fun CommandPaletteDropdownContent(
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 11.sp,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = WarmCreamText,
+                        maxLines = 1,
+                        softWrap = false,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else WarmCreamText,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                     )
                 }
             }
         }
 
-        HorizontalDivider(color = Color(0xFF3A342E))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
         LazyColumn(
             modifier = Modifier
@@ -1596,14 +1713,33 @@ fun CommandPaletteDropdownContent(
                 .heightIn(max = 250.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            items(filtered, key = { it.id }) { item ->
+            items(filteredWithMatch, key = { it.first.id }) { (item, match) ->
+                val accentColor = WarmAmberAccent
+                val highlightedTitle = remember(item.title, match.matchedIndices, accentColor, WarmCreamText) {
+                    if (match.matchedIndices.isEmpty()) {
+                        AnnotatedString(item.title)
+                    } else {
+                        buildAnnotatedString {
+                            item.title.forEachIndexed { idx, ch ->
+                                if (idx in match.matchedIndices) {
+                                    withStyle(SpanStyle(color = accentColor, fontWeight = FontWeight.ExtraBold)) {
+                                        append(ch)
+                                    }
+                                } else {
+                                    append(ch)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Surface(
-                    color = Color(0xFF23201E),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .border(1.dp, Color(0xFF36312C), RoundedCornerShape(10.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
                         .clickable {
                             item.action()
                             onClose()
@@ -1624,11 +1760,13 @@ fun CommandPaletteDropdownContent(
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = item.title,
+                                text = highlightedTitle,
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = WarmCreamText
+                                color = WarmCreamText,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = item.subtitle,

@@ -213,7 +213,14 @@ fun KtScribeApp(
                         onJumpToCodeLine = editorViewModel::jumpToCodeLine,
                         onUpdateTerminalStdin = editorViewModel::updateTerminalStdin,
                         onCreateLocalSnapshot = { secId -> editorViewModel.createLocalSnapshot(secId) },
-                        onRestoreLocalSnapshot = editorViewModel::restoreLocalSnapshot
+                        onRestoreLocalSnapshot = editorViewModel::restoreLocalSnapshot,
+                        onCompileActiveSection = editorViewModel::compileActiveSection,
+                        onDebugResume = editorViewModel::startOrResumeDebugSession,
+                        onDebugStepOver = editorViewModel::debugStepOver,
+                        onDebugReset = editorViewModel::debugReset,
+                        onEvaluateRepl = editorViewModel::evaluateRepl,
+                        onClearRepl = editorViewModel::clearRepl,
+                        onReorderEditorTab = editorViewModel::reorderEditorTab
                     )
                 }
             }

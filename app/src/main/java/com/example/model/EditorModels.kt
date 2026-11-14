@@ -165,8 +165,11 @@ enum class WindowPresetTier(val label: String, val badge: String) {
  */
 enum class BottomDrawerTab(val label: String, val badge: String) {
     TERMINAL("Build & Run", ">_"),
-    PROBLEMS("Problems", "⚠"),
+    REPL("REPL", "λ"),
     DEBUGGER("Debugger", "🪲"),
+    AST_BYTECODE("Bytecode", "⛁"),
+    GIT_DIFF("Git Diff", "±"),
+    PROBLEMS("Problems", "⚠"),
     LOGCAT("Logcat", "≣")
 }
 
@@ -220,15 +223,15 @@ data class ToolchainPluginItem(
         fun defaultCatalog(installedIds: Set<String> = DEFAULT_PREINSTALLED_IDS): List<ToolchainPluginItem> = listOf(
             ToolchainPluginItem(
                 id = "sdk_kotlin",
-                name = "Kotlin On-Device Engine & AST",
-                subtitle = "Built-in Kotlin interpreter (loops, fns, when/if, stdin) & K2 linter",
+                name = "Kotlin Built-in Compiler & KtVM",
+                subtitle = "Core bundled Kotlin compiler plugin (Lexer -> AST -> Bytecode) & Stack VM",
                 category = PluginCategory.LANGUAGE_SDK,
                 language = LanguageType.KOTLIN,
-                version = "Built-in",
+                version = "Bundled",
                 sizeLabel = "On-Device",
-                binaryCommand = "ast-kotlin",
-                debuggerName = "Live Variable Inspector",
-                isInstalled = "sdk_kotlin" in installedIds
+                binaryCommand = "kotlinc + ktvm",
+                debuggerName = "KtVM Bytecode Debugger",
+                isInstalled = true
             ),
             ToolchainPluginItem(
                 id = "sdk_java",

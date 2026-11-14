@@ -146,6 +146,13 @@ enum class AppThemeId(
             onSurface = Color(0xFFE6E1DC),
             surfaceVariant = Color(0xFF252320),
             onSurfaceVariant = Color(0xFFA39C93),
+            surfaceDim = Color(0xFF0E0D0C),
+            surfaceBright = Color(0xFF36322E),
+            surfaceContainerLowest = Color(0xFF0D0C0B),
+            surfaceContainerLow = Color(0xFF171514),
+            surfaceContainer = Color(0xFF1E1C1A),
+            surfaceContainerHigh = Color(0xFF272421),
+            surfaceContainerHighest = Color(0xFF322E2A),
             outline = Color(0xFF423D38),
             outlineVariant = Color(0xFF2E2A27)
         )
@@ -166,6 +173,13 @@ enum class AppThemeId(
             onSurface = Color(0xFFF1F5F9),
             surfaceVariant = Color(0xFF1F2937),
             onSurfaceVariant = Color(0xFF94A3B8),
+            surfaceDim = Color(0xFF080B13),
+            surfaceBright = Color(0xFF283548),
+            surfaceContainerLowest = Color(0xFF070A12),
+            surfaceContainerLow = Color(0xFF0F1623),
+            surfaceContainer = Color(0xFF151E2E),
+            surfaceContainerHigh = Color(0xFF1D283A),
+            surfaceContainerHighest = Color(0xFF27344A),
             outline = Color(0xFF374151),
             outlineVariant = Color(0xFF1E293B)
         )
@@ -186,6 +200,13 @@ enum class AppThemeId(
             onSurface = Color(0xFFFCFCFA),
             surfaceVariant = Color(0xFF2D2A2E),
             onSurfaceVariant = Color(0xFF939293),
+            surfaceDim = Color(0xFF141315),
+            surfaceBright = Color(0xFF3A363C),
+            surfaceContainerLowest = Color(0xFF131214),
+            surfaceContainerLow = Color(0xFF1D1B1E),
+            surfaceContainer = Color(0xFF242125),
+            surfaceContainerHigh = Color(0xFF2E2A2F),
+            surfaceContainerHighest = Color(0xFF39343B),
             outline = Color(0xFF49464E),
             outlineVariant = Color(0xFF322F35)
         )
@@ -206,6 +227,13 @@ enum class AppThemeId(
             onSurface = Color(0xFFF0F6FC),
             surfaceVariant = Color(0xFF161B22),
             onSurfaceVariant = Color(0xFF8B949E),
+            surfaceDim = Color(0xFF010307),
+            surfaceBright = Color(0xFF242C37),
+            surfaceContainerLowest = Color(0xFF010409),
+            surfaceContainerLow = Color(0xFF0A0E14),
+            surfaceContainer = Color(0xFF11161E),
+            surfaceContainerHigh = Color(0xFF181E28),
+            surfaceContainerHighest = Color(0xFF212834),
             outline = Color(0xFF30363D),
             outlineVariant = Color(0xFF21262D)
         )
@@ -226,6 +254,13 @@ enum class AppThemeId(
             onSurface = Color(0xFFEEE8D5),
             surfaceVariant = Color(0xFF0A4452),
             onSurfaceVariant = Color(0xFF839496),
+            surfaceDim = Color(0xFF00212A),
+            surfaceBright = Color(0xFF125464),
+            surfaceContainerLowest = Color(0xFF00232C),
+            surfaceContainerLow = Color(0xFF052F3A),
+            surfaceContainer = Color(0xFF093B47),
+            surfaceContainerHigh = Color(0xFF0E4958),
+            surfaceContainerHighest = Color(0xFF145768),
             outline = Color(0xFF586E75),
             outlineVariant = Color(0xFF093E4B)
         )
@@ -246,6 +281,13 @@ enum class AppThemeId(
             onSurface = Color(0xFFECEFF4),
             surfaceVariant = Color(0xFF3B4252),
             onSurfaceVariant = Color(0xFFD8DEE9),
+            surfaceDim = Color(0xFF1E222B),
+            surfaceBright = Color(0xFF464F61),
+            surfaceContainerLowest = Color(0xFF1D222B),
+            surfaceContainerLow = Color(0xFF282E3A),
+            surfaceContainer = Color(0xFF303744),
+            surfaceContainerHigh = Color(0xFF394150),
+            surfaceContainerHighest = Color(0xFF434C5E),
             outline = Color(0xFF4C566A),
             outlineVariant = Color(0xFF2E3440)
         )

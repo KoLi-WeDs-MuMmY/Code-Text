@@ -64,6 +64,7 @@ import com.example.model.PluginCategory
 import com.example.model.ToolchainPluginItem
 import com.example.ui.theme.AppThemeId
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LocalAdaptiveThemeSpec
 import com.example.ui.theme.ThemeMode
 
 enum class StudioSettingsCategory(val id: String, val label: String, val icon: ImageVector) {
@@ -104,10 +105,12 @@ fun ShortcutAndSettingsDialog(
     }
     val installedSdkCount = remember(languageSdks) { languageSdks.count { it.isInstalled } }
 
+    val adaptiveSpec = LocalAdaptiveThemeSpec.current
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF1C1917),
-        tonalElevation = 12.dp,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = adaptiveSpec.overlayElevation,
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
@@ -453,6 +456,55 @@ fun ShortcutAndSettingsDialog(
                             }
                         }
                     }
+
+                    // Device Display & Adaptive Ratio Profile Telemetry Card (Zero Permissions)
+                    IosSettingsGroupCard(
+                        headerTitle = "DISPLAY RATIO & ADAPTIVE THEME FILE",
+                        headerSubtitle = "Live aspect-ratio layout selection using WindowMetrics with zero extra permissions"
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Active Tier & Theme",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Text(
+                                        text = "${adaptiveSpec.tier.displayName} • ${adaptiveSpec.themeFileLabel}",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "Viewport: ${adaptiveSpec.profile.widthDp}×${adaptiveSpec.profile.heightDp} dp • Ratio: ${adaptiveSpec.profile.aspectRatioLabel} • ${adaptiveSpec.profile.densityDpi} dpi",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Grid: ${adaptiveSpec.gridColumns} col • Nav Rail: ${if (adaptiveSpec.useNavigationRail) "Active" else "Sheet"} • Source: ${adaptiveSpec.profile.sourceLabel}",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 9.5.sp,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
+                    }
                 }
 
                 // =========================================================================
@@ -631,9 +683,11 @@ fun IosSettingsGroupCard(
     content: @Composable () -> Unit
 ) {
     Surface(
-        color = Color(0xFF24201D),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(0.75.dp, Color(0xFF3A342E)),
+        tonalElevation = 2.dp,
+        shadowElevation = 4.dp,
+        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -759,12 +813,21 @@ fun ToolchainPluginRowItem(
                         )
                     }
                 } else {
+                    val isBundledCore = plugin.id == "sdk_kotlin"
                     Surface(
-                        color = if (plugin.isInstalled) Color(0xFF283728) else Color(0xFFD4883A),
+                        color = when {
+                            isBundledCore -> MaterialTheme.colorScheme.tertiaryContainer
+                            plugin.isInstalled -> Color(0xFF283728)
+                            else -> MaterialTheme.colorScheme.primary
+                        },
                         shape = RoundedCornerShape(8.dp),
                         border = BorderStroke(
-                            0.5.dp,
-                            if (plugin.isInstalled) Color(0xFF6A8759) else Color(0xFFFFC66D)
+                            0.6.dp,
+                            when {
+                                isBundledCore -> MaterialTheme.colorScheme.tertiary
+                                plugin.isInstalled -> Color(0xFF6A8759)
+                                else -> MaterialTheme.colorScheme.primary
+                            }
                         ),
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
@@ -779,15 +842,29 @@ fun ToolchainPluginRowItem(
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
                                 contentDescription = null,
-                                tint = if (plugin.isInstalled) Color(0xFF81C784) else Color(0xFF161412),
+                                tint = when {
+                                    isBundledCore -> MaterialTheme.colorScheme.onTertiaryContainer
+                                    plugin.isInstalled -> Color(0xFF81C784)
+                                    else -> MaterialTheme.colorScheme.onPrimary
+                                },
                                 modifier = Modifier.size(12.dp)
                             )
                             Text(
-                                text = if (plugin.isInstalled) "Active" else "Enable",
+                                text = when {
+                                    isBundledCore -> "Bundled"
+                                    plugin.isInstalled -> "Active"
+                                    else -> "Enable"
+                                },
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (plugin.isInstalled) Color(0xFF81C784) else Color(0xFF161412)
+                                maxLines = 1,
+                                softWrap = false,
+                                color = when {
+                                    isBundledCore -> MaterialTheme.colorScheme.onTertiaryContainer
+                                    plugin.isInstalled -> Color(0xFF81C784)
+                                    else -> MaterialTheme.colorScheme.onPrimary
+                                }
                             )
                         }
                     }

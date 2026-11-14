@@ -3,13 +3,22 @@ package com.example
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.example.ai.AiSectionNamingService
+import com.example.code.BracketPairColorizer
+import com.example.code.DiffEngine
+import com.example.code.DiffLineKind
 import com.example.code.KotlinCodeEngine
+import com.example.compiler.KotlinCompilerPlugin
+import com.example.compiler.KtBytecodeVm
+import com.example.compiler.OpCode
 import com.example.data.local.VaultStorageManager
 import com.example.model.CodeSectionUiModel
 import com.example.model.EditorFontChoice
+import com.example.model.LanguageType
 import com.example.model.TextAlignmentChoice
 import com.example.model.TextFormattingStyle
 import com.example.ui.theme.LightKotlinSyntaxColors
+import com.example.ui.theme.ScreenRatioClassifier
+import com.example.ui.theme.ScreenRatioTier
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -540,5 +549,142 @@ class ExampleUnitTest {
         assertEquals(560f, windowType.getTierWidthDp(com.example.model.WindowPresetTier.LANDSCAPE), 0.01f)
         assertEquals(360f, windowType.getTierHeightDp(com.example.model.WindowPresetTier.LANDSCAPE), 0.01f)
     }
+
+    @Test
+    fun `built-in KotlinCompilerPlugin compiles AST symbols and stack bytecode on device`() {
+        val code = """
+            data class Point(val x: Int, val y: Int)
+
+            fun add(a: Int, b: Int): Int {
+                return a + b
+            }
+
+            fun main() {
+                val p = Point(3, 4)
+                val sum = add(p.x, p.y)
+                println("sum=${'$'}sum")
+            }
+        """.trimIndent()
+
+        val artifact = KotlinCompilerPlugin.compile(code, LanguageType.KOTLIN)
+        assertTrue("Expected compilation to succeed cleanly", artifact.success)
+        assertNotNull(artifact.ast)
+        assertTrue(artifact.bytecode.isNotEmpty())
+        assertTrue(artifact.bytecode.any { it.op == OpCode.PRINTLN || it.op == OpCode.CALL_FN })
+        assertTrue(artifact.bytecode.last().op == OpCode.HALT)
+        assertTrue(artifact.functions.containsKey("main"))
+        assertTrue(artifact.functions.containsKey("add"))
+        assertTrue(artifact.classes.containsKey("Point"))
+        assertTrue(artifact.symbols.any { it.name == "sum" })
+    }
+
+    @Test
+    fun `KtBytecodeVm DebugSession executes compiled code steps and pauses on breakpoints`() {
+        val code = """
+            fun main() {
+                val x = 10
+                val y = x * 3
+                println("y=${'$'}y")
+            }
+        """.trimIndent()
+
+        val artifact = KotlinCompilerPlugin.compile(code, LanguageType.KOTLIN)
+        assertTrue(artifact.success)
+
+        val runSession = KtBytecodeVm.DebugSession(artifact)
+        val finalState = runSession.runToEnd()
+        assertEquals(0, finalState.exitCode)
+        assertTrue(finalState.isFinished)
+        assertEquals(listOf("y=30"), finalState.stdout)
+
+        val debugSession = KtBytecodeVm.DebugSession(artifact)
+        val pausedState = debugSession.runUntilBreakpoint(setOf(3))
+        assertTrue(pausedState.isPaused)
+        assertEquals(3, pausedState.currentLine)
+
+        val stepped = debugSession.stepOver()
+        assertTrue(stepped.currentLine >= 3)
+        val reset = debugSession.resetTrace()
+        assertTrue(reset.isPaused)
+    }
+
+    @Test
+    fun `KtBytecodeVm ReplSession persists variables and functions across evaluations`() {
+        val repl = KtBytecodeVm.ReplSession()
+        val declRes = repl.evaluate("val base = 21")
+        assertFalse(declRes.isError)
+        assertTrue(declRes.compiledOpsCount > 0)
+
+        val fnRes = repl.evaluate("fun doubleIt(n: Int): Int { return n * 2 }")
+        assertFalse(fnRes.isError)
+
+        val evalRes = repl.evaluate("doubleIt(base)")
+        assertFalse(evalRes.isError)
+        assertEquals("42", evalRes.output.trim())
+
+        repl.reset()
+        val afterReset = repl.evaluate("base")
+        assertEquals("null", afterReset.output.trim())
+    }
+
+    @Test
+    fun `DiffEngine computes accurate LCS additions deletions and unchanged lines`() {
+        val oldText = "fun main() {\n    val a = 1\n    println(a)\n}"
+        val newText = "fun main() {\n    val a = 2\n    val b = 3\n    println(a)\n}"
+
+        val diff = DiffEngine.computeLineDiff(oldText, newText)
+        assertTrue(diff.hasChanges)
+        assertEquals(1, diff.deletionsCount)
+        assertEquals(2, diff.additionsCount)
+        assertEquals(3, diff.unchangedCount)
+        assertTrue(diff.lines.any { it.kind == DiffLineKind.REMOVED && it.text.contains("val a = 1") })
+        assertTrue(diff.lines.any { it.kind == DiffLineKind.ADDED && it.text.contains("val b = 3") })
+    }
+
+    @Test
+    fun `BracketPairColorizer tracks nested depths ignores strings and detects mismatches`() {
+        val validCode = """fun test() { println("(ignored)") }"""
+        val validSpans = BracketPairColorizer.analyzeBrackets(validCode)
+        // Only the outer (), inner () for println, and {} are matched (6 brackets total; string "()" ignored)
+        assertEquals(6, validSpans.size)
+        assertTrue(validSpans.all { it.isMatched })
+
+        val nestedCode = "{[()]}"
+        val nestedSpans = BracketPairColorizer.analyzeBrackets(nestedCode)
+        assertEquals(0, nestedSpans.first { it.offset == 0 }.depth)
+        assertEquals(1, nestedSpans.first { it.offset == 1 }.depth)
+        assertEquals(2, nestedSpans.first { it.offset == 2 }.depth)
+
+        val brokenCode = "fun broken() { (1 + 2"
+        val brokenSpans = BracketPairColorizer.analyzeBrackets(brokenCode)
+        assertTrue(brokenSpans.any { !it.isMatched })
+    }
+
+    @Test
+    fun `ScreenRatioClassifier dispatches separate theme files without extra permissions`() {
+        val portrait = ScreenRatioClassifier.classify(widthDp = 390, heightDp = 844, densityDpi = 440)
+        assertEquals(ScreenRatioTier.COMPACT_PORTRAIT, portrait.tier)
+        val portraitSpec = ScreenRatioClassifier.resolveThemeSpec(portrait)
+        assertEquals("CompactPortraitTheme.kt", portraitSpec.themeFileLabel)
+        assertFalse(portraitSpec.useNavigationRail)
+        assertTrue(portraitSpec.useCompactTopActions)
+
+        val landscape = ScreenRatioClassifier.classify(widthDp = 844, heightDp = 390, densityDpi = 440)
+        assertEquals(ScreenRatioTier.COMPACT_LANDSCAPE, landscape.tier)
+        val landscapeSpec = ScreenRatioClassifier.resolveThemeSpec(landscape)
+        assertEquals("CompactLandscapeTheme.kt", landscapeSpec.themeFileLabel)
+        assertTrue(landscapeSpec.useNavigationRail)
+
+        val foldable = ScreenRatioClassifier.classify(widthDp = 700, heightDp = 620, densityDpi = 420)
+        assertEquals(ScreenRatioTier.MEDIUM_FOLDABLE, foldable.tier)
+        assertEquals("MediumFoldableTheme.kt", ScreenRatioClassifier.resolveThemeSpec(foldable).themeFileLabel)
+
+        val tablet = ScreenRatioClassifier.classify(widthDp = 1100, heightDp = 760, densityDpi = 320)
+        assertEquals(ScreenRatioTier.EXPANDED_TABLET, tablet.tier)
+        val tabletSpec = ScreenRatioClassifier.resolveThemeSpec(tablet)
+        assertEquals("ExpandedTabletTheme.kt", tabletSpec.themeFileLabel)
+        assertEquals(3, tabletSpec.gridColumns)
+    }
 }
+
 

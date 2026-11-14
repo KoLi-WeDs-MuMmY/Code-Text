@@ -13,13 +13,18 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -57,11 +62,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -96,7 +104,10 @@ import com.example.model.ToolchainPluginItem
 import com.example.ui.components.ModernFloatingMeshBackground
 import com.example.ui.components.TrichromeBrandHeader
 import com.example.ui.components.TrichromeStudioLogo
+import com.example.ui.theme.AdaptiveThemeSpec
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LocalAdaptiveThemeSpec
+import com.example.ui.theme.ScreenRatioTier
 import com.example.ui.theme.ThemeMode
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -124,6 +135,7 @@ fun DocumentListScreen(
 ) {
     val totalSections = documents.sumOf { it.sectionCount }
     val allLearnedConcepts = documents.flatMap { it.conceptTags }.distinct()
+    val adaptive = LocalAdaptiveThemeSpec.current
 
     var selectedLanguageFilter by remember { mutableStateOf<LanguageType?>(null) }
     var showNewTemplateDialog by remember { mutableStateOf(false) }
@@ -144,76 +156,97 @@ fun DocumentListScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
-        containerColor = Color(0xFF1A1615),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
                     TrichromeBrandHeader(
-                        appName = stringResource(R.string.app_name)
+                        appName = stringResource(R.string.app_name),
+                        showSubtitle = adaptive.showBrandSubtitle,
+                        compact = adaptive.useCompactTopActions
                     )
                 },
                 actions = {
-                    // Hidden Vault ("xyz") Recovery & Status Pill
-                    Surface(
-                        color = Color(0xFF232E23),
-                        shape = RoundedCornerShape(999.dp),
-                        border = BorderStroke(0.8.dp, Color(0xFF4E6E4E)),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .clickable(onClick = onOpenVaultModal)
-                            .testTag("home_vault_recovery_button")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    if (adaptive.useCompactTopActions) {
+                        IconButton(
+                            onClick = onOpenVaultModal,
+                            modifier = Modifier.testTag("home_vault_recovery_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Lock,
                                 contentDescription = "Hidden Vault Recovery",
-                                tint = Color(0xFF81C784),
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Vault 'xyz'",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF81C784)
+                                tint = MaterialTheme.colorScheme.tertiary
                             )
                         }
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    // Shortcut Key Pill
-                    Surface(
-                        color = Color(0xFF2B241E),
-                        shape = RoundedCornerShape(999.dp),
-                        border = BorderStroke(0.8.dp, Color(0xFF524336)),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .clickable(onClick = onOpenSettings)
-                            .testTag("home_shortcut_settings_button")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    } else {
+                        // Hidden Vault ("xyz") Recovery & Status Pill
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.65f),
+                            shape = RoundedCornerShape(999.dp),
+                            tonalElevation = 2.dp,
+                            border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .clickable(onClick = onOpenVaultModal)
+                                .testTag("home_vault_recovery_button")
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Keyboard,
-                                contentDescription = "Configure Ctrl Shortcut",
-                                tint = Color(0xFFFFC66D),
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Ctrl+$shortcutLetter",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFE6E1DC)
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Hidden Vault Recovery",
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Vault 'xyz'",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        // Shortcut Key & Adaptive Screen Tier Pill
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            shape = RoundedCornerShape(999.dp),
+                            tonalElevation = 2.dp,
+                            border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .clickable(onClick = onOpenSettings)
+                                .testTag("home_shortcut_settings_button")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Keyboard,
+                                    contentDescription = "Configure Ctrl Shortcut",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Ctrl+$shortcutLetter • ${adaptive.tier.shortBadge}",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
 
@@ -228,7 +261,7 @@ fun DocumentListScreen(
                                 ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
                             },
                             contentDescription = "Switch Theme (${themeMode.label})",
-                            tint = Color(0xFFE6E1DC)
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
@@ -239,25 +272,27 @@ fun DocumentListScreen(
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = "Studio Settings (Theme, SDKs, Language)",
-                            tint = Color(0xFFD4883A)
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF1F1B19).copy(alpha = 0.96f)
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f)
                 )
             )
         },
         floatingActionButton = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.navigationBarsPadding()
             ) {
                 Surface(
-                    color = Color(0xFF2B241E),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(1.dp, Color(0xFFD4883A).copy(alpha = 0.7f)),
-                    shadowElevation = 6.dp,
+                    tonalElevation = 4.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)),
+                    shadowElevation = adaptive.overlayElevation,
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
                         .clickable {
@@ -274,7 +309,7 @@ fun DocumentListScreen(
                         Icon(
                             imageVector = Icons.Default.Code,
                             contentDescription = "New Project Template",
-                            tint = Color(0xFFFFC66D),
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
@@ -282,7 +317,9 @@ fun DocumentListScreen(
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFE6E1DC)
+                            maxLines = 1,
+                            softWrap = false,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -300,103 +337,167 @@ fun DocumentListScreen(
                         Text(
                             text = stringResource(R.string.new_document),
                             fontFamily = JetBrainsMonoFontFamily,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     },
-                    containerColor = Color(0xFFD4883A),
-                    contentColor = Color(0xFF1A1615),
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.testTag("create_document_fab")
                 )
             }
         },
         modifier = modifier.fillMaxSize()
     ) { innerPadding ->
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            contentAlignment = Alignment.TopCenter
+                .padding(innerPadding)
         ) {
-            ModernFloatingMeshBackground(
-                modifier = Modifier.fillMaxSize()
-            )
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 780.dp)
-                    .animateContentSize(
-                        animationSpec = spring(
-                            dampingRatio = 0.82f,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    ),
-                contentPadding = PaddingValues(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = 10.dp,
-                    bottom = 104.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // 1. CodeAssist + iOS Glass Studio Welcome Hero Banner
-                item {
-                    HeroWorkspaceBanner(
-                        shortcutLetter = shortcutLetter,
-                        folderCount = documents.size,
-                        totalSections = totalSections,
-                        learnedConceptsCount = allLearnedConcepts.size,
-                        installedSdkCount = installedSdkCount,
-                        totalSdkCount = totalSdkCount,
-                        onOpenSdkManager = onOpenSettings,
-                        onInstallAllSdks = onInstallAllSdks
+            if (adaptive.useNavigationRail) {
+                NavigationRail(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(adaptive.railWidth.coerceAtLeast(68.dp))
+                ) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    NavigationRailItem(
+                        selected = selectedLanguageFilter == null,
+                        onClick = { selectedLanguageFilter = null },
+                        icon = { Icon(Icons.Default.FolderSpecial, contentDescription = "All Projects") },
+                        label = { Text("All", fontSize = 10.sp, maxLines = 1) }
+                    )
+                    NavigationRailItem(
+                        selected = selectedLanguageFilter == LanguageType.KOTLIN,
+                        onClick = { selectedLanguageFilter = LanguageType.KOTLIN },
+                        icon = { Icon(Icons.Default.Code, contentDescription = "Kotlin Projects") },
+                        label = { Text("KT", fontSize = 10.sp, maxLines = 1) }
+                    )
+                    NavigationRailItem(
+                        selected = selectedLanguageFilter == LanguageType.PYTHON,
+                        onClick = { selectedLanguageFilter = LanguageType.PYTHON },
+                        icon = { Icon(Icons.Default.Terminal, contentDescription = "Python Projects") },
+                        label = { Text("PY", fontSize = 10.sp, maxLines = 1) }
+                    )
+                    NavigationRailItem(
+                        selected = selectedLanguageFilter == LanguageType.JAVA,
+                        onClick = { selectedLanguageFilter = LanguageType.JAVA },
+                        icon = { Icon(Icons.Default.Extension, contentDescription = "Java Projects") },
+                        label = { Text("JV", fontSize = 10.sp, maxLines = 1) }
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    NavigationRailItem(
+                        selected = false,
+                        onClick = onOpenSettings,
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Studio Settings") },
+                        label = { Text("Setup", fontSize = 10.sp, maxLines = 1) }
                     )
                 }
+            }
 
-                // 2. Quick Create Project by Language Template Bar
-                item {
-                    Card(
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF231E1B).copy(alpha = 0.94f)),
-                        border = BorderStroke(1.dp, Color(0xFF38302A)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                ModernFloatingMeshBackground(
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = adaptive.maxContentWidth)
+                        .animateContentSize(
+                            animationSpec = spring(
+                                dampingRatio = 0.82f,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        ),
+                    contentPadding = PaddingValues(
+                        start = adaptive.screenPadding,
+                        end = adaptive.screenPadding,
+                        top = 10.dp,
+                        bottom = 128.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(adaptive.sectionSpacing)
+                ) {
+                    // 1. M3 Studio Welcome Hero Banner + Display Profile Pill
+                    item {
+                        HeroWorkspaceBanner(
+                            adaptive = adaptive,
+                            shortcutLetter = shortcutLetter,
+                            folderCount = documents.size,
+                            totalSections = totalSections,
+                            learnedConceptsCount = allLearnedConcepts.size,
+                            installedSdkCount = installedSdkCount,
+                            totalSdkCount = totalSdkCount,
+                            onOpenSdkManager = onOpenSettings,
+                            onInstallAllSdks = onInstallAllSdks
+                        )
+                    }
+
+                    // 2. Quick Create Project by Language Template Bar
+                    item {
+                        ElevatedCard(
+                            shape = RoundedCornerShape(adaptive.cardCornerRadius),
+                            colors = CardDefaults.elevatedCardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f)
+                            ),
+                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = adaptive.cardElevation),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                .border(
+                                    0.8.dp,
+                                    MaterialTheme.colorScheme.outlineVariant,
+                                    RoundedCornerShape(adaptive.cardCornerRadius)
+                                )
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = adaptive.cardPadding, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Extension,
-                                        contentDescription = null,
-                                        tint = Color(0xFFD4883A),
-                                        modifier = Modifier.size(14.dp)
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Extension,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text = "Quick Start Template",
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Quick Start Project Template",
+                                        text = "1-Tap Workspace",
                                         fontFamily = JetBrainsMonoFontFamily,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFE6E1DC)
+                                        fontSize = 9.5.sp,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                Text(
-                                    text = "1-Tap Workspace",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 9.5.sp,
-                                    color = Color(0xFFA39C93)
-                                )
-                            }
 
                             Row(
                                 modifier = Modifier
@@ -601,25 +702,39 @@ fun DocumentListScreen(
                     }
                 }
 
-                // 5. Rounded CodeAssist Project Cards or Empty State
+                // 5. Responsive M3 Elevated Project Cards (1-3 columns by Screen Ratio)
                 if (filteredList.isEmpty()) {
                     item {
                         EmptyDocumentsCard(onCreateDocument = onCreateDocument)
                     }
                 } else {
+                    val gridRows = filteredList.chunked(adaptive.gridColumns.coerceAtLeast(1))
                     items(
-                        items = filteredList,
-                        key = { it.id }
-                    ) { folder ->
-                        FolderSummaryCard(
-                            folder = folder,
-                            onClick = { onOpenDocument(folder.id) },
-                            onDelete = { onDeleteDocument(folder.id) },
-                            onRename = { newTitle -> onRenameDocument(folder.id, newTitle) }
-                        )
+                        items = gridRows,
+                        key = { row -> row.joinToString("_") { it.id.toString() } }
+                    ) { rowItems ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(adaptive.sectionSpacing)
+                        ) {
+                            rowItems.forEach { folder ->
+                                FolderSummaryCard(
+                                    folder = folder,
+                                    adaptive = adaptive,
+                                    onClick = { onOpenDocument(folder.id) },
+                                    onDelete = { onDeleteDocument(folder.id) },
+                                    onRename = { newTitle -> onRenameDocument(folder.id, newTitle) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            repeat(adaptive.gridColumns - rowItems.size) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
             }
+        }
         }
     }
 
@@ -765,8 +880,10 @@ fun DocumentListScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HeroWorkspaceBanner(
+    adaptive: AdaptiveThemeSpec,
     shortcutLetter: Char,
     folderCount: Int,
     totalSections: Int,
@@ -776,65 +893,68 @@ private fun HeroWorkspaceBanner(
     onOpenSdkManager: () -> Unit,
     onInstallAllSdks: () -> Unit
 ) {
-    Card(
-        shape = RoundedCornerShape(24.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+    ElevatedCard(
+        shape = RoundedCornerShape(adaptive.cardCornerRadius),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = adaptive.cardElevation + 4.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, Color(0xFF3E352F), RoundedCornerShape(24.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(adaptive.cardCornerRadius))
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(194.dp)
+                .heightIn(min = if (adaptive.tier == ScreenRatioTier.COMPACT_LANDSCAPE) 128.dp else 166.dp)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.img_editor_hero_1794022926039),
                 contentDescription = "KtScribe CodeAssist Studio",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.matchParentSize()
             )
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                Color(0xFF1A1615).copy(alpha = 0.96f),
-                                Color(0xFF241E1B).copy(alpha = 0.90f),
-                                Color(0xFF1A1615).copy(alpha = 0.76f)
+                                MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.96f),
+                                MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.90f),
+                                MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.78f)
                             )
                         )
                     )
-                    .padding(18.dp),
+                    .padding(adaptive.cardPadding),
                 contentAlignment = Alignment.BottomStart
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    FlowRow(
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        TrichromeStudioLogo(sizeDp = 28.dp)
+                        TrichromeStudioLogo(sizeDp = 26.dp)
 
                         Surface(
-                            color = Color(0xFF3B2E25),
+                            color = MaterialTheme.colorScheme.primaryContainer,
                             shape = RoundedCornerShape(999.dp),
-                            border = BorderStroke(0.8.dp, Color(0xFFD4883A))
+                            border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.primary)
                         ) {
                             Text(
-                                text = "● ● ●  CODEASSIST + iOS STUDIO",
+                                text = "● KT COMPILER + VM",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 9.5.sp,
-                                color = Color(0xFFFFC66D),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 fontWeight = FontWeight.ExtraBold,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                             )
                         }
 
                         Surface(
-                            color = Color(0xFF233023),
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
                             shape = RoundedCornerShape(999.dp),
-                            border = BorderStroke(0.8.dp, Color(0xFF6A8759)),
+                            border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.tertiary),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
                                 .clickable(onClick = onOpenSdkManager)
@@ -847,25 +967,46 @@ private fun HeroWorkspaceBanner(
                                 Icon(
                                     imageVector = Icons.Default.CheckCircle,
                                     contentDescription = null,
-                                    tint = Color(0xFF81C784),
+                                    tint = MaterialTheme.colorScheme.tertiary,
                                     modifier = Modifier.size(11.dp)
                                 )
                                 Text(
                                     text = "$installedSdkCount/$totalSdkCount Engines Active",
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 9.5.sp,
-                                    color = Color(0xFF81C784),
-                                    fontWeight = FontWeight.Bold
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
+                        }
+
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            shape = RoundedCornerShape(999.dp),
+                            border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Text(
+                                text = "${adaptive.profile.aspectRatioLabel} • ${adaptive.themeFileLabel.removeSuffix("Theme.kt")}",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 9.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
                         }
                     }
 
                     Text(
-                        text = "CodeAssist IDE • Breakpoint Debugger • Auto-Import & AST",
+                        text = "Built-In Kotlin Compiler • Stack VM • Adaptive M3 IDE",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color(0xFFF5EFEA),
-                        fontWeight = FontWeight.Bold
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
 
                     Row(
@@ -875,25 +1016,28 @@ private fun HeroWorkspaceBanner(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Terminal,
                                 contentDescription = null,
-                                tint = Color(0xFFD4883A),
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(14.dp)
                             )
                             Text(
-                                text = "$folderCount Projects • $totalSections Files • $learnedConceptsCount Concepts",
+                                text = "$folderCount Projects • $totalSections Files • $learnedConceptsCount Concepts • Ctrl+$shortcutLetter",
                                 fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 11.sp,
-                                color = Color(0xFFD5CEC6)
+                                fontSize = 10.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
                         if (installedSdkCount < totalSdkCount) {
                             Surface(
-                                color = Color(0xFFD4883A),
+                                color = MaterialTheme.colorScheme.primary,
                                 shape = RoundedCornerShape(999.dp),
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(999.dp))
@@ -904,7 +1048,9 @@ private fun HeroWorkspaceBanner(
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF1A1615),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    color = MaterialTheme.colorScheme.onPrimary,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                 )
                             }
@@ -919,9 +1065,11 @@ private fun HeroWorkspaceBanner(
 @Composable
 private fun FolderSummaryCard(
     folder: DocumentSummaryUiModel,
+    adaptive: AdaptiveThemeSpec,
     onClick: () -> Unit,
     onDelete: () -> Unit,
-    onRename: (String) -> Unit
+    onRename: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val dateFormat = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
     val formattedDate = dateFormat.format(Date(folder.updatedAt))
@@ -930,20 +1078,20 @@ private fun FolderSummaryCard(
 
     val lang = folder.primaryLanguage
 
-    Card(
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF231E1B).copy(alpha = 0.96f)
+    ElevatedCard(
+        shape = RoundedCornerShape(adaptive.cardCornerRadius),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.97f)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        modifier = Modifier
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = adaptive.cardElevation),
+        modifier = modifier
             .fillMaxWidth()
             .border(
                 width = 1.dp,
-                color = Color(0xFF3A322C),
-                shape = RoundedCornerShape(22.dp)
+                color = MaterialTheme.colorScheme.outlineVariant,
+                shape = RoundedCornerShape(adaptive.cardCornerRadius)
             )
-            .clip(RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(adaptive.cardCornerRadius))
             .clickable(onClick = onClick)
             .testTag("document_card_${folder.id}")
     ) {

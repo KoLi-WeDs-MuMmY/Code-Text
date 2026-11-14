@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Save
@@ -69,17 +70,23 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -133,10 +140,13 @@ import com.example.ui.components.ResizableIslandDropdownWindow
 import com.example.ui.components.ToolchainPluginRowItem
 import com.example.ui.components.exportOrCopyCodePayload
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LocalAdaptiveThemeSpec
+import com.example.ui.theme.ScreenRatioTier
 import com.example.ui.theme.Tier2CompletionSelectedBg
 import com.example.ui.theme.Tier3FloatingWindowActiveBevel
 import com.example.viewmodel.EditorUiState
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DocumentEditorScreen(
     uiState: EditorUiState,
@@ -215,14 +225,29 @@ fun DocumentEditorScreen(
     onUpdateTerminalStdin: (String) -> Unit = {},
     onCreateLocalSnapshot: (Long) -> Unit = {},
     onRestoreLocalSnapshot: (Long, Long) -> Unit = { _, _ -> },
+    onCompileActiveSection: (Boolean) -> Unit = {},
+    onDebugResume: () -> Unit = {},
+    onDebugStepOver: () -> Unit = {},
+    onDebugReset: () -> Unit = {},
+    onEvaluateRepl: (String) -> Unit = {},
+    onClearRepl: () -> Unit = {},
+    onReorderEditorTab: (Long, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val clipboardManager = LocalClipboardManager.current
     val density = LocalDensity.current
+    val adaptive = LocalAdaptiveThemeSpec.current
     var activeLeftRailTool by remember { mutableStateOf(LeftRailIdeTool.NONE) }
     var showFileSettingsDialog by remember { mutableStateOf(false) }
+
+    // On narrow portrait phones, collapse the initial inline Files tree so the code editor gets 100% width
+    LaunchedEffect(Unit) {
+        if (!adaptive.useNavigationRail && uiState.activeLeftActivityTab == LeftActivityTab.FILES) {
+            onToggleLeftActivityTab(LeftActivityTab.FILES)
+        }
+    }
 
     val openTabSections = remember(document.sections, uiState.closedTabSectionIds) {
         document.sections.filter { it.id !in uiState.closedTabSectionIds }
@@ -288,60 +313,69 @@ fun DocumentEditorScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets.systemBars,
-        containerColor = Color(0xFF1A1615),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF1F1B19))
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                tonalElevation = 4.dp,
+                shadowElevation = adaptive.cardElevation,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // =========================================================================
-                // 1. CODEASSIST + iOS GLASS TOP WORKSPACE BAR
-                // =========================================================================
-                CodeAssistTopWorkspaceBar(
-                    activeFolder = document,
-                    activeSection = activeSection,
-                    activeLeftActivityTab = uiState.activeLeftActivityTab,
-                    openFloatingWindows = uiState.openFloatingWindows,
-                    activeDropdown = uiState.activeIslandDropdown,
-                    isBottomDrawerOpen = uiState.isBottomDrawerOpen,
-                    syntaxErrorCount = syntaxErrors.size,
-                    hasUnsavedChanges = uiState.hasUnsavedChanges,
-                    secondsUntilAutoSave = uiState.secondsUntilAutoSave,
-                    canUndo = uiState.canUndo,
-                    canRedo = uiState.canRedo,
-                    onBackToFolders = onCloseDocument,
-                    onToggleFilesSidebar = { onToggleLeftActivityTab(LeftActivityTab.FILES) },
-                    onSaveNow = onSaveNow,
-                    onUndo = onUndo,
-                    onRedo = onRedo,
-                    onRunCode = onRunActiveSectionInTerminal,
-                    onToggleFloatingWindow = onToggleFloatingWindow,
-                    onToggleTerminalDrawer = {
-                        onToggleBottomDrawer(uiState.activeBottomDrawerTab)
-                    },
-                    onToggleCommandPalette = {
-                        onToggleIslandDropdown(IslandDropdownMenu.COMMAND_PALETTE)
-                    },
-                    onOpenVaultModal = onOpenVaultModal,
-                    onOpenFileSettings = {
-                        if (activeSection != null) {
-                            showFileSettingsDialog = true
-                        } else {
-                            onOpenSettings()
-                        }
-                    },
-                    onOpenStudioSettings = onOpenSettings
-                )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // =========================================================================
+                    // 1. ADAPTIVE M3 TOP WORKSPACE BAR
+                    // =========================================================================
+                    CodeAssistTopWorkspaceBar(
+                        activeFolder = document,
+                        activeSection = activeSection,
+                        activeLeftActivityTab = uiState.activeLeftActivityTab,
+                        openFloatingWindows = uiState.openFloatingWindows,
+                        activeDropdown = uiState.activeIslandDropdown,
+                        isBottomDrawerOpen = uiState.isBottomDrawerOpen,
+                        syntaxErrorCount = syntaxErrors.size,
+                        hasUnsavedChanges = uiState.hasUnsavedChanges,
+                        secondsUntilAutoSave = uiState.secondsUntilAutoSave,
+                        canUndo = uiState.canUndo,
+                        canRedo = uiState.canRedo,
+                        onBackToFolders = onCloseDocument,
+                        onToggleFilesSidebar = { onToggleLeftActivityTab(LeftActivityTab.FILES) },
+                        onSaveNow = onSaveNow,
+                        onUndo = onUndo,
+                        onRedo = onRedo,
+                        onRunCode = onRunActiveSectionInTerminal,
+                        onToggleFloatingWindow = onToggleFloatingWindow,
+                        onToggleTerminalDrawer = {
+                            onToggleBottomDrawer(uiState.activeBottomDrawerTab)
+                        },
+                        onOpenDrawerTab = { tab ->
+                            onSetBottomDrawerTab(tab)
+                            if (!uiState.isBottomDrawerOpen) {
+                                onToggleBottomDrawer(tab)
+                            }
+                        },
+                        onCompileAstBytecode = { onCompileActiveSection(true) },
+                        onToggleCommandPalette = {
+                            onToggleIslandDropdown(IslandDropdownMenu.COMMAND_PALETTE)
+                        },
+                        onOpenVaultModal = onOpenVaultModal,
+                        onOpenFileSettings = {
+                            if (activeSection != null) {
+                                showFileSettingsDialog = true
+                            } else {
+                                onOpenSettings()
+                            }
+                        },
+                        onOpenStudioSettings = onOpenSettings
+                    )
 
-                HorizontalDivider(thickness = 0.5.dp, color = Color(0xFF332D29))
+                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
 
-                // =========================================================================
-                // 2. FEEDBACK / NOTIFICATION TOAST BANNER (Animated when active)
-                // =========================================================================
-                AnimatedVisibility(
-                    visible = uiState.aiStatusMessage != null || uiState.aiErrorBanner != null
-                ) {
+                    // =========================================================================
+                    // 2. FEEDBACK / NOTIFICATION TOAST BANNER (Animated when active)
+                    // =========================================================================
+                    AnimatedVisibility(
+                        visible = uiState.aiStatusMessage != null || uiState.aiErrorBanner != null
+                    ) {
                     val isError = uiState.aiErrorBanner != null
                     val bannerText = uiState.aiErrorBanner ?: uiState.aiStatusMessage.orEmpty()
                     Surface(
@@ -382,6 +416,7 @@ fun DocumentEditorScreen(
                     }
                 }
             }
+            }
         },
         modifier = modifier
             .fillMaxSize()
@@ -403,21 +438,21 @@ fun DocumentEditorScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .imePadding()
-                .background(Color(0xFF1A1615))
+                .background(MaterialTheme.colorScheme.background)
         ) {
             val totalHeightPx = with(density) { maxHeight.toPx().coerceAtLeast(1f) }
             val totalWidthPx = with(density) { maxWidth.toPx().coerceAtLeast(1f) }
 
             // =========================================================================
             // MAIN WORKSPACE ROW:
-            // 1. Slim CodeAssist Left Activity Bar (40.dp)
-            // 2. Collapsible Left Side Panel (`Files` Tree / `Plugins & SDKs` / `Explain` / `Search`)
+            // 1. Slim CodeAssist Left Activity Bar (adaptive width)
+            // 2. Collapsible Left Side Panel (inline on Landscape/Tablet; M3 BottomSheet on Compact Portrait)
             // 3. Editor Area (File Tab Bar + Active Code Editor OR "No file open" Zero-State)
             // =========================================================================
             Row(
                 modifier = Modifier.fillMaxSize()
             ) {
-                // 1. Slim Left Activity Bar (CodeAssist style)
+                // 1. Slim Left Activity Bar
                 CodeAssistSlimLeftActivityBar(
                     activeActivityTab = uiState.activeLeftActivityTab,
                     activeLeftRailTool = activeLeftRailTool,
@@ -453,50 +488,53 @@ fun DocumentEditorScreen(
                     }
                 )
 
-                // 2. Collapsible CodeAssist Side Panel (Files Tree / Search / Structure / Explain / Plugins)
-                AnimatedVisibility(
-                    visible = uiState.activeLeftActivityTab != LeftActivityTab.NONE,
-                    enter = expandHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
-                    exit = shrinkHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMedium)) + fadeOut()
-                ) {
-                    CodeAssistSidePanel(
-                        activeTab = uiState.activeLeftActivityTab,
-                        document = document,
-                        allFolders = allFolders,
-                        activeSection = activeSection,
-                        uiState = uiState,
-                        allProjectSymbols = allProjectSymbols,
-                        onSelectFileSection = onJumpToSectionConcept,
-                        onInsertNewFile = onInsertCodeBlock,
-                        onInsertLanguageFile = onInsertLanguageCodeBlock,
-                        onSelectFolder = onSelectFolder,
-                        onCreateNewFolder = onCreateNewFolder,
-                        onOpenFileSettings = { showFileSettingsDialog = true },
-                        onExportFile = { sec ->
-                            exportOrCopyCodePayload(
-                                context = context,
-                                clipboardManager = clipboardManager,
-                                fileName = sec.nativeFileName,
-                                content = sec.codeContent,
-                                launchShareSheet = true,
-                                onStatusBanner = onShowStatusToast
-                            )
-                        },
-                        onUpdateSectionExplanation = onUpdateSectionExplanation,
-                        onUpdateSectionConceptTag = onUpdateSectionConceptTag,
-                        onFontChoiceChange = onFontChoiceChange,
-                        onToggleBold = onToggleBold,
-                        onToggleItalic = onToggleItalic,
-                        onToggleUnderline = onToggleUnderline,
-                        onRequestAiExplain = onRequestAiExplain,
-                        onInstallOrTogglePlugin = onInstallOrTogglePlugin,
-                        onInstallAllSdks = onInstallAllSdks,
-                        onOptimizeActiveImports = { activeSection?.let { onOptimizeSectionImports(it.id) } },
-                        onFormatActiveCode = { activeSection?.let { onFormatSectionCode(it.id) } },
-                        onToggleBreakpoint = { line -> activeSection?.let { onToggleLineBreakpoint(it.id, line) } },
-                        onJumpToCodeLine = onJumpToCodeLine,
-                        onCollapsePanel = { onToggleLeftActivityTab(uiState.activeLeftActivityTab) }
-                    )
+                // 2. Inline Collapsible Side Panel (Landscape, Foldable, Tablet ONLY — never squeezes Compact Portrait!)
+                if (adaptive.useNavigationRail) {
+                    AnimatedVisibility(
+                        visible = uiState.activeLeftActivityTab != LeftActivityTab.NONE,
+                        enter = expandHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+                        exit = shrinkHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMedium)) + fadeOut()
+                    ) {
+                        CodeAssistSidePanel(
+                            activeTab = uiState.activeLeftActivityTab,
+                            document = document,
+                            allFolders = allFolders,
+                            activeSection = activeSection,
+                            uiState = uiState,
+                            allProjectSymbols = allProjectSymbols,
+                            panelWidthDp = if (adaptive.tier == ScreenRatioTier.COMPACT_LANDSCAPE) 204 else 235,
+                            onSelectFileSection = onJumpToSectionConcept,
+                            onInsertNewFile = onInsertCodeBlock,
+                            onInsertLanguageFile = onInsertLanguageCodeBlock,
+                            onSelectFolder = onSelectFolder,
+                            onCreateNewFolder = onCreateNewFolder,
+                            onOpenFileSettings = { showFileSettingsDialog = true },
+                            onExportFile = { sec ->
+                                exportOrCopyCodePayload(
+                                    context = context,
+                                    clipboardManager = clipboardManager,
+                                    fileName = sec.nativeFileName,
+                                    content = sec.codeContent,
+                                    launchShareSheet = true,
+                                    onStatusBanner = onShowStatusToast
+                                )
+                            },
+                            onUpdateSectionExplanation = onUpdateSectionExplanation,
+                            onUpdateSectionConceptTag = onUpdateSectionConceptTag,
+                            onFontChoiceChange = onFontChoiceChange,
+                            onToggleBold = onToggleBold,
+                            onToggleItalic = onToggleItalic,
+                            onToggleUnderline = onToggleUnderline,
+                            onRequestAiExplain = onRequestAiExplain,
+                            onInstallOrTogglePlugin = onInstallOrTogglePlugin,
+                            onInstallAllSdks = onInstallAllSdks,
+                            onOptimizeActiveImports = { activeSection?.let { onOptimizeSectionImports(it.id) } },
+                            onFormatActiveCode = { activeSection?.let { onFormatSectionCode(it.id) } },
+                            onToggleBreakpoint = { line -> activeSection?.let { onToggleLineBreakpoint(it.id, line) } },
+                            onJumpToCodeLine = onJumpToCodeLine,
+                            onCollapsePanel = { onToggleLeftActivityTab(uiState.activeLeftActivityTab) }
+                        )
+                    }
                 }
 
                 // 3. Right Editor Column: Editor File Tab Bar + Main Code Canvas (or "No file open")
@@ -505,7 +543,7 @@ fun DocumentEditorScreen(
                         .weight(1f)
                         .fillMaxHeight()
                 ) {
-                    // CodeAssist Editor File Tab Bar (`K Main.kt • ×`)
+                    // Multi-File Project Tab Bar (with reorder & + language switcher)
                     CodeAssistEditorTabBar(
                         allSections = document.sections,
                         openSections = openTabSections,
@@ -513,8 +551,10 @@ fun DocumentEditorScreen(
                         hasUnsavedChanges = uiState.hasUnsavedChanges,
                         onSelectSection = onJumpToSectionConcept,
                         onCloseSectionTab = onCloseEditorTab,
+                        onReorderTab = onReorderEditorTab,
                         onNavigateFocusedSection = onNavigateFocusedSection,
                         onInsertNewFile = onInsertCodeBlock,
+                        onInsertLanguageFile = onInsertLanguageCodeBlock,
                         onOpenFileSettings = { showFileSettingsDialog = true },
                         onExportActiveFile = {
                             val payload = activeSection?.toKtScribeFilePayload(document.title)
@@ -1101,6 +1141,19 @@ fun DocumentEditorScreen(
                                     "toggle_split" -> onDockWindowToSplitScreen(FloatingWindowType.EXPLANATION)
                                     "float_explain" -> onToggleFloatingWindow(FloatingWindowType.EXPLANATION)
                                     "run_code" -> onRunActiveSectionInTerminal()
+                                    "debug_vm" -> onDebugResume()
+                                    "open_repl" -> {
+                                        onSetBottomDrawerTab(BottomDrawerTab.REPL)
+                                        if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.REPL)
+                                    }
+                                    "inspect_bytecode" -> onCompileActiveSection(true)
+                                    "open_git_diff" -> {
+                                        onSetBottomDrawerTab(BottomDrawerTab.GIT_DIFF)
+                                        if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.GIT_DIFF)
+                                    }
+                                    "display_profile" -> onShowStatusToast(
+                                        "Screen: ${adaptive.profile.widthDp}x${adaptive.profile.heightDp}dp (${adaptive.profile.aspectRatioLabel}) -> ${adaptive.themeFileLabel}"
+                                    )
                                     "new_section" -> onInsertCodeBlock()
                                     "open_vault" -> onOpenVaultModal()
                                 }
@@ -1114,8 +1167,72 @@ fun DocumentEditorScreen(
             }
 
             // =========================================================================
-            // CRITICAL FIX: BOTTOM-ANCHORED IDE DRAWER (`Modifier.align(Alignment.BottomCenter)`)
-            // Ensures Terminal / Build & Run / Problems / Debugger / Logcat ALWAYS pops up BELOW!
+            // COMPACT PORTRAIT MODAL BOTTOM SHEET EXPLORER
+            // =========================================================================
+            if (!adaptive.useNavigationRail && uiState.activeLeftActivityTab != LeftActivityTab.NONE) {
+                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                ModalBottomSheet(
+                    onDismissRequest = { onToggleLeftActivityTab(uiState.activeLeftActivityTab) },
+                    sheetState = sheetState,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(460.dp)
+                    ) {
+                        CodeAssistSidePanel(
+                            activeTab = uiState.activeLeftActivityTab,
+                            document = document,
+                            allFolders = allFolders,
+                            activeSection = activeSection,
+                            uiState = uiState,
+                            allProjectSymbols = allProjectSymbols,
+                            panelWidthDp = null,
+                            onSelectFileSection = { secId ->
+                                onJumpToSectionConcept(secId)
+                                onToggleLeftActivityTab(uiState.activeLeftActivityTab)
+                            },
+                            onInsertNewFile = onInsertCodeBlock,
+                            onInsertLanguageFile = onInsertLanguageCodeBlock,
+                            onSelectFolder = onSelectFolder,
+                            onCreateNewFolder = onCreateNewFolder,
+                            onOpenFileSettings = { showFileSettingsDialog = true },
+                            onExportFile = { sec ->
+                                exportOrCopyCodePayload(
+                                    context = context,
+                                    clipboardManager = clipboardManager,
+                                    fileName = sec.nativeFileName,
+                                    content = sec.codeContent,
+                                    launchShareSheet = true,
+                                    onStatusBanner = onShowStatusToast
+                                )
+                            },
+                            onUpdateSectionExplanation = onUpdateSectionExplanation,
+                            onUpdateSectionConceptTag = onUpdateSectionConceptTag,
+                            onFontChoiceChange = onFontChoiceChange,
+                            onToggleBold = onToggleBold,
+                            onToggleItalic = onToggleItalic,
+                            onToggleUnderline = onToggleUnderline,
+                            onRequestAiExplain = onRequestAiExplain,
+                            onInstallOrTogglePlugin = onInstallOrTogglePlugin,
+                            onInstallAllSdks = onInstallAllSdks,
+                            onOptimizeActiveImports = { activeSection?.let { onOptimizeSectionImports(it.id) } },
+                            onFormatActiveCode = { activeSection?.let { onFormatSectionCode(it.id) } },
+                            onToggleBreakpoint = { line -> activeSection?.let { onToggleLineBreakpoint(it.id, line) } },
+                            onJumpToCodeLine = { line ->
+                                onJumpToCodeLine(line)
+                                onToggleLeftActivityTab(uiState.activeLeftActivityTab)
+                            },
+                            onCollapsePanel = { onToggleLeftActivityTab(uiState.activeLeftActivityTab) }
+                        )
+                    }
+                }
+            }
+
+            // =========================================================================
+            // BOTTOM-ANCHORED IDE DRAWER (Terminal / REPL / Debugger / Bytecode / Git Diff / Problems / Logcat)
             // =========================================================================
             IdeBottomDrawer(
                 isOpen = uiState.isBottomDrawerOpen,
@@ -1127,6 +1244,12 @@ fun DocumentEditorScreen(
                 activeBreakpoints = uiState.breakpointsBySectionId[activeSection?.id ?: -1L] ?: emptySet(),
                 watchExpressions = uiState.watchExpressions,
                 stdinInput = uiState.terminalStdinInput,
+                compilationArtifact = uiState.latestCompilation,
+                vmDebugState = uiState.vmDebugState,
+                vmTrace = uiState.vmTrace,
+                vmTraceIndex = uiState.vmTraceIndex,
+                replHistory = uiState.replHistory,
+                localSnapshots = uiState.localSnapshotsBySectionId[activeSection?.id ?: -1L].orEmpty(),
                 onUpdateStdinInput = onUpdateTerminalStdin,
                 onTabSelected = onSetBottomDrawerTab,
                 onHeightFractionChange = onSetBottomDrawerHeightFraction,
@@ -1142,6 +1265,14 @@ fun DocumentEditorScreen(
                 onApplyQuickFixCode = { fixedCode ->
                     activeSection?.let { onUpdateSectionCode(it.id, fixedCode) }
                 },
+                onCompileAstBytecode = { onCompileActiveSection(true) },
+                onDebugResumeVm = onDebugResume,
+                onDebugStepOverVm = onDebugStepOver,
+                onDebugResetVm = onDebugReset,
+                onEvaluateRepl = onEvaluateRepl,
+                onClearRepl = onClearRepl,
+                onCreateSnapshot = { activeSection?.let { onCreateLocalSnapshot(it.id) } },
+                onRestoreSnapshot = { snapId -> activeSection?.let { onRestoreLocalSnapshot(it.id, snapId) } },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
@@ -1262,29 +1393,35 @@ private fun CodeAssistTopWorkspaceBar(
     onRunCode: () -> Unit,
     onToggleFloatingWindow: (FloatingWindowType) -> Unit,
     onToggleTerminalDrawer: () -> Unit,
+    onOpenDrawerTab: (BottomDrawerTab) -> Unit = {},
+    onCompileAstBytecode: () -> Unit = {},
     onToggleCommandPalette: () -> Unit,
     onOpenVaultModal: () -> Unit,
     onOpenFileSettings: () -> Unit,
     onOpenStudioSettings: () -> Unit
 ) {
+    val adaptive = LocalAdaptiveThemeSpec.current
     val isExplainActive = FloatingWindowType.EXPLANATION in openFloatingWindows
     val isFilesFloatingActive = FloatingWindowType.FOLDERS in openFloatingWindows
     val isAiActive = FloatingWindowType.AI_STUDIO in openFloatingWindows
     val isRunActive = FloatingWindowType.RUN_OUTPUT in openFloatingWindows
     val isCmdActive = activeDropdown == IslandDropdownMenu.COMMAND_PALETTE
+    var showOverflowMenu by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = if (adaptive.useCompactTopActions) 8.dp else 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Left Cluster: Back Arrow `←`, Sidebar Toggle `◧`, Folder Icon `M`, Project Name, `✓ Indexed` Vault Status
+        // Left Cluster: Back Arrow, Files Toggle, Project Badge, Folder Name (ellipsized), Single-line Indexed Badge
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-            modifier = Modifier.weight(1f, fill = false)
+            horizontalArrangement = Arrangement.spacedBy(if (adaptive.useCompactTopActions) 5.dp else 7.dp),
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 6.dp)
         ) {
             IconButton(
                 onClick = onBackToFolders,
@@ -1295,18 +1432,21 @@ private fun CodeAssistTopWorkspaceBar(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back to Folders",
-                    tint = Color(0xFFE6E1DC),
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(18.dp)
                 )
             }
 
-            // CodeAssist Sidebar Toggle (`◧`)
             Surface(
-                color = if (activeLeftActivityTab == LeftActivityTab.FILES) Color(0xFF3D322A) else Color(0xFF282320),
+                color = if (activeLeftActivityTab == LeftActivityTab.FILES) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
                 shape = RoundedCornerShape(7.dp),
                 border = BorderStroke(
                     0.75.dp,
-                    if (activeLeftActivityTab == LeftActivityTab.FILES) Color(0xFFD4883A) else Color(0xFF3E3630)
+                    if (activeLeftActivityTab == LeftActivityTab.FILES) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
                 ),
                 modifier = Modifier
                     .clip(RoundedCornerShape(7.dp))
@@ -1315,44 +1455,49 @@ private fun CodeAssistTopWorkspaceBar(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.FolderOpen,
                         contentDescription = "Toggle Project Files Tree",
-                        tint = if (activeLeftActivityTab == LeftActivityTab.FILES) Color(0xFFD4883A) else Color(0xFFA39C93),
+                        tint = if (activeLeftActivityTab == LeftActivityTab.FILES) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(14.dp)
                     )
                 }
             }
 
-            // Project Badge (`M`) + Project Title
-            Surface(
-                color = Color(0xFFD4883A).copy(alpha = 0.22f),
-                shape = RoundedCornerShape(6.dp),
-                border = BorderStroke(0.75.dp, Color(0xFFD4883A))
-            ) {
-                Text(
-                    text = activeFolder.title.firstOrNull()?.uppercase() ?: "M",
-                    fontFamily = JetBrainsMonoFontFamily,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFFFFC66D),
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                )
+            if (!adaptive.useCompactTopActions) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.primary)
+                ) {
+                    Text(
+                        text = activeFolder.title.firstOrNull()?.uppercase() ?: "M",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
             }
 
             Text(
                 text = activeFolder.title.ifBlank { "My App" },
                 fontFamily = JetBrainsMonoFontFamily,
-                fontSize = 13.sp,
+                fontSize = if (adaptive.useCompactTopActions) 12.sp else 13.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFFE6E1DC),
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
             )
 
-            // CodeAssist `✓ Indexed` / Vault Status Pill
+            // Vault / Sync Status Pill (Always single-line — never wraps vertically!)
             Surface(
                 color = Color(0xFF232C23),
                 shape = RoundedCornerShape(999.dp),
@@ -1364,176 +1509,334 @@ private fun CodeAssistTopWorkspaceBar(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .padding(horizontal = if (adaptive.useCompactTopActions) 6.dp else 8.dp, vertical = 3.dp)
                         .testTag("autosave_status_pill")
                 ) {
                     Text(
-                        text = if (hasUnsavedChanges) "● Sync ${secondsUntilAutoSave}s" else "✓ Indexed",
+                        text = when {
+                            adaptive.useCompactTopActions && hasUnsavedChanges -> "${secondsUntilAutoSave}s"
+                            adaptive.useCompactTopActions -> "✓"
+                            hasUnsavedChanges -> "● Sync ${secondsUntilAutoSave}s"
+                            else -> "✓ Indexed"
+                        },
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 9.5.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (hasUnsavedChanges) Color(0xFFFFC66D) else Color(0xFF81C784)
+                        color = if (hasUnsavedChanges) Color(0xFFFFC66D) else Color(0xFF81C784),
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
         }
 
-        // Right Cluster: Save, Undo, Redo, `▶ Run`, `>_ Terminal`, `Explain`, `Files`, `AI Guide`, `⌘P`, `Settings`
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            modifier = Modifier.horizontalScroll(rememberScrollState())
-        ) {
-            // Save button (CodeAssist floppy icon)
-            Surface(
-                color = Color(0xFF332922),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(0.5.dp, Color(0xFF5C4938)),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onSaveNow)
-                    .testTag("save_now_button")
+        // Right Cluster: Compact single-row essentials on Portrait Phone, full pill strip on Landscape / Foldable / Tablet
+        if (adaptive.useCompactTopActions) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Save,
-                    contentDescription = "Save Now",
-                    tint = Color(0xFFFFC66D),
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier
-                        .padding(horizontal = 7.dp, vertical = 5.dp)
-                        .size(14.dp)
-                )
-            }
-
-            // Undo & Redo icons
-            IconButton(
-                onClick = onUndo,
-                enabled = canUndo,
-                modifier = Modifier.size(28.dp).testTag("undo_top_button")
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Undo,
-                    contentDescription = "Undo",
-                    tint = if (canUndo) Color(0xFFE6E1DC) else Color(0xFF5A534D),
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-            IconButton(
-                onClick = onRedo,
-                enabled = canRedo,
-                modifier = Modifier.size(28.dp).testTag("redo_top_button")
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Redo,
-                    contentDescription = "Redo",
-                    tint = if (canRedo) Color(0xFFE6E1DC) else Color(0xFF5A534D),
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-
-            // Primary CodeAssist `▶ Run` Pill
-            Surface(
-                color = if (isRunActive || isBottomDrawerOpen) Color(0xFF28422B) else Color(0xFF332922),
-                shape = RoundedCornerShape(999.dp),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = if (isRunActive || isBottomDrawerOpen) Color(0xFF6A8759) else Color(0xFFD4883A)
-                ),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .clickable(onClick = onRunCode)
-                    .testTag("island_run_code_button")
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onSaveNow)
+                        .testTag("save_now_button")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Run Code",
-                        tint = Color(0xFF81C784),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "Run",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFE6E1DC)
+                        imageVector = Icons.Default.Save,
+                        contentDescription = "Save Now",
+                        tint = Color(0xFFFFC66D),
+                        modifier = Modifier
+                            .padding(horizontal = 6.dp, vertical = 5.dp)
+                            .size(14.dp)
                     )
                 }
+
+                // Primary ▶ Run Pill
+                Surface(
+                    color = if (isRunActive || isBottomDrawerOpen) Color(0xFF28422B) else MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = if (isRunActive || isBottomDrawerOpen) Color(0xFF6A8759) else MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable(onClick = onRunCode)
+                        .testTag("island_run_code_button")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Run Code",
+                            tint = Color(0xFF81C784),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "Run",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                // Compact `>_` Drawer Toggle
+                CodeAssistTopPill(
+                    label = if (syntaxErrorCount > 0) ">_ $syntaxErrorCount" else ">_",
+                    isActive = isBottomDrawerOpen,
+                    testTag = "island_terminal_drawer_button",
+                    onClick = onToggleTerminalDrawer
+                )
+
+                // `⌘P` Command Palette
+                CodeAssistTopPill(
+                    label = "⌘P",
+                    isActive = isCmdActive,
+                    testTag = "island_command_palette_button",
+                    onClick = onToggleCommandPalette
+                )
+
+                // Overflow `⋮` Menu for Undo, Redo, Floating Windows, New Tools & Settings (zero clipping!)
+                Box {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(999.dp),
+                        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable { showOverflowMenu = true }
+                            .testTag("editor_topbar_overflow_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Workspace Tools & Settings",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                                .size(15.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showOverflowMenu,
+                        onDismissRequest = { showOverflowMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Undo", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
+                            enabled = canUndo,
+                            onClick = { showOverflowMenu = false; onUndo() },
+                            modifier = Modifier.testTag("undo_top_button")
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Redo", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
+                            enabled = canRedo,
+                            onClick = { showOverflowMenu = false; onRedo() },
+                            modifier = Modifier.testTag("redo_top_button")
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text(if (isExplainActive) "Close Explain Window" else "Explain Window", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
+                            onClick = { showOverflowMenu = false; onToggleFloatingWindow(FloatingWindowType.EXPLANATION) },
+                            modifier = Modifier.testTag("island_explanation_window_toggle")
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Files Window (${activeFolder.sections.size})", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
+                            onClick = { showOverflowMenu = false; onToggleFloatingWindow(FloatingWindowType.FOLDERS) },
+                            modifier = Modifier.testTag("island_folder_dropdown_button")
+                        )
+                        DropdownMenuItem(
+                            text = { Text("AI Guide Window", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
+                            onClick = { showOverflowMenu = false; onToggleFloatingWindow(FloatingWindowType.AI_STUDIO) },
+                            modifier = Modifier.testTag("island_ai_studio_button")
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("λ Kotlin REPL Console", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
+                            onClick = { showOverflowMenu = false; onOpenDrawerTab(BottomDrawerTab.REPL) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("⛁ AST & Bytecode Inspector", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
+                            onClick = { showOverflowMenu = false; onCompileAstBytecode() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("± Git Diff & History", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
+                            onClick = { showOverflowMenu = false; onOpenDrawerTab(BottomDrawerTab.GIT_DIFF) }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("File & Studio Settings", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
+                            onClick = { showOverflowMenu = false; onOpenFileSettings() },
+                            modifier = Modifier.testTag("editor_shortcut_settings_button")
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Adaptive Theme & Preferences", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
+                            onClick = { showOverflowMenu = false; onOpenStudioSettings() }
+                        )
+                    }
+                }
             }
-
-            // `>_ Terminal` Bottom Drawer Toggle Pill
-            CodeAssistTopPill(
-                label = if (syntaxErrorCount > 0) ">_ Terminal ($syntaxErrorCount)" else ">_ Terminal",
-                isActive = isBottomDrawerOpen,
-                testTag = "island_terminal_drawer_button",
-                onClick = onToggleTerminalDrawer
-            )
-
-            // `Explain` Floating/Split Window Toggle Pill
-            CodeAssistTopPill(
-                label = "Explain",
-                isActive = isExplainActive,
-                testTag = "island_explanation_window_toggle",
-                onClick = { onToggleFloatingWindow(FloatingWindowType.EXPLANATION) }
-            )
-
-            // `Files` Floating/Split Window Toggle Pill
-            CodeAssistTopPill(
-                label = "Files ${activeFolder.sections.size}",
-                isActive = isFilesFloatingActive,
-                testTag = "island_folder_dropdown_button",
-                onClick = { onToggleFloatingWindow(FloatingWindowType.FOLDERS) }
-            )
-
-            // `AI Guide` Floating Window Toggle Pill
-            CodeAssistTopPill(
-                label = "AI Guide",
-                isActive = isAiActive,
-                testTag = "island_ai_studio_button",
-                onClick = { onToggleFloatingWindow(FloatingWindowType.AI_STUDIO) }
-            )
-
-            // `⌘P` Command Block Pill
-            CodeAssistTopPill(
-                label = "⌘P",
-                isActive = isCmdActive,
-                testTag = "island_command_palette_button",
-                onClick = onToggleCommandPalette
-            )
-
-            // File Inspector & Studio Settings Pill
-            Surface(
-                color = Color(0xFF282320),
-                shape = RoundedCornerShape(999.dp),
-                border = BorderStroke(0.75.dp, Color(0xFF453D37)),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .clickable(onClick = onOpenFileSettings)
-                    .testTag("editor_shortcut_settings_button")
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState())
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onSaveNow)
+                        .testTag("save_now_button")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "File & Studio Settings",
-                        tint = Color(0xFFD4883A),
-                        modifier = Modifier.size(12.dp)
+                        imageVector = Icons.Default.Save,
+                        contentDescription = "Save Now",
+                        tint = Color(0xFFFFC66D),
+                        modifier = Modifier
+                            .padding(horizontal = 7.dp, vertical = 5.dp)
+                            .size(14.dp)
                     )
-                    Text(
-                        text = "Settings",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFE6E1DC)
+                }
+
+                IconButton(
+                    onClick = onUndo,
+                    enabled = canUndo,
+                    modifier = Modifier.size(28.dp).testTag("undo_top_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Undo,
+                        contentDescription = "Undo",
+                        tint = if (canUndo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(15.dp)
                     )
+                }
+                IconButton(
+                    onClick = onRedo,
+                    enabled = canRedo,
+                    modifier = Modifier.size(28.dp).testTag("redo_top_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Redo,
+                        contentDescription = "Redo",
+                        tint = if (canRedo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+
+                Surface(
+                    color = if (isRunActive || isBottomDrawerOpen) Color(0xFF28422B) else MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = if (isRunActive || isBottomDrawerOpen) Color(0xFF6A8759) else MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable(onClick = onRunCode)
+                        .testTag("island_run_code_button")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Run Code",
+                            tint = Color(0xFF81C784),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "Run",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                CodeAssistTopPill(
+                    label = if (syntaxErrorCount > 0) ">_ Terminal ($syntaxErrorCount)" else ">_ Terminal",
+                    isActive = isBottomDrawerOpen,
+                    testTag = "island_terminal_drawer_button",
+                    onClick = onToggleTerminalDrawer
+                )
+
+                CodeAssistTopPill(
+                    label = "Explain",
+                    isActive = isExplainActive,
+                    testTag = "island_explanation_window_toggle",
+                    onClick = { onToggleFloatingWindow(FloatingWindowType.EXPLANATION) }
+                )
+
+                CodeAssistTopPill(
+                    label = "Files ${activeFolder.sections.size}",
+                    isActive = isFilesFloatingActive,
+                    testTag = "island_folder_dropdown_button",
+                    onClick = { onToggleFloatingWindow(FloatingWindowType.FOLDERS) }
+                )
+
+                CodeAssistTopPill(
+                    label = "AI Guide",
+                    isActive = isAiActive,
+                    testTag = "island_ai_studio_button",
+                    onClick = { onToggleFloatingWindow(FloatingWindowType.AI_STUDIO) }
+                )
+
+                CodeAssistTopPill(
+                    label = "⌘P",
+                    isActive = isCmdActive,
+                    testTag = "island_command_palette_button",
+                    onClick = onToggleCommandPalette
+                )
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable(onClick = onOpenFileSettings)
+                        .testTag("editor_shortcut_settings_button")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "File & Studio Settings",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            text = "Settings",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
                 }
             }
         }
@@ -1548,11 +1851,11 @@ private fun CodeAssistTopPill(
     onClick: () -> Unit
 ) {
     Surface(
-        color = if (isActive) Color(0xFF3B3028) else Color(0xFF26211E),
+        color = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RoundedCornerShape(999.dp),
         border = BorderStroke(
             width = if (isActive) 1.dp else 0.75.dp,
-            color = if (isActive) Color(0xFFD4883A) else Color(0xFF3E3630)
+            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
         ),
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
@@ -1564,8 +1867,10 @@ private fun CodeAssistTopPill(
             fontFamily = JetBrainsMonoFontFamily,
             fontSize = 10.sp,
             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-            color = if (isActive) Color(0xFFFFC66D) else Color(0xFFD5CEC6),
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+            color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         )
     }
 }
@@ -1590,8 +1895,8 @@ private fun CodeAssistSlimLeftActivityBar(
         modifier = Modifier
             .fillMaxHeight()
             .width(40.dp)
-            .background(Color(0xFF1F1B19))
-            .border(0.5.dp, Color(0xFF332D29))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
             .verticalScroll(rememberScrollState())
             .padding(vertical = 8.dp)
             .testTag("left_circular_ide_rail"),
@@ -1738,6 +2043,7 @@ private fun CodeAssistSidePanel(
     activeSection: CodeSectionUiModel?,
     uiState: EditorUiState,
     allProjectSymbols: List<CodeLanguageEngine.CodeSymbolDefinition> = emptyList(),
+    panelWidthDp: Int? = 235,
     onSelectFileSection: (Long) -> Unit,
     onInsertNewFile: () -> Unit,
     onInsertLanguageFile: (LanguageType) -> Unit,
@@ -1764,11 +2070,11 @@ private fun CodeAssistSidePanel(
     var searchFilter by remember { mutableStateOf("") }
 
     Surface(
-        color = Color(0xFF1E1A18),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier
             .fillMaxHeight()
-            .width(235.dp)
-            .border(0.5.dp, Color(0xFF332D29))
+            .then(if (panelWidthDp != null) Modifier.width(panelWidthDp.dp) else Modifier.fillMaxWidth())
+            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
             .testTag("codeassist_side_panel")
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -1776,7 +2082,7 @@ private fun CodeAssistSidePanel(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF241F1C))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
                     .padding(horizontal = 10.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -2453,16 +2759,20 @@ private fun CodeAssistEditorTabBar(
     hasUnsavedChanges: Boolean,
     onSelectSection: (Long) -> Unit,
     onCloseSectionTab: (Long) -> Unit,
+    onReorderTab: (Long, Int) -> Unit = { _, _ -> },
     onNavigateFocusedSection: (Int) -> Unit,
     onInsertNewFile: () -> Unit,
+    onInsertLanguageFile: (LanguageType) -> Unit = {},
     onOpenFileSettings: () -> Unit,
     onExportActiveFile: () -> Unit
 ) {
+    var showNewLangMenu by remember { mutableStateOf(false) }
+
     Surface(
-        color = Color(0xFF1F1B19),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier
             .fillMaxWidth()
-            .border(0.5.dp, Color(0xFF332D29))
+            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
             modifier = Modifier
@@ -2474,15 +2784,15 @@ private fun CodeAssistEditorTabBar(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             val sectionsToShow = if (openSections.isNotEmpty()) openSections else allSections
-            sectionsToShow.forEach { sec ->
+            sectionsToShow.forEachIndexed { idx, sec ->
                 val isCurrent = activeSection?.id == sec.id
                 val langColor = sec.language.badgeColor
                 Surface(
-                    color = if (isCurrent) Color(0xFF47372B) else Color(0xFF26211E),
+                    color = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
                     shape = RoundedCornerShape(999.dp),
                     border = BorderStroke(
                         width = if (isCurrent) 1.dp else 0.5.dp,
-                        color = if (isCurrent) Color(0xFFD4883A) else Color(0xFF3A332D)
+                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
                     ),
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
@@ -2494,7 +2804,6 @@ private fun CodeAssistEditorTabBar(
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                     ) {
-                        // Circular Language Badge (`K`)
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
@@ -2508,7 +2817,9 @@ private fun CodeAssistEditorTabBar(
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 7.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = langColor
+                                color = langColor,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
 
@@ -2517,10 +2828,11 @@ private fun CodeAssistEditorTabBar(
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 11.sp,
                             fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isCurrent) Color(0xFFFFE5CC) else Color(0xFFD5CEC6)
+                            color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false
                         )
 
-                        // Unsaved / Modified amber dot (`•`) like CodeAssist
                         if (isCurrent) {
                             Box(
                                 modifier = Modifier
@@ -2528,13 +2840,34 @@ private fun CodeAssistEditorTabBar(
                                     .clip(CircleShape)
                                     .background(if (hasUnsavedChanges) Color(0xFFFFC66D) else Color(0xFF81C784))
                             )
+                            if (sectionsToShow.size > 1) {
+                                if (idx > 0) {
+                                    Text(
+                                        text = "◀",
+                                        fontSize = 8.5.sp,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier
+                                            .clickable { onReorderTab(sec.id, -1) }
+                                            .testTag("reorder_tab_left_${sec.orderIndex}")
+                                    )
+                                }
+                                if (idx < sectionsToShow.lastIndex) {
+                                    Text(
+                                        text = "▶",
+                                        fontSize = 8.5.sp,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier
+                                            .clickable { onReorderTab(sec.id, 1) }
+                                            .testTag("reorder_tab_right_${sec.orderIndex}")
+                                    )
+                                }
+                            }
                         }
 
-                        // Tab close button `×`
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close ${sec.nativeFileName} Tab",
-                            tint = Color(0xFFA39C93),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .size(12.dp)
                                 .clip(CircleShape)
@@ -2545,26 +2878,74 @@ private fun CodeAssistEditorTabBar(
                 }
             }
 
-            // `+` New File Tab Pill
-            Surface(
-                color = Color(0xFF26211E),
-                shape = RoundedCornerShape(999.dp),
-                border = BorderStroke(0.5.dp, Color(0xFF3A332D)),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .clickable(onClick = onInsertNewFile)
-                    .testTag("tab_bar_new_file_button")
-            ) {
+            // `+` New File Tab Pill + Language Quick Picker Dropdown
+            Box {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "New File",
-                        tint = Color(0xFFD4883A),
-                        modifier = Modifier.size(12.dp)
-                    )
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(999.dp),
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable(onClick = onInsertNewFile)
+                            .testTag("tab_bar_new_file_button")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "New File",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(999.dp),
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable { showNewLangMenu = true }
+                            .testTag("tab_bar_language_menu_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "New File by Language",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .padding(horizontal = 5.dp, vertical = 4.dp)
+                                .size(12.dp)
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = showNewLangMenu,
+                    onDismissRequest = { showNewLangMenu = false }
+                ) {
+                    LanguageType.entries.forEach { lang ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = "+ New ${lang.displayName} (${lang.nativeExtension})",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 11.5.sp,
+                                    color = lang.badgeColor
+                                )
+                            },
+                            onClick = {
+                                showNewLangMenu = false
+                                onInsertLanguageFile(lang)
+                            }
+                        )
+                    }
                 }
             }
 
@@ -2578,7 +2959,7 @@ private fun CodeAssistEditorTabBar(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                         contentDescription = "Previous File",
-                        tint = Color(0xFFA39C93),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(15.dp)
                     )
                 }
@@ -2590,7 +2971,7 @@ private fun CodeAssistEditorTabBar(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = "Next File",
-                        tint = Color(0xFFA39C93),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(15.dp)
                     )
                 }
@@ -2598,9 +2979,9 @@ private fun CodeAssistEditorTabBar(
 
             // Export / Copy Active File Bundle
             Surface(
-                color = Color(0xFF26211E),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 shape = RoundedCornerShape(999.dp),
-                border = BorderStroke(0.5.dp, Color(0xFF3A332D)),
+                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier
                     .clip(RoundedCornerShape(999.dp))
                     .clickable(onClick = onExportActiveFile)
@@ -2613,7 +2994,7 @@ private fun CodeAssistEditorTabBar(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                         contentDescription = "Export or Share File",
-                        tint = Color(0xFFD4883A),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(11.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
@@ -2621,7 +3002,9 @@ private fun CodeAssistEditorTabBar(
                         text = "Export / Copy",
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 10.sp,
-                        color = Color(0xFFE6E1DC)
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
