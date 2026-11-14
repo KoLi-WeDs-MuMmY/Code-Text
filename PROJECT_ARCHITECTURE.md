@@ -106,3 +106,38 @@ app/src/main/java/com/example/
 ### 9.4 SDK & Plugin Toolchain Manager & iOS Grouped Settings (`ShortcutAndSettingsDialog.kt` & `FileSettingsDialog.kt`)
 - Both Main Studio Settings and File Inspector are organized into **iOS-style grouped inset cards** with a top segmented category filter bar (`All`, `SDK & Plugins`, `Appearance`, `Editor & Caret`, `Shortcuts`, `Vault & AI`).
 - Users can download, install, and manage 6 Language SDKs & Debuggers (Kotlin, Java, Python, C/C++, Dart, Rust) and 4 IDE Extensions with persisted state in `SharedPreferences`.
+
+
+---
+
+## 10. CodeAssist Deep IDE & Debugger Integration + Rounded Project Manager UI
+
+### 10.1 Gutter Breakpoints & Expression Watch Debugger (`KotlinCodeSectionCard.kt` & `IdeBottomDrawer.kt`)
+- Each gutter row in `KotlinCodeSectionCard.kt` (`gutter_line_${orderIndex}_$lineNum`) is clickable to toggle a line breakpoint (`EditorViewModel.toggleLineBreakpoint`), rendering a red dot (`●`) and crimson row highlight without altering `rowHeightDp` synchronization.
+- `IdeBottomDrawer.kt` (`DebuggerTabContent`) integrates breakpoint pause/resume (`Resume` jumps directly to the next active breakpoint line), active breakpoint management chips, and an interactive **Expression Watch Evaluator** (`CodeLanguageEngine.evaluateWatchExpression`) with live preview (`= result`) and custom watch pills.
+
+### 10.2 Auto-Import Quick Fixes, Optimize Imports, Code Folding & Go-to-Definition (`CodeLanguageEngine.kt`)
+- `getMissingImportsForLanguage` & `applyAutoImport`: Automatically detects unimported symbols across Kotlin, Java, Python, C++, Dart, and Rust and attaches 1-tap `+ Import <symbol>` quick fixes to both inline error pills and the `Problems` tab.
+- `optimizeImportsForLanguage`: Deduplicates, sorts, and prunes unused imports in the active file (`optimize_imports_button_${orderIndex}`).
+- `detectFoldableRegions`: Identifies foldable functions, classes, and import blocks with gutter `▾`/`▸` chevrons and a folded-regions summary bar.
+- `extractSymbolsForSection` & `findDefinitionAtCursor`: Powers `⌘B Go to Def` (`goto_definition_button_${orderIndex}`) and the project-wide symbol outline in `LeftActivityTab.STRUCTURE`.
+
+### 10.3 CodeAssist Rounded Project Home (`DocumentListScreen.kt` & `MainActivity.kt`)
+- Features a Live SDK Toolchain Status Bar (`X/6 SDKs Ready`), 1-tap Quick Start Project Template pills (`+ Kotlin`, `+ Java`, `+ Python`, `+ C++`, `+ Dart`, `+ Rust`), a New Project Template Wizard modal (`open_template_wizard_button`), pill-rounded search/filter bars, and spring-animated screen transitions in `MainActivity.kt`.
+
+---
+
+## 11. Zero-Server On-Device Architecture, End-to-End Line Jumping, Interactive `stdin` & Local Snapshots
+
+### 11.1 100% On-Device Zero-Server AST Engine (`AiSectionNamingService.kt`)
+- Runs with `preferOfflineLocalEngine = true` by default so Smart Naming, 3-Part Explanations, Idiomatic Refactoring, and Docstring/KDoc generation execute in `<5ms` on-device with zero paid server requirement and zero network timeout failures.
+- Supports language-specific documentation conventions (`"""` PEP-257 docstrings for Python, `///` for Rust/Dart, `/** ... */` for Kotlin/Java/C++) and multi-language concept tag inference (`CodeSectionUiModel.inferSmartConceptTagFromCode`).
+
+### 11.2 End-to-End Line Jumping (`EditorViewModel.jumpToCodeLine` → `KotlinCodeSectionCard`)
+- `EditorUiState.requestedJumpLine` and `jumpLineTrigger` propagate line-jump requests from `IdeBottomDrawer` (`Problems`, `Debugger` Step Over/Into/Resume, Call Stack), `CodeAssistSidePanel` (`Structure` symbols, foldable regions, and `Search` matches), and `⌘B Go to Def` into `KotlinCodeSectionCard`, which unfolds any enclosing folded block, positions the caret on the target line, requests focus, and calls `bringActiveCodeLineIntoView`.
+
+### 11.3 Interactive `stdin` Pipe, Multi-Language Formatter & Local Version Snapshots
+- `IdeBottomDrawer.kt` (`TerminalTabContent`) includes an interactive `stdin >` bar (`terminal_stdin_input`, `terminal_send_stdin_button`) wired to `CodeLanguageEngine.executeAndDebug(..., stdinInput)` with live variable interpolation across all 6 languages.
+- `CodeLanguageEngine.formatCodeForLanguage`, `toggleLineCommentForLanguage`, and `getLiveTemplatesForLanguage` provide native formatting, commenting (`#` vs `//`), and live templates per language.
+- `EditorUiState.localSnapshotsBySectionId` powers the `⏱ History` pill (`local_history_button_${orderIndex}`) for instant on-device checkpoints and 1-tap rollback.
+

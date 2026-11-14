@@ -83,7 +83,18 @@ data class EditorUiState(
     // Closed Editor Tab IDs (allows closing tabs with 'x' to reveal the CodeAssist 'No file open' screen)
     val closedTabSectionIds: Set<Long> = emptySet(),
     // SDK & Plugin Toolchain Manager Catalog
-    val toolchainPlugins: List<com.example.model.ToolchainPluginItem> = com.example.model.ToolchainPluginItem.defaultCatalog()
+    val toolchainPlugins: List<com.example.model.ToolchainPluginItem> = com.example.model.ToolchainPluginItem.defaultCatalog(),
+    // CodeAssist Gutter Breakpoints per File Section (`sectionId -> Set<lineNumber>`)
+    val breakpointsBySectionId: Map<Long, Set<Int>> = emptyMap(),
+    // CodeAssist Debugger Expression Watch List
+    val watchExpressions: List<String> = emptyList(),
+    // Editor Line Jump Target (triggered from Problems tab, Debugger step, or Structure outline)
+    val requestedJumpLine: Int? = null,
+    val jumpLineTrigger: Int = 0,
+    // Interactive Standard Input (stdin) for readln() / input() / Scanner / std::cin
+    val terminalStdinInput: String = "",
+    // Local On-Device Version History Snapshots (`sectionId -> List<LocalCodeSnapshot>`)
+    val localSnapshotsBySectionId: Map<Long, List<com.example.model.LocalCodeSnapshot>> = emptyMap()
 ) {
     fun isLanguageSdkInstalled(language: com.example.model.LanguageType): Boolean {
         val sdkId = com.example.model.ToolchainPluginItem.sdkIdForLanguage(language)
@@ -333,10 +344,18 @@ class EditorViewModel(
 
     fun toggleFloatingWindow(type: FloatingWindowType) {
         if (type == FloatingWindowType.RUN_OUTPUT && type !in _uiState.value.openFloatingWindows) {
-            val doc = _uiState.value.activeDocument
-            val activeSec = doc?.sections?.find { it.id == _uiState.value.focusedSectionId }
+            val state = _uiState.value
+            val doc = state.activeDocument
+            val activeSec = doc?.sections?.find { it.id == state.focusedSectionId }
                 ?: doc?.sections?.firstOrNull()
-            val output = activeSec?.let { KotlinCodeEngine.simulateKotlinExecution(it.codeContent) }
+            val output = activeSec?.let {
+                com.example.code.CodeLanguageEngine.executeAndDebug(
+                    code = it.codeContent,
+                    language = it.language,
+                    isSdkInstalled = state.isLanguageSdkInstalled(it.language),
+                    stdinInput = state.terminalStdinInput
+                ).output
+            }
             _uiState.update { current ->
                 val nextState = EditorUiState.applyToggleFloatingWindow(current, type)
                 nextState.copy(terminalExecutionOutput = output ?: current.terminalExecutionOutput)
@@ -415,10 +434,18 @@ class EditorViewModel(
 
     fun dockWindowToSplitScreen(type: FloatingWindowType) {
         if (type == FloatingWindowType.RUN_OUTPUT) {
-            val doc = _uiState.value.activeDocument
-            val activeSec = doc?.sections?.find { it.id == _uiState.value.focusedSectionId }
+            val state = _uiState.value
+            val doc = state.activeDocument
+            val activeSec = doc?.sections?.find { it.id == state.focusedSectionId }
                 ?: doc?.sections?.firstOrNull()
-            val output = activeSec?.let { KotlinCodeEngine.simulateKotlinExecution(it.codeContent) }
+            val output = activeSec?.let {
+                com.example.code.CodeLanguageEngine.executeAndDebug(
+                    code = it.codeContent,
+                    language = it.language,
+                    isSdkInstalled = state.isLanguageSdkInstalled(it.language),
+                    stdinInput = state.terminalStdinInput
+                ).output
+            }
             _uiState.update { current ->
                 EditorUiState.applyDockWindowToSplitScreen(current, type).copy(
                     terminalExecutionOutput = output ?: current.terminalExecutionOutput
@@ -479,15 +506,17 @@ class EditorViewModel(
     }
 
     fun runActiveSectionInTerminal() {
-        val doc = _uiState.value.activeDocument ?: return
-        val activeSec = doc.sections.find { it.id == _uiState.value.focusedSectionId }
+        val state = _uiState.value
+        val doc = state.activeDocument ?: return
+        val activeSec = doc.sections.find { it.id == state.focusedSectionId }
             ?: doc.sections.firstOrNull()
             ?: return
-        val isSdkReady = _uiState.value.isLanguageSdkInstalled(activeSec.language)
+        val isSdkReady = state.isLanguageSdkInstalled(activeSec.language)
         val debugInfo = com.example.code.CodeLanguageEngine.executeAndDebug(
             code = activeSec.codeContent,
             language = activeSec.language,
-            isSdkInstalled = isSdkReady
+            isSdkInstalled = isSdkReady,
+            stdinInput = state.terminalStdinInput
         )
         _uiState.update { current ->
             current.copy(
@@ -495,6 +524,62 @@ class EditorViewModel(
                 isBottomDrawerOpen = true,
                 activeBottomDrawerTab = com.example.model.BottomDrawerTab.TERMINAL
             )
+        }
+    }
+
+    fun updateTerminalStdin(input: String) {
+        _uiState.update { it.copy(terminalStdinInput = input) }
+    }
+
+    fun jumpToCodeLine(line: Int) {
+        val targetLine = line.coerceAtLeast(1)
+        _uiState.update { state ->
+            state.copy(
+                requestedJumpLine = targetLine,
+                jumpLineTrigger = state.jumpLineTrigger + 1,
+                aiStatusMessage = "→ Jumped to Ln $targetLine"
+            )
+        }
+    }
+
+    fun createLocalSnapshot(sectionId: Long, label: String = "Manual Snapshot") {
+        val doc = _uiState.value.activeDocument ?: return
+        val sec = doc.sections.find { it.id == sectionId } ?: return
+        if (sec.codeContent.isBlank()) return
+        val now = System.currentTimeMillis()
+        val existing = _uiState.value.localSnapshotsBySectionId[sectionId].orEmpty()
+        if (existing.firstOrNull()?.codeContent == sec.codeContent) {
+            _uiState.update { it.copy(aiStatusMessage = "✓ Snapshot already up to date for ${sec.nativeFileName}") }
+            return
+        }
+        val snapshot = com.example.model.LocalCodeSnapshot(
+            id = now,
+            sectionId = sectionId,
+            label = label,
+            codeContent = sec.codeContent,
+            timestampMs = now
+        )
+        val updatedList = (listOf(snapshot) + existing).take(12)
+        _uiState.update { state ->
+            state.copy(
+                localSnapshotsBySectionId = state.localSnapshotsBySectionId + (sectionId to updatedList),
+                aiStatusMessage = "⏱ Saved local snapshot '$label' (${snapshot.lineCount} lines)"
+            )
+        }
+    }
+
+    fun restoreLocalSnapshot(sectionId: Long, snapshotId: Long) {
+        val snapshots = _uiState.value.localSnapshotsBySectionId[sectionId].orEmpty()
+        val target = snapshots.find { it.id == snapshotId } ?: return
+        mutateActiveDocument(recordUndo = true) { current ->
+            current.copy(
+                sections = current.sections.map { sec ->
+                    if (sec.id == sectionId) sec.copy(codeContent = target.codeContent) else sec
+                }
+            )
+        }
+        _uiState.update {
+            it.copy(aiStatusMessage = "↺ Restored snapshot '${target.label}' (${target.lineCount} lines)")
         }
     }
 
@@ -599,6 +684,57 @@ class EditorViewModel(
         }
     }
 
+    fun toggleLineBreakpoint(sectionId: Long, line: Int) {
+        if (line < 1) return
+        _uiState.update { state ->
+            val currentSet = state.breakpointsBySectionId[sectionId] ?: emptySet()
+            val updatedSet = if (line in currentSet) currentSet - line else (currentSet + line).sorted().toSet()
+            val msg = if (line in updatedSet) {
+                "● Breakpoint set at Ln $line"
+            } else {
+                "○ Breakpoint cleared at Ln $line"
+            }
+            state.copy(
+                breakpointsBySectionId = state.breakpointsBySectionId + (sectionId to updatedSet),
+                aiStatusMessage = msg
+            )
+        }
+    }
+
+    fun addWatchExpression(expression: String) {
+        val clean = expression.trim()
+        if (clean.isBlank()) return
+        _uiState.update { state ->
+            if (clean in state.watchExpressions) state
+            else state.copy(watchExpressions = state.watchExpressions + clean)
+        }
+    }
+
+    fun removeWatchExpression(expression: String) {
+        _uiState.update { state ->
+            state.copy(watchExpressions = state.watchExpressions - expression)
+        }
+    }
+
+    fun optimizeImportsInSection(sectionId: Long) {
+        val doc = _uiState.value.activeDocument ?: return
+        val targetSection = doc.sections.find { it.id == sectionId } ?: return
+        val optimized = com.example.code.CodeLanguageEngine.optimizeImportsForLanguage(
+            code = targetSection.codeContent,
+            language = targetSection.language
+        )
+        mutateActiveDocument(recordUndo = true) { current ->
+            current.copy(
+                sections = current.sections.map { sec ->
+                    if (sec.id == sectionId) sec.copy(codeContent = optimized) else sec
+                }
+            )
+        }
+        _uiState.update {
+            it.copy(aiStatusMessage = "✓ Optimized & sorted imports in ${targetSection.nativeFileName}")
+        }
+    }
+
     fun openBottomDrawer(tab: com.example.model.BottomDrawerTab = com.example.model.BottomDrawerTab.TERMINAL) {
         _uiState.update { it.copy(isBottomDrawerOpen = true, activeBottomDrawerTab = tab) }
     }
@@ -689,15 +825,36 @@ class EditorViewModel(
         }
     }
 
-    fun createAndOpenNewDocument(customTitle: String? = null) {
+    fun createAndOpenNewDocument(
+        customTitle: String? = null,
+        starterLanguage: com.example.model.LanguageType? = null
+    ) {
         viewModelScope.launch {
             if (_uiState.value.activeDocument != null && _uiState.value.hasUnsavedChanges) {
                 persistActiveDocumentInternal("Auto-saved before creating new folder")
             }
+            val targetLang = starterLanguage ?: _uiState.value.defaultLanguageForNewFiles
+            val defaultName = customTitle?.takeIf { it.isNotBlank() }
+                ?: "New ${targetLang.displayName} Project"
             val newDocId = repository.createNewDocument(
-                title = customTitle?.takeIf { it.isNotBlank() } ?: "New Kotlin Folder",
+                title = defaultName,
                 withStarterSection = true
             )
+            if (starterLanguage != null) {
+                val createdDetail = repository.loadDocumentDetail(newDocId)
+                if (createdDetail != null && createdDetail.sections.isNotEmpty()) {
+                    val updatedSections = createdDetail.sections.mapIndexed { idx, sec ->
+                        if (idx == 0) {
+                            sec.copy(
+                                language = starterLanguage,
+                                sectionTitle = starterLanguage.defaultFileName,
+                                codeContent = starterLanguage.starterCode
+                            )
+                        } else sec
+                    }
+                    repository.saveDocumentDetail(createdDetail.copy(sections = updatedSections))
+                }
+            }
             openDocument(newDocId)
         }
     }
@@ -744,6 +901,10 @@ class EditorViewModel(
     }
 
     fun saveNowManual() {
+        val activeSecId = _uiState.value.focusedSectionId ?: _uiState.value.activeDocument?.sections?.firstOrNull()?.id
+        if (activeSecId != null) {
+            createLocalSnapshot(activeSecId, "Manual Save")
+        }
         viewModelScope.launch {
             persistActiveDocumentInternal("Saved to Hidden Vault")
         }
@@ -1014,17 +1175,17 @@ class EditorViewModel(
     fun exportActiveDocumentAsMarkdown(): String {
         val doc = _uiState.value.activeDocument ?: return ""
         return buildString {
-            appendLine("# 📁 ${doc.title.ifBlank { "Untitled Kotlin Folder" }}")
+            appendLine("# 📁 ${doc.title.ifBlank { "Untitled Project Folder" }}")
             if (doc.introText.isNotBlank()) {
                 appendLine()
                 appendLine(doc.introText.trim())
             }
             doc.sections.forEach { sec ->
                 appendLine()
-                appendLine("## §${sec.orderIndex + 1}. ${sec.displayTitle}")
+                appendLine("## §${sec.orderIndex + 1}. ${sec.displayTitle} (${sec.language.displayName})")
                 appendLine("**Learned Concept Tag:** `${sec.effectiveLearnedConceptTag}`")
                 appendLine()
-                appendLine("```kotlin")
+                appendLine("```${sec.language.id}")
                 appendLine(sec.codeContent.trim())
                 appendLine("```")
                 if (sec.explanationText.isNotBlank()) {
@@ -1052,7 +1213,10 @@ class EditorViewModel(
     fun formatCodeInSection(sectionId: Long) {
         val doc = _uiState.value.activeDocument ?: return
         val targetSection = doc.sections.find { it.id == sectionId } ?: return
-        val formatted = KotlinCodeEngine.formatKotlinCode(targetSection.codeContent)
+        val formatted = com.example.code.CodeLanguageEngine.formatCodeForLanguage(
+            code = targetSection.codeContent,
+            language = targetSection.language
+        )
         mutateActiveDocument(recordUndo = true) { current ->
             current.copy(
                 sections = current.sections.map { sec ->
@@ -1061,7 +1225,7 @@ class EditorViewModel(
             )
         }
         _uiState.update {
-            it.copy(aiStatusMessage = "Formatted Kotlin code in Section ${targetSection.orderIndex + 1}")
+            it.copy(aiStatusMessage = "✓ Formatted ${targetSection.language.displayName} code in ${targetSection.nativeFileName}")
         }
     }
 
@@ -1199,13 +1363,14 @@ class EditorViewModel(
                             if (it.id == sectionId) it.copy(isNamingInProgress = true) else it
                         }
                     ),
-                    aiStatusMessage = "✨ AI analyzing Kotlin code to write explanation…"
+                    aiStatusMessage = "⚡ Analyzing ${sec.language.displayName} AST to write explanation…"
                 )
             }
             val result = aiNamingService.generateCodeExplanation(
                 codeContent = sec.codeContent,
                 existingExplanation = sec.explanationText,
-                sectionNumber = sec.orderIndex + 1
+                sectionNumber = sec.orderIndex + 1,
+                language = sec.language
             )
             val (generatedExp, banner, quota) = when (result) {
                 is AiAssistOutput.Success -> Triple(result.outputText, result.summaryBanner, result.remainingRpmQuota)
@@ -1263,6 +1428,7 @@ class EditorViewModel(
     fun requestAiRefactorForSection(sectionId: Long) {
         val doc = _uiState.value.activeDocument ?: return
         val sec = doc.sections.find { it.id == sectionId } ?: return
+        createLocalSnapshot(sectionId, "Pre-Refactor")
         viewModelScope.launch {
             _uiState.update { state ->
                 val curDoc = state.activeDocument ?: return@update state
@@ -1272,10 +1438,10 @@ class EditorViewModel(
                             if (it.id == sectionId) it.copy(isNamingInProgress = true) else it
                         }
                     ),
-                    aiStatusMessage = "✨ AI refactoring & fixing Kotlin syntax…"
+                    aiStatusMessage = "⚡ Auto-fixing & formatting ${sec.language.displayName} syntax…"
                 )
             }
-            val result = aiNamingService.refactorAndFixKotlinCode(sec.codeContent)
+            val result = aiNamingService.refactorAndFixKotlinCode(sec.codeContent, sec.language)
             val (refactoredCode, banner, quota) = when (result) {
                 is AiAssistOutput.Success -> Triple(result.outputText, result.summaryBanner, result.remainingRpmQuota)
                 is AiAssistOutput.FallbackApplied -> Triple(result.outputText, result.summaryBanner, result.remainingRpmQuota)
@@ -1306,6 +1472,7 @@ class EditorViewModel(
     fun requestAiKDocForSection(sectionId: Long) {
         val doc = _uiState.value.activeDocument ?: return
         val sec = doc.sections.find { it.id == sectionId } ?: return
+        createLocalSnapshot(sectionId, "Pre-Docstring")
         viewModelScope.launch {
             _uiState.update { state ->
                 val curDoc = state.activeDocument ?: return@update state
@@ -1315,10 +1482,10 @@ class EditorViewModel(
                             if (it.id == sectionId) it.copy(isNamingInProgress = true) else it
                         }
                     ),
-                    aiStatusMessage = "✨ AI adding KDoc & inline comments…"
+                    aiStatusMessage = "⚡ Generating ${sec.language.displayName} documentation comments…"
                 )
             }
-            val result = aiNamingService.addKDocAndCommentsToCode(sec.codeContent)
+            val result = aiNamingService.addKDocAndCommentsToCode(sec.codeContent, sec.language)
             val (documentedCode, banner, quota) = when (result) {
                 is AiAssistOutput.Success -> Triple(result.outputText, result.summaryBanner, result.remainingRpmQuota)
                 is AiAssistOutput.FallbackApplied -> Triple(result.outputText, result.summaryBanner, result.remainingRpmQuota)
@@ -1362,14 +1529,15 @@ class EditorViewModel(
                     }
                 ),
                 aiErrorBanner = null,
-                aiStatusMessage = "Naming Section #${targetSection.orderIndex + 1} from Kotlin code & explanation…"
+                aiStatusMessage = "Naming Section #${targetSection.orderIndex + 1} (${targetSection.language.displayName})…"
             )
         }
 
         val result = aiNamingService.generateSectionTitle(
             codeContent = targetSection.codeContent,
             explanationText = targetSection.explanationText,
-            sectionNumber = targetSection.orderIndex + 1
+            sectionNumber = targetSection.orderIndex + 1,
+            language = targetSection.language
         )
 
         when (result) {

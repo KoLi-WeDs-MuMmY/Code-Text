@@ -4,6 +4,12 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -92,92 +98,124 @@ fun KtScribeApp(
             color = MaterialTheme.colorScheme.background
         ) {
             val activeDoc = uiState.activeDocument
-            if (activeDoc == null) {
-                DocumentListScreen(
-                    documents = documents,
-                    searchQuery = uiState.searchQuery,
-                    shortcutLetter = uiState.shortcutLetter,
-                    themeMode = uiState.themeMode,
-                    onSearchQueryChange = editorViewModel::updateSearchQuery,
-                    onOpenDocument = editorViewModel::openDocument,
-                    onCreateDocument = { editorViewModel.createAndOpenNewDocument() },
-                    onDeleteDocument = editorViewModel::deleteDocument,
-                    onRenameDocument = editorViewModel::renameFolderById,
-                    onCycleThemeMode = cycleThemeMode,
-                    onOpenSettings = { showSettingsDialog = true },
-                    onOpenVaultModal = editorViewModel::openVaultRecoveryDialog
-                )
-            } else {
-                DocumentEditorScreen(
-                    uiState = uiState,
-                    document = activeDoc,
-                    allFolders = documents,
-                    onCloseDocument = editorViewModel::closeActiveDocument,
-                    onSelectFolder = editorViewModel::openDocument,
-                    onCreateNewFolder = { title -> editorViewModel.createAndOpenNewDocument(title) },
-                    onSaveNow = editorViewModel::saveNowManual,
-                    onTitleChange = editorViewModel::updateDocumentTitle,
-                    onIntroTextChange = editorViewModel::updateIntroText,
-                    onInsertCodeBlock = editorViewModel::insertCodeBlockAtActivePosition,
-                    onUpdateSectionCode = editorViewModel::updateSectionCode,
-                    onUpdateSectionExplanation = editorViewModel::updateSectionExplanation,
-                    onUpdateSectionTitle = editorViewModel::updateSectionTitleManual,
-                    onUpdateSectionConceptTag = editorViewModel::updateSectionConceptTagManual,
-                    onJumpToSectionConcept = editorViewModel::jumpToSectionConcept,
-                    onExportMarkdown = editorViewModel::exportActiveDocumentAsMarkdown,
-                    onFormatSectionCode = editorViewModel::formatCodeInSection,
-                    onRequestAiNaming = editorViewModel::requestAiTitleForSection,
-                    onRequestAiExplain = editorViewModel::requestAiExplainForSection,
-                    onRequestAiRefactor = editorViewModel::requestAiRefactorForSection,
-                    onRequestAiKDoc = editorViewModel::requestAiKDocForSection,
-                    onToggleSectionDivider = editorViewModel::toggleSectionDivider,
-                    onDeleteSection = editorViewModel::deleteSection,
-                    onSetActiveTarget = editorViewModel::setActiveTarget,
-                    onExitFocusMode = editorViewModel::exitFocusedSingleSectionMode,
-                    onToggleFocusSection = editorViewModel::toggleFocusedSingleSectionMode,
-                    onNavigateFocusedSection = editorViewModel::navigateFocusedSection,
-                    onClearNewSectionFocusFlag = editorViewModel::clearNewlyInsertedSectionFocusFlag,
-                    onFontChoiceChange = editorViewModel::setFontChoice,
-                    onFontSizeChange = editorViewModel::setFontSizeSp,
-                    onToggleBold = editorViewModel::toggleBold,
-                    onToggleItalic = editorViewModel::toggleItalic,
-                    onToggleUnderline = editorViewModel::toggleUnderline,
-                    onToggleStrikethrough = editorViewModel::toggleStrikethrough,
-                    onAlignmentChange = editorViewModel::setTextAlignment,
-                    onUndo = editorViewModel::undo,
-                    onRedo = editorViewModel::redo,
-                    onCycleThemeMode = cycleThemeMode,
-                    onOpenSettings = { showSettingsDialog = true },
-                    onDismissBanner = editorViewModel::dismissBanners,
-                    onToggleIslandDropdown = editorViewModel::toggleIslandDropdown,
-                    onCloseIslandDropdown = editorViewModel::closeIslandDropdown,
-                    onCycleExplanationWindowMode = editorViewModel::cycleExplanationWindowMode,
-                    onSetExplanationWindowMode = editorViewModel::setExplanationWindowMode,
-                    onUpdateSplitRatio = editorViewModel::updateSplitScreenRatio,
-                    onDockWindowToSplitScreen = editorViewModel::dockWindowToSplitScreen,
-                    onUndockSplitWindowToFloating = editorViewModel::undockSplitWindowToFloating,
-                    onCloseSplitScreenWindow = editorViewModel::closeSplitScreenWindow,
-                    onToggleSplitScreenOrientation = editorViewModel::toggleSplitScreenOrientation,
-                    onRunActiveSectionInTerminal = editorViewModel::runActiveSectionInTerminal,
-                    onOpenVaultModal = editorViewModel::openVaultRecoveryDialog,
-                    onToggleFloatingWindow = editorViewModel::toggleFloatingWindow,
-                    onCloseFloatingWindow = editorViewModel::closeFloatingWindow,
-                    onFocusFloatingWindow = editorViewModel::focusFloatingWindow,
-                    onUpdateSectionLanguage = editorViewModel::updateSectionLanguage,
-                    onUpdateSectionThemeOverride = editorViewModel::updateSectionThemeOverride,
-                    onInsertLanguageCodeBlock = editorViewModel::insertCodeBlockAtActivePosition,
-                    onToggleBottomDrawer = editorViewModel::toggleBottomDrawer,
-                    onCloseBottomDrawer = editorViewModel::closeBottomDrawer,
-                    onSetBottomDrawerTab = editorViewModel::setBottomDrawerTab,
-                    onSetBottomDrawerHeightFraction = editorViewModel::setBottomDrawerHeightFraction,
-                    onClearTerminal = editorViewModel::clearTerminalOutput,
-                    onDismissExtensionRenameWarning = editorViewModel::dismissExtensionRenameWarning,
-                    onShowStatusToast = editorViewModel::showStatusToast,
-                    onToggleLeftActivityTab = editorViewModel::toggleLeftActivityTab,
-                    onCloseEditorTab = editorViewModel::closeEditorTab,
-                    onInstallOrTogglePlugin = editorViewModel::installOrTogglePlugin,
-                    onInstallAllSdks = editorViewModel::installAllLanguageSdks
-                )
+            AnimatedContent(
+                targetState = activeDoc != null,
+                transitionSpec = {
+                    fadeIn(
+                        animationSpec = spring(
+                            dampingRatio = 0.85f,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    ) togetherWith fadeOut(
+                        animationSpec = spring(
+                            dampingRatio = 0.85f,
+                            stiffness = Spring.StiffnessMedium
+                        )
+                    )
+                },
+                label = "CodeAssistNavigationTransition"
+            ) { isEditorOpen ->
+                val currentDoc = uiState.activeDocument
+                if (!isEditorOpen || currentDoc == null) {
+                    DocumentListScreen(
+                        documents = documents,
+                        searchQuery = uiState.searchQuery,
+                        shortcutLetter = uiState.shortcutLetter,
+                        themeMode = uiState.themeMode,
+                        toolchainPlugins = uiState.toolchainPlugins,
+                        onSearchQueryChange = editorViewModel::updateSearchQuery,
+                        onOpenDocument = editorViewModel::openDocument,
+                        onCreateDocument = { editorViewModel.createAndOpenNewDocument() },
+                        onCreateDocumentWithTemplate = { title, lang ->
+                            editorViewModel.createAndOpenNewDocument(title, lang)
+                        },
+                        onDeleteDocument = editorViewModel::deleteDocument,
+                        onRenameDocument = editorViewModel::renameFolderById,
+                        onCycleThemeMode = cycleThemeMode,
+                        onOpenSettings = { showSettingsDialog = true },
+                        onOpenVaultModal = editorViewModel::openVaultRecoveryDialog,
+                        onInstallAllSdks = editorViewModel::installAllLanguageSdks
+                    )
+                } else {
+                    DocumentEditorScreen(
+                        uiState = uiState,
+                        document = currentDoc,
+                        allFolders = documents,
+                        onCloseDocument = editorViewModel::closeActiveDocument,
+                        onSelectFolder = editorViewModel::openDocument,
+                        onCreateNewFolder = { title -> editorViewModel.createAndOpenNewDocument(title) },
+                        onSaveNow = editorViewModel::saveNowManual,
+                        onTitleChange = editorViewModel::updateDocumentTitle,
+                        onIntroTextChange = editorViewModel::updateIntroText,
+                        onInsertCodeBlock = editorViewModel::insertCodeBlockAtActivePosition,
+                        onUpdateSectionCode = editorViewModel::updateSectionCode,
+                        onUpdateSectionExplanation = editorViewModel::updateSectionExplanation,
+                        onUpdateSectionTitle = editorViewModel::updateSectionTitleManual,
+                        onUpdateSectionConceptTag = editorViewModel::updateSectionConceptTagManual,
+                        onJumpToSectionConcept = editorViewModel::jumpToSectionConcept,
+                        onExportMarkdown = editorViewModel::exportActiveDocumentAsMarkdown,
+                        onFormatSectionCode = editorViewModel::formatCodeInSection,
+                        onRequestAiNaming = editorViewModel::requestAiTitleForSection,
+                        onRequestAiExplain = editorViewModel::requestAiExplainForSection,
+                        onRequestAiRefactor = editorViewModel::requestAiRefactorForSection,
+                        onRequestAiKDoc = editorViewModel::requestAiKDocForSection,
+                        onToggleSectionDivider = editorViewModel::toggleSectionDivider,
+                        onDeleteSection = editorViewModel::deleteSection,
+                        onSetActiveTarget = editorViewModel::setActiveTarget,
+                        onExitFocusMode = editorViewModel::exitFocusedSingleSectionMode,
+                        onToggleFocusSection = editorViewModel::toggleFocusedSingleSectionMode,
+                        onNavigateFocusedSection = editorViewModel::navigateFocusedSection,
+                        onClearNewSectionFocusFlag = editorViewModel::clearNewlyInsertedSectionFocusFlag,
+                        onFontChoiceChange = editorViewModel::setFontChoice,
+                        onFontSizeChange = editorViewModel::setFontSizeSp,
+                        onToggleBold = editorViewModel::toggleBold,
+                        onToggleItalic = editorViewModel::toggleItalic,
+                        onToggleUnderline = editorViewModel::toggleUnderline,
+                        onToggleStrikethrough = editorViewModel::toggleStrikethrough,
+                        onAlignmentChange = editorViewModel::setTextAlignment,
+                        onUndo = editorViewModel::undo,
+                        onRedo = editorViewModel::redo,
+                        onCycleThemeMode = cycleThemeMode,
+                        onOpenSettings = { showSettingsDialog = true },
+                        onDismissBanner = editorViewModel::dismissBanners,
+                        onToggleIslandDropdown = editorViewModel::toggleIslandDropdown,
+                        onCloseIslandDropdown = editorViewModel::closeIslandDropdown,
+                        onCycleExplanationWindowMode = editorViewModel::cycleExplanationWindowMode,
+                        onSetExplanationWindowMode = editorViewModel::setExplanationWindowMode,
+                        onUpdateSplitRatio = editorViewModel::updateSplitScreenRatio,
+                        onDockWindowToSplitScreen = editorViewModel::dockWindowToSplitScreen,
+                        onUndockSplitWindowToFloating = editorViewModel::undockSplitWindowToFloating,
+                        onCloseSplitScreenWindow = editorViewModel::closeSplitScreenWindow,
+                        onToggleSplitScreenOrientation = editorViewModel::toggleSplitScreenOrientation,
+                        onRunActiveSectionInTerminal = editorViewModel::runActiveSectionInTerminal,
+                        onOpenVaultModal = editorViewModel::openVaultRecoveryDialog,
+                        onToggleFloatingWindow = editorViewModel::toggleFloatingWindow,
+                        onCloseFloatingWindow = editorViewModel::closeFloatingWindow,
+                        onFocusFloatingWindow = editorViewModel::focusFloatingWindow,
+                        onUpdateSectionLanguage = editorViewModel::updateSectionLanguage,
+                        onUpdateSectionThemeOverride = editorViewModel::updateSectionThemeOverride,
+                        onInsertLanguageCodeBlock = editorViewModel::insertCodeBlockAtActivePosition,
+                        onToggleBottomDrawer = editorViewModel::toggleBottomDrawer,
+                        onCloseBottomDrawer = editorViewModel::closeBottomDrawer,
+                        onSetBottomDrawerTab = editorViewModel::setBottomDrawerTab,
+                        onSetBottomDrawerHeightFraction = editorViewModel::setBottomDrawerHeightFraction,
+                        onClearTerminal = editorViewModel::clearTerminalOutput,
+                        onDismissExtensionRenameWarning = editorViewModel::dismissExtensionRenameWarning,
+                        onShowStatusToast = editorViewModel::showStatusToast,
+                        onToggleLeftActivityTab = editorViewModel::toggleLeftActivityTab,
+                        onCloseEditorTab = editorViewModel::closeEditorTab,
+                        onInstallOrTogglePlugin = editorViewModel::installOrTogglePlugin,
+                        onInstallAllSdks = editorViewModel::installAllLanguageSdks,
+                        onToggleLineBreakpoint = editorViewModel::toggleLineBreakpoint,
+                        onAddWatchExpression = editorViewModel::addWatchExpression,
+                        onRemoveWatchExpression = editorViewModel::removeWatchExpression,
+                        onOptimizeSectionImports = editorViewModel::optimizeImportsInSection,
+                        onJumpToCodeLine = editorViewModel::jumpToCodeLine,
+                        onUpdateTerminalStdin = editorViewModel::updateTerminalStdin,
+                        onCreateLocalSnapshot = { secId -> editorViewModel.createLocalSnapshot(secId) },
+                        onRestoreLocalSnapshot = editorViewModel::restoreLocalSnapshot
+                    )
+                }
             }
 
             // First-Launch Storage Permission & Hidden Vault ("xyz") Recovery Dialog

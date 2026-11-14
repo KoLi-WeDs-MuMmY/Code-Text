@@ -204,6 +204,16 @@ fun KotlinCodeSectionCard(
     onOpenFileSettings: () -> Unit = {},
     onRunCode: () -> Unit = {},
     onExportOrCopyFile: (Boolean) -> Unit = {},
+    activeBreakpoints: Set<Int> = emptySet(),
+    onToggleBreakpoint: (Int) -> Unit = {},
+    onOptimizeImports: () -> Unit = {},
+    projectSymbols: List<com.example.code.CodeLanguageEngine.CodeSymbolDefinition> = emptyList(),
+    onNavigateToSymbolDefinition: (com.example.code.CodeLanguageEngine.CodeSymbolDefinition) -> Unit = {},
+    requestedJumpLine: Int? = null,
+    jumpLineTrigger: Int = 0,
+    localSnapshots: List<com.example.model.LocalCodeSnapshot> = emptyList(),
+    onCreateSnapshot: () -> Unit = {},
+    onRestoreSnapshot: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val defaultSyntaxColors = com.example.ui.theme.LocalKotlinSyntaxColors.current
@@ -229,6 +239,9 @@ fun KotlinCodeSectionCard(
     var showAiStudioMenu by remember { mutableStateOf(false) }
     var terminalConsoleOutput by remember { mutableStateOf<String?>(null) }
     var isCodeFolded by remember { mutableStateOf(false) }
+    var foldedStartLines by remember(section.id) { mutableStateOf(emptySet<Int>()) }
+    var showGoToDefinitionBar by remember { mutableStateOf(false) }
+    var showSnapshotHistoryBar by remember { mutableStateOf(false) }
     var userOverrodeExplainDock by remember { mutableStateOf(false) }
     var selectedSuggestionIndex by remember { mutableIntStateOf(0) }
     var dismissedCompletionForPrefix by remember { mutableStateOf<String?>(null) }
@@ -436,9 +449,28 @@ fun KotlinCodeSectionCard(
         }
     }
 
-    // Real-time IDE syntax diagnostics, detected colors, structure outline, metrics, and cursor telemetry
-    val diagnostics = remember(codeFieldValue.text) {
-        KotlinCodeEngine.diagnoseKotlinSyntax(codeFieldValue.text)
+    // Respond to line jumps triggered from Bottom Drawer (Problems, Debugger step, Call Stack) or Structure outline
+    LaunchedEffect(requestedJumpLine, jumpLineTrigger) {
+        if (requestedJumpLine != null && jumpLineTrigger > 0) {
+            val lines = codeFieldValue.text.split('\n')
+            val targetIdx = (requestedJumpLine - 1).coerceIn(0, (lines.size - 1).coerceAtLeast(0))
+            val offset = lines.take(targetIdx).sumOf { it.length + 1 }
+            isCodeFolded = false
+            codeFieldValue = codeFieldValue.copy(selection = TextRange(offset))
+            try {
+                codeFocusRequester.requestFocus()
+            } catch (_: Exception) {
+            }
+            bringActiveCodeLineIntoView(offset, codeFieldValue.text)
+        }
+    }
+
+    // Real-time IDE syntax diagnostics (including Auto-Import quick fixes), foldable regions, detected colors, structure outline, metrics, and cursor telemetry
+    val diagnostics = remember(codeFieldValue.text, section.language) {
+        com.example.code.CodeLanguageEngine.getDiagnosticsForLanguage(codeFieldValue.text, section.language)
+    }
+    val foldableRegions = remember(codeFieldValue.text, section.language) {
+        com.example.code.CodeLanguageEngine.detectFoldableRegions(codeFieldValue.text, section.language)
     }
     val detectedColors = remember(codeFieldValue.text) {
         KotlinCodeEngine.detectColorCodes(codeFieldValue.text)
@@ -446,8 +478,13 @@ fun KotlinCodeSectionCard(
     val codeMetrics = remember(codeFieldValue.text) {
         KotlinCodeEngine.analyzeCodeMetrics(codeFieldValue.text)
     }
-    val structureSymbols = remember(codeFieldValue.text) {
-        KotlinCodeEngine.extractStructureSymbols(codeFieldValue.text)
+    val structureSymbols = remember(codeFieldValue.text, section.language) {
+        com.example.code.CodeLanguageEngine.extractSymbolsForSection(
+            code = codeFieldValue.text,
+            language = section.language,
+            sectionId = section.id,
+            fileName = section.nativeFileName
+        )
     }
     val cursorInfo = remember(codeFieldValue.text, codeFieldValue.selection.end) {
         KotlinCodeEngine.getCursorPositionInfo(codeFieldValue)
@@ -1082,6 +1119,106 @@ fun KotlinCodeSectionCard(
                         )
                     }
 
+                    // CodeAssist Optimize Imports Pill Button
+                    Surface(
+                        color = Color(0xFF282320),
+                        shape = RoundedCornerShape(999.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF423933)),
+                        modifier = Modifier
+                            .padding(horizontal = 2.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable {
+                                val optimized = com.example.code.CodeLanguageEngine.optimizeImportsForLanguage(
+                                    codeFieldValue.text,
+                                    section.language
+                                )
+                                codeFieldValue = TextFieldValue(
+                                    text = optimized,
+                                    selection = TextRange(codeFieldValue.selection.end.coerceIn(0, optimized.length))
+                                )
+                                onCodeChange(optimized)
+                                onOptimizeImports()
+                            }
+                            .testTag("optimize_imports_button_${section.orderIndex}")
+                    ) {
+                        Text(
+                            text = "Optimize Imports",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DarculaSageGreen,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        )
+                    }
+
+                    // CodeAssist Go-to-Definition Pill Button (`⌘B`)
+                    Surface(
+                        color = if (showGoToDefinitionBar) Color(0xFF3E3127) else Color(0xFF282320),
+                        shape = RoundedCornerShape(999.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            0.8.dp,
+                            if (showGoToDefinitionBar) DarculaWarmAmber else Color(0xFF423933)
+                        ),
+                        modifier = Modifier
+                            .padding(horizontal = 2.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable {
+                                val def = com.example.code.CodeLanguageEngine.findDefinitionAtCursor(
+                                    code = codeFieldValue.text,
+                                    cursorPosition = codeFieldValue.selection.end,
+                                    allProjectSymbols = projectSymbols
+                                )
+                                if (def != null) {
+                                    if (def.sectionId == section.id) {
+                                        val lines = codeFieldValue.text.split('\n')
+                                        val targetIdx = (def.line - 1).coerceIn(0, (lines.size - 1).coerceAtLeast(0))
+                                        val offset = lines.take(targetIdx).sumOf { it.length + 1 }
+                                        codeFieldValue = codeFieldValue.copy(selection = TextRange(offset))
+                                        codeFocusRequester.requestFocus()
+                                        bringActiveCodeLineIntoView(offset, codeFieldValue.text)
+                                    } else {
+                                        onNavigateToSymbolDefinition(def)
+                                    }
+                                } else {
+                                    showGoToDefinitionBar = !showGoToDefinitionBar
+                                }
+                            }
+                            .testTag("goto_definition_button_${section.orderIndex}")
+                    ) {
+                        Text(
+                            text = "⌘B Go to Def",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF7CB7FF),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        )
+                    }
+
+                    // Local On-Device Snapshot History Pill (`⏱ History`)
+                    Surface(
+                        color = if (showSnapshotHistoryBar) Color(0xFF3E3127) else Color(0xFF282320),
+                        shape = RoundedCornerShape(999.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            0.8.dp,
+                            if (showSnapshotHistoryBar) DarculaWarmAmber else Color(0xFF423933)
+                        ),
+                        modifier = Modifier
+                            .padding(horizontal = 2.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable { showSnapshotHistoryBar = !showSnapshotHistoryBar }
+                            .testTag("local_history_button_${section.orderIndex}")
+                    ) {
+                        Text(
+                            text = if (localSnapshots.isEmpty()) "⏱ History" else "⏱ History (${localSnapshots.size})",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFC66D),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        )
+                    }
+
                     // Copy Code button (with Toast & Banner feedback)
                     IconButton(
                         onClick = {
@@ -1147,7 +1284,10 @@ fun KotlinCodeSectionCard(
                                 label = "⌘/ Comment",
                                 accentColor = DarculaSteelBlue,
                                 onClick = {
-                                    val updated = KotlinCodeEngine.toggleLineCommentAtCursor(codeFieldValue)
+                                    val updated = com.example.code.CodeLanguageEngine.toggleLineCommentForLanguage(
+                                        codeFieldValue,
+                                        section.language
+                                    )
                                     codeFieldValue = updated
                                     onCodeChange(updated.text)
                                 }
@@ -1227,13 +1367,13 @@ fun KotlinCodeSectionCard(
                             horizontalArrangement = Arrangement.spacedBy(7.dp)
                         ) {
                             Text(
-                                text = "Templates:",
+                                text = "${section.language.displayName} Templates:",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = DarculaMutedText
                             )
-                            KotlinCodeEngine.LIVE_TEMPLATES.forEach { tpl ->
+                            com.example.code.CodeLanguageEngine.getLiveTemplatesForLanguage(section.language).forEach { tpl ->
                                 Surface(
                                     color = DarculaCanvasBg,
                                     shape = RoundedCornerShape(7.dp),
@@ -1241,8 +1381,9 @@ fun KotlinCodeSectionCard(
                                         .clip(RoundedCornerShape(7.dp))
                                         .border(1.dp, DarculaBorder, RoundedCornerShape(7.dp))
                                         .clickable {
+                                            val cleanSnippet = tpl.snippet.replace("|", "")
                                             val base = codeFieldValue.text.trimEnd()
-                                            val updated = if (base.isEmpty()) tpl.snippet else "$base\n\n${tpl.snippet}"
+                                            val updated = if (base.isEmpty()) cleanSnippet else "$base\n\n$cleanSnippet"
                                             codeFieldValue = TextFieldValue(
                                                 text = updated,
                                                 selection = TextRange(updated.length)
@@ -1414,7 +1555,7 @@ fun KotlinCodeSectionCard(
                                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
-                                            IdeCompletionBadgeIcon(badgeChar = sym.kindBadge)
+                                            IdeCompletionBadgeIcon(badgeChar = sym.kindBadge.toString())
                                             Text(
                                                 text = "${sym.name} :${sym.line}",
                                                 fontFamily = JetBrainsMonoFontFamily,
@@ -1612,6 +1753,204 @@ fun KotlinCodeSectionCard(
 
                 HorizontalDivider(color = DarculaBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
 
+                // =========================================================================
+                // E1. CODEASSIST GO-TO-DEFINITION, FOLDED REGIONS & LOCAL SNAPSHOTS BAR
+                // =========================================================================
+                AnimatedVisibility(
+                    visible = showGoToDefinitionBar || foldedStartLines.isNotEmpty() || showSnapshotHistoryBar,
+                    modifier = Modifier.animateContentSize(
+                        animationSpec = spring(
+                            dampingRatio = 0.82f,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF211C19))
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (foldedStartLines.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Folded Regions:",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DarculaWarmAmber
+                                )
+                                foldableRegions.filter { it.startLine in foldedStartLines }.forEach { reg ->
+                                    Surface(
+                                        color = Color(0xFF2D2520),
+                                        shape = RoundedCornerShape(999.dp),
+                                        border = androidx.compose.foundation.BorderStroke(0.8.dp, DarculaWarmAmber.copy(alpha = 0.6f)),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .clickable {
+                                                foldedStartLines = foldedStartLines - reg.startLine
+                                            }
+                                    ) {
+                                        Text(
+                                            text = "▸ Ln ${reg.startLine}..${reg.endLine}: ${reg.summaryLabel}",
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 9.5.sp,
+                                            color = Color(0xFFFFC66D),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (showSnapshotHistoryBar) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Local Snapshots:",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFFC66D)
+                                )
+                                Surface(
+                                    color = Color(0xFF233626),
+                                    shape = RoundedCornerShape(999.dp),
+                                    border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF6A8759)),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .clickable(onClick = onCreateSnapshot)
+                                        .testTag("save_local_snapshot_button_${section.orderIndex}")
+                                ) {
+                                    Text(
+                                        text = "+ Save Snapshot",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF81C784),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                                if (localSnapshots.isEmpty()) {
+                                    Text(
+                                        text = "No snapshots yet — tap '+ Save Snapshot' or Save to record offline version history",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 9.5.sp,
+                                        color = DarculaMutedText
+                                    )
+                                } else {
+                                    localSnapshots.forEach { snap ->
+                                        Surface(
+                                            color = Color(0xFF282320),
+                                            shape = RoundedCornerShape(999.dp),
+                                            border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF453C36)),
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .clickable {
+                                                    onRestoreSnapshot(snap.id)
+                                                }
+                                        ) {
+                                            Text(
+                                                text = "↺ ${snap.label} (${snap.lineCount}L)",
+                                                fontFamily = JetBrainsMonoFontFamily,
+                                                fontSize = 9.5.sp,
+                                                color = DarculaBrightText,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                IdeActionChip(
+                                    label = "✕ Close",
+                                    accentColor = MacTrafficRed,
+                                    onClick = { showSnapshotHistoryBar = false }
+                                )
+                            }
+                        }
+
+                        if (showGoToDefinitionBar) {
+                            val symbolsToDisplay = if (projectSymbols.isNotEmpty()) {
+                                projectSymbols
+                            } else {
+                                com.example.code.CodeLanguageEngine.extractSymbolsForSection(
+                                    code = codeFieldValue.text,
+                                    language = section.language,
+                                    sectionId = section.id,
+                                    fileName = section.nativeFileName
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Go to Symbol:",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF7CB7FF)
+                                )
+                                symbolsToDisplay.forEach { sym ->
+                                    Surface(
+                                        color = Color(0xFF282320),
+                                        shape = RoundedCornerShape(999.dp),
+                                        border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF453C36)),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .clickable {
+                                                if (sym.sectionId == section.id) {
+                                                    val lines = codeFieldValue.text.split('\n')
+                                                    val targetIdx = (sym.line - 1).coerceIn(0, (lines.size - 1).coerceAtLeast(0))
+                                                    val offset = lines.take(targetIdx).sumOf { it.length + 1 }
+                                                    codeFieldValue = codeFieldValue.copy(selection = TextRange(offset))
+                                                    codeFocusRequester.requestFocus()
+                                                    bringActiveCodeLineIntoView(offset, codeFieldValue.text)
+                                                } else {
+                                                    onNavigateToSymbolDefinition(sym)
+                                                }
+                                                showGoToDefinitionBar = false
+                                            }
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        ) {
+                                            IdeCompletionBadgeIcon(badgeChar = sym.kindBadge.toString())
+                                            Text(
+                                                text = "${sym.name} (${sym.fileName}:${sym.line})",
+                                                fontFamily = JetBrainsMonoFontFamily,
+                                                fontSize = 9.5.sp,
+                                                color = DarculaBrightText
+                                            )
+                                        }
+                                    }
+                                }
+                                IdeActionChip(
+                                    label = "✕ Close",
+                                    accentColor = MacTrafficRed,
+                                    onClick = { showGoToDefinitionBar = false }
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Docked compact preview when writing inline explanation
                 AnimatedVisibility(visible = isDockedCompactForExplanation) {
                     val previewSnippet = remember(codeFieldValue.text) {
@@ -1630,7 +1969,7 @@ fun KotlinCodeSectionCard(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = previewSnippet.ifBlank { "// Empty Kotlin code block (tap to edit)" },
+                            text = previewSnippet.ifBlank { "// Empty ${section.language.displayName} file (tap to edit)" },
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 11.5.sp,
                             lineHeight = 17.sp,
@@ -1711,16 +2050,20 @@ fun KotlinCodeSectionCard(
                             verticalAlignment = Alignment.Top
                         ) {
                             // Line Numbers Gutter (`1.`, `2.`, `3.` locked 1:1 with `BasicTextField` line layout bounds)
+                            // Includes interactive CodeAssist Breakpoint Dots (`●`) and Code Folding Chevrons (`▾`/`▸`)
                             Column(
                                 modifier = Modifier
-                                    .width(48.dp)
+                                    .width(58.dp)
                                     .background(DarculaGutterBg)
-                                    .padding(start = 4.dp, end = 6.dp),
+                                    .padding(start = 3.dp, end = 5.dp),
                                 horizontalAlignment = Alignment.End
                             ) {
                                 for (lineNum in 1..visibleLines) {
                                     val lineDiag = diagnostics.firstOrNull { it.line == lineNum }
                                     val isCurrentCursorLine = isCodeFocused && cursorInfo.line == lineNum
+                                    val hasBreakpoint = lineNum in activeBreakpoints
+                                    val foldRegionOnLine = foldableRegions.firstOrNull { it.startLine == lineNum }
+                                    val isRegionFolded = lineNum in foldedStartLines
                                     val rowHeightDp = run {
                                         val layout = codeLayoutResult
                                         val range = logicalLineRanges.getOrNull(lineNum - 1)
@@ -1747,16 +2090,26 @@ fun KotlinCodeSectionCard(
                                             .fillMaxWidth()
                                             .height(rowHeightDp)
                                             .background(
-                                                if (isCurrentCursorLine) {
-                                                    DarculaActiveLineBg
-                                                } else {
-                                                    Color.Transparent
+                                                when {
+                                                    hasBreakpoint -> Color(0xFF421C1C)
+                                                    isCurrentCursorLine -> DarculaActiveLineBg
+                                                    else -> Color.Transparent
                                                 }
-                                            ),
+                                            )
+                                            .clickable { onToggleBreakpoint(lineNum) }
+                                            .testTag("gutter_line_${section.orderIndex}_$lineNum"),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.End
                                     ) {
-                                        if (lineDiag != null) {
+                                        if (hasBreakpoint) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(7.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFFFF5555))
+                                            )
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                        } else if (lineDiag != null) {
                                             Text(
                                                 text = "✕",
                                                 fontFamily = JetBrainsMonoFontFamily,
@@ -1778,13 +2131,32 @@ fun KotlinCodeSectionCard(
                                                     trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.None
                                                 )
                                             ),
-                                            fontWeight = if (isCurrentCursorLine) FontWeight.Bold else FontWeight.Normal,
+                                            fontWeight = if (isCurrentCursorLine || hasBreakpoint) FontWeight.Bold else FontWeight.Normal,
                                             color = when {
+                                                hasBreakpoint -> Color(0xFFFF8A80)
                                                 lineDiag != null -> IdeInlineErrorPillText
                                                 isCurrentCursorLine -> DarculaWarmAmber
                                                 else -> DarculaMutedText.copy(alpha = 0.72f)
                                             }
                                         )
+                                        if (foldRegionOnLine != null) {
+                                            Text(
+                                                text = if (isRegionFolded) "▸" else "▾",
+                                                fontFamily = JetBrainsMonoFontFamily,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isRegionFolded) DarculaWarmAmber else DarculaMutedText,
+                                                modifier = Modifier
+                                                    .padding(start = 2.dp)
+                                                    .clickable {
+                                                        foldedStartLines = if (isRegionFolded) {
+                                                            foldedStartLines - lineNum
+                                                        } else {
+                                                            foldedStartLines + lineNum
+                                                        }
+                                                    }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1850,7 +2222,7 @@ fun KotlinCodeSectionCard(
                                         ) {
                                             if (codeFieldValue.text.isEmpty()) {
                                                 Text(
-                                                    text = "fun main() {\n    sout\n}",
+                                                    text = section.language.starterCode,
                                                     fontFamily = JetBrainsMonoFontFamily,
                                                     fontSize = 13.sp,
                                                     lineHeight = 22.sp,
@@ -1886,7 +2258,7 @@ fun KotlinCodeSectionCard(
                                     }
                                 }
 
-                                // 1. CodeAssist Inline Error Pill on the active/error line (matching Screenshot 6: `⊗ Unresolved reference: sout`)
+                                // 1. CodeAssist Inline Error Pill + 1-Tap Auto-Import / Quick-Fix Chip on the active/error line
                                 val activeLineDiagnostic = diagnostics.firstOrNull { it.line == cursorInfo.line }
                                     ?: diagnostics.firstOrNull()
                                 if (activeLineDiagnostic != null && cursorRect != null) {
@@ -1895,7 +2267,7 @@ fun KotlinCodeSectionCard(
                                     val errX = with(density) { (cursorRect.right.toDp() + 24.dp).coerceAtLeast(140.dp) }
                                     Surface(
                                         color = Color(0xFF3D2222),
-                                        shape = RoundedCornerShape(10.dp),
+                                        shape = RoundedCornerShape(999.dp),
                                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF6E3838)),
                                         modifier = Modifier
                                             .offset(x = errX, y = errY)
@@ -1903,8 +2275,8 @@ fun KotlinCodeSectionCard(
                                     ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.ErrorOutline,
@@ -1920,6 +2292,32 @@ fun KotlinCodeSectionCard(
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
+                                            if (activeLineDiagnostic.quickFixLabel != null && activeLineDiagnostic.fixedCode != null) {
+                                                Surface(
+                                                    color = Color(0xFF4E3822),
+                                                    shape = RoundedCornerShape(999.dp),
+                                                    border = androidx.compose.foundation.BorderStroke(0.8.dp, DarculaWarmAmber),
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(999.dp))
+                                                        .clickable {
+                                                            val fixed = activeLineDiagnostic.fixedCode
+                                                            codeFieldValue = TextFieldValue(
+                                                                text = fixed,
+                                                                selection = TextRange(fixed.length)
+                                                            )
+                                                            onCodeChange(fixed)
+                                                        }
+                                                ) {
+                                                    Text(
+                                                        text = activeLineDiagnostic.quickFixLabel,
+                                                        fontFamily = JetBrainsMonoFontFamily,
+                                                        fontSize = 9.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFFFFC66D),
+                                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }

@@ -95,6 +95,10 @@ fun IdeBottomDrawer(
     executionOutput: String?,
     heightFraction: Float,
     toolchainPlugins: List<ToolchainPluginItem> = emptyList(),
+    activeBreakpoints: Set<Int> = emptySet(),
+    watchExpressions: List<String> = emptyList(),
+    stdinInput: String = "",
+    onUpdateStdinInput: (String) -> Unit = {},
     onTabSelected: (BottomDrawerTab) -> Unit,
     onHeightFractionChange: (Float) -> Unit,
     onRunCode: () -> Unit,
@@ -103,11 +107,17 @@ fun IdeBottomDrawer(
     onInstallPlugin: (String) -> Unit = {},
     onOpenPluginManager: () -> Unit = {},
     onJumpToLine: (Int) -> Unit = {},
+    onToggleBreakpoint: (Int) -> Unit = {},
+    onAddWatchExpression: (String) -> Unit = {},
+    onRemoveWatchExpression: (String) -> Unit = {},
+    onApplyQuickFixCode: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var logFilterLevel by remember { mutableStateOf(LogFilterLevel.ALL) }
     var filterQuery by remember { mutableStateOf("") }
-    var debugStepLine by remember(activeSection?.id) { mutableIntStateOf(1) }
+    var debugStepLine by remember(activeSection?.id, activeBreakpoints) {
+        mutableIntStateOf(activeBreakpoints.minOrNull() ?: 1)
+    }
 
     val activeLanguage = activeSection?.language ?: com.example.model.LanguageType.KOTLIN
     val requiredSdkId = ToolchainPluginItem.sdkIdForLanguage(activeLanguage)
@@ -119,12 +129,13 @@ fun IdeBottomDrawer(
         else CodeLanguageEngine.getDiagnosticsForLanguage(activeSection.codeContent, activeSection.language)
     }
 
-    val debugInfo = remember(activeSection?.codeContent, activeSection?.language, isSdkInstalled) {
+    val debugInfo = remember(activeSection?.codeContent, activeSection?.language, isSdkInstalled, stdinInput) {
         if (activeSection == null) null
         else CodeLanguageEngine.executeAndDebug(
             code = activeSection.codeContent,
             language = activeSection.language,
-            isSdkInstalled = isSdkInstalled
+            isSdkInstalled = isSdkInstalled,
+            stdinInput = stdinInput
         )
     }
 
@@ -567,7 +578,10 @@ fun IdeBottomDrawer(
                                 activeSection = activeSection,
                                 sdkPlugin = matchingSdkPlugin,
                                 filterLevel = logFilterLevel,
-                                filterQuery = filterQuery
+                                filterQuery = filterQuery,
+                                stdinInput = stdinInput,
+                                onUpdateStdinInput = onUpdateStdinInput,
+                                onRunWithInput = onRunCode
                             )
                         }
                         BottomDrawerTab.DEBUGGER -> {
@@ -576,10 +590,15 @@ fun IdeBottomDrawer(
                                 activeSection = activeSection,
                                 sdkPlugin = matchingSdkPlugin,
                                 activeStepLine = debugStepLine,
+                                activeBreakpoints = activeBreakpoints,
+                                watchExpressions = watchExpressions,
                                 onStepLineChange = { newLine ->
                                     debugStepLine = newLine
                                     onJumpToLine(newLine)
                                 },
+                                onToggleBreakpoint = onToggleBreakpoint,
+                                onAddWatchExpression = onAddWatchExpression,
+                                onRemoveWatchExpression = onRemoveWatchExpression,
                                 onOpenPluginManager = onOpenPluginManager
                             )
                         }
@@ -588,7 +607,8 @@ fun IdeBottomDrawer(
                                 diagnostics = diagnostics,
                                 filterLevel = logFilterLevel,
                                 filterQuery = filterQuery,
-                                onJumpToLine = onJumpToLine
+                                onJumpToLine = onJumpToLine,
+                                onApplyQuickFixCode = onApplyQuickFixCode
                             )
                         }
                         BottomDrawerTab.LOGCAT -> {
@@ -662,7 +682,10 @@ private fun TerminalTabContent(
     activeSection: CodeSectionUiModel?,
     sdkPlugin: ToolchainPluginItem?,
     filterLevel: LogFilterLevel,
-    filterQuery: String
+    filterQuery: String,
+    stdinInput: String = "",
+    onUpdateStdinInput: (String) -> Unit = {},
+    onRunWithInput: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     val isError = output.contains("exit code 1") || output.contains("Error") || output.contains("error:")
@@ -680,53 +703,149 @@ private fun TerminalTabContent(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
+        modifier = Modifier.fillMaxSize()
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.padding(bottom = 6.dp)
+        // Interactive Standard Input (stdin) Bar for readln() / input() / Scanner / std::cin
+        Surface(
+            color = Color(0xFF1C1816),
+            shape = RoundedCornerShape(10.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF342C28)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp)
         ) {
-            Box(
+            Row(
                 modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(if (isError) Color(0xFFFF5F56) else Color(0xFF27C93F))
-            )
-            Text(
-                text = "${activeSection?.language?.displayName ?: "Kotlin"} Console • ${sdkPlugin?.name ?: "Standard Toolchain"} • ${if (isError) "Process Failed" else "Ready"}",
-                fontFamily = JetBrainsMonoFontFamily,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFA39C93)
-            )
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "stdin >",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFD4883A)
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF13100F))
+                        .border(0.75.dp, Color(0xFF3A312C), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    BasicTextField(
+                        value = stdinInput,
+                        onValueChange = onUpdateStdinInput,
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.5.sp,
+                            color = Color(0xFFE6E1DC)
+                        ),
+                        cursorBrush = SolidColor(Color(0xFFD4883A)),
+                        decorationBox = { inner ->
+                            if (stdinInput.isEmpty()) {
+                                Text(
+                                    text = "Console input for readln() / input() / Scanner / cin...",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF7D746C),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            inner()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("terminal_stdin_input")
+                    )
+                }
+                if (stdinInput.isNotEmpty()) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Clear Stdin",
+                        tint = Color(0xFFA39C93),
+                        modifier = Modifier
+                            .size(13.dp)
+                            .clickable { onUpdateStdinInput("") }
+                    )
+                }
+                Surface(
+                    color = Color(0xFF27C93F).copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF27C93F)),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onRunWithInput)
+                        .testTag("terminal_send_stdin_button")
+                ) {
+                    Text(
+                        text = "Send ▶",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF27C93F),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
         }
 
-        if (filteredLines.isEmpty()) {
-            Text(
-                text = "No build or console lines match the current filter.",
-                fontFamily = JetBrainsMonoFontFamily,
-                fontSize = 11.sp,
-                color = Color(0xFF7D746C)
-            )
-        } else {
-            filteredLines.forEach { line ->
-                val lineColor = when {
-                    line.startsWith("$ ") -> Color(0xFFD4883A)
-                    line.contains("Error") || line.contains("error:") || line.contains("SyntaxError") -> Color(0xFFF2B8B5)
-                    line.contains("exit code 0") -> Color(0xFF8FB975)
-                    line.contains("exit code 1") -> Color(0xFFFF5F56)
-                    else -> Color(0xFFE6E1DC)
-                }
-                Text(
-                    text = line,
-                    fontFamily = JetBrainsMonoFontFamily,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
-                    color = lineColor
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(scrollState)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(bottom = 6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(if (isError) Color(0xFFFF5F56) else Color(0xFF27C93F))
                 )
+                Text(
+                    text = "${activeSection?.language?.displayName ?: "Kotlin"} Console • ${sdkPlugin?.name ?: "Standard Toolchain"} • ${if (isError) "Process Failed" else "Ready"}",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFA39C93)
+                )
+            }
+
+            if (filteredLines.isEmpty()) {
+                Text(
+                    text = "No build or console lines match the current filter.",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 11.sp,
+                    color = Color(0xFF7D746C)
+                )
+            } else {
+                filteredLines.forEach { line ->
+                    val lineColor = when {
+                        line.startsWith("$ ") -> Color(0xFFD4883A)
+                        line.startsWith("[stdin]") -> Color(0xFF6897BB)
+                        line.contains("Error") || line.contains("error:") || line.contains("SyntaxError") -> Color(0xFFF2B8B5)
+                        line.contains("exit code 0") -> Color(0xFF8FB975)
+                        line.contains("exit code 1") -> Color(0xFFFF5F56)
+                        else -> Color(0xFFE6E1DC)
+                    }
+                    Text(
+                        text = line,
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp,
+                        color = lineColor
+                    )
+                }
             }
         }
     }
@@ -738,13 +857,20 @@ private fun DebuggerTabContent(
     activeSection: CodeSectionUiModel?,
     sdkPlugin: ToolchainPluginItem?,
     activeStepLine: Int,
+    activeBreakpoints: Set<Int> = emptySet(),
+    watchExpressions: List<String> = emptyList(),
     onStepLineChange: (Int) -> Unit,
+    onToggleBreakpoint: (Int) -> Unit = {},
+    onAddWatchExpression: (String) -> Unit = {},
+    onRemoveWatchExpression: (String) -> Unit = {},
     onOpenPluginManager: () -> Unit
 ) {
     val variables = debugInfo?.variables ?: emptyMap()
     val callStack = debugInfo?.callStack.orEmpty()
     val hasErrors = debugInfo?.hasErrors == true
     val totalLines = (activeSection?.lineCount ?: 1).coerceAtLeast(1)
+    val isPausedAtBreakpoint = activeStepLine in activeBreakpoints
+    var watchInput by remember { mutableStateOf("") }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -753,9 +879,12 @@ private fun DebuggerTabContent(
         // Step Debugger Toolbar
         item {
             Surface(
-                color = Color(0xFF1D1917),
-                shape = RoundedCornerShape(10.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF342C28)),
+                color = if (isPausedAtBreakpoint) Color(0xFF2B1A19) else Color(0xFF1D1917),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (isPausedAtBreakpoint) Color(0xFFFF5F56) else Color(0xFF342C28)
+                ),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -773,14 +902,24 @@ private fun DebuggerTabContent(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(if (hasErrors) Color(0xFFFF5F56) else Color(0xFF10B981))
+                                .background(
+                                    when {
+                                        isPausedAtBreakpoint -> Color(0xFFFF5F56)
+                                        hasErrors -> Color(0xFFFF5F56)
+                                        else -> Color(0xFF10B981)
+                                    }
+                                )
                         )
                         Text(
-                            text = "${sdkPlugin?.debuggerName ?: "JDWP Debugger"} • Line $activeStepLine/$totalLines",
+                            text = if (isPausedAtBreakpoint) {
+                                "● Paused at Breakpoint • Ln $activeStepLine/$totalLines"
+                            } else {
+                                "${sdkPlugin?.debuggerName ?: "JDWP Debugger"} • Line $activeStepLine/$totalLines"
+                            },
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFE6E1DC)
+                            color = if (isPausedAtBreakpoint) Color(0xFFFFB4AB) else Color(0xFFE6E1DC)
                         )
                     }
 
@@ -788,13 +927,50 @@ private fun DebuggerTabContent(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        // Resume to Next Breakpoint (F9)
+                        if (activeBreakpoints.isNotEmpty()) {
+                            Surface(
+                                color = Color(0xFF233626),
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF6A8759)),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        val sorted = activeBreakpoints.sorted()
+                                        val nextBp = sorted.firstOrNull { it > activeStepLine } ?: sorted.first()
+                                        onStepLineChange(nextBp)
+                                    }
+                                    .testTag("debugger_resume_breakpoint_button")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Resume to Next Breakpoint",
+                                        tint = Color(0xFF81C784),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "Resume",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF81C784)
+                                    )
+                                }
+                            }
+                        }
+
                         // Step Over (F8)
                         Surface(
                             color = Color(0xFF2C2522),
-                            shape = RoundedCornerShape(6.dp),
+                            shape = RoundedCornerShape(8.dp),
                             border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF4A3F39)),
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(8.dp))
                                 .clickable {
                                     val next = if (activeStepLine < totalLines) activeStepLine + 1 else 1
                                     onStepLineChange(next)
@@ -825,10 +1001,10 @@ private fun DebuggerTabContent(
                         // Step Into (F7)
                         Surface(
                             color = Color(0xFF2C2522),
-                            shape = RoundedCornerShape(6.dp),
+                            shape = RoundedCornerShape(8.dp),
                             border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF4A3F39)),
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(8.dp))
                                 .clickable {
                                     val next = (activeStepLine + 1).coerceAtMost(totalLines)
                                     onStepLineChange(next)
@@ -858,9 +1034,9 @@ private fun DebuggerTabContent(
                         // Reset Frame
                         Surface(
                             color = Color(0xFF2C2522),
-                            shape = RoundedCornerShape(6.dp),
+                            shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(8.dp))
                                 .clickable { onStepLineChange(1) }
                         ) {
                             Row(
@@ -873,6 +1049,210 @@ private fun DebuggerTabContent(
                                     tint = Color(0xFF8FB975),
                                     modifier = Modifier.size(13.dp)
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Active Line Breakpoints Strip (tap gutter line numbers or pills here)
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "BREAKPOINTS (${activeBreakpoints.size}):",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFA39C93)
+                )
+                if (activeBreakpoints.isEmpty()) {
+                    Text(
+                        text = "Tap any line number in the editor gutter to toggle ● breakpoint",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 9.5.sp,
+                        color = Color(0xFF7D746C)
+                    )
+                } else {
+                    activeBreakpoints.sorted().forEach { bpLine ->
+                        Surface(
+                            color = if (bpLine == activeStepLine) Color(0xFF4F2220) else Color(0xFF291C1B),
+                            shape = RoundedCornerShape(999.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF5F56)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .clickable { onStepLineChange(bpLine) }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFFF5F56))
+                                )
+                                Text(
+                                    text = "Ln $bpLine",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFFB4AB)
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Clear Breakpoint Ln $bpLine",
+                                    tint = Color(0xFFFFB4AB),
+                                    modifier = Modifier
+                                        .size(11.dp)
+                                        .clickable { onToggleBreakpoint(bpLine) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Expression Watch & Evaluator Bar
+        item {
+            Surface(
+                color = Color(0xFF1C1816),
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF38302C)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF141110))
+                                .border(0.75.dp, Color(0xFF3E3530), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                        ) {
+                            BasicTextField(
+                                value = watchInput,
+                                onValueChange = { watchInput = it },
+                                singleLine = true,
+                                textStyle = TextStyle(
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.5.sp,
+                                    color = Color(0xFFE6E1DC)
+                                ),
+                                cursorBrush = SolidColor(Color(0xFFD4883A)),
+                                decorationBox = { inner ->
+                                    if (watchInput.isEmpty()) {
+                                        Text(
+                                            text = "Evaluate expression or add watch (e.g. count * 2)...",
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 10.sp,
+                                            color = Color(0xFF7D746C)
+                                        )
+                                    }
+                                    inner()
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("debugger_watch_input")
+                            )
+                        }
+
+                        if (watchInput.isNotBlank()) {
+                            val liveEval = remember(watchInput, variables) {
+                                CodeLanguageEngine.evaluateWatchExpression(watchInput, variables)
+                            }
+                            Text(
+                                text = "= $liveEval",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF81C784)
+                            )
+                        }
+
+                        Surface(
+                            color = Color(0xFFD4883A),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    if (watchInput.isNotBlank()) {
+                                        onAddWatchExpression(watchInput)
+                                        watchInput = ""
+                                    }
+                                }
+                                .testTag("debugger_add_watch_button")
+                        ) {
+                            Text(
+                                text = "+ Watch",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF181412),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+
+                    if (watchExpressions.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            watchExpressions.forEach { expr ->
+                                val evaluated = CodeLanguageEngine.evaluateWatchExpression(expr, variables)
+                                Surface(
+                                    color = Color(0xFF26201D),
+                                    shape = RoundedCornerShape(999.dp),
+                                    border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFD4883A).copy(alpha = 0.6f))
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(
+                                            text = "$expr = ",
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 9.5.sp,
+                                            color = Color(0xFFD4883A),
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = evaluated,
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 9.5.sp,
+                                            color = Color(0xFF8FB975)
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Remove Watch $expr",
+                                            tint = Color(0xFFA39C93),
+                                            modifier = Modifier
+                                                .size(11.dp)
+                                                .clickable { onRemoveWatchExpression(expr) }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -901,7 +1281,7 @@ private fun DebuggerTabContent(
                     callStack.forEach { frame ->
                         Surface(
                             color = Color(0xFF1F1B19),
-                            shape = RoundedCornerShape(7.dp),
+                            shape = RoundedCornerShape(999.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF38302C)),
                             modifier = Modifier.clickable {
                                 val lineNum = frame.substringAfterLast(":").toIntOrNull() ?: 1
@@ -913,7 +1293,7 @@ private fun DebuggerTabContent(
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.sp,
                                 color = Color(0xFFD4883A),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                             )
                         }
                     }
@@ -936,7 +1316,7 @@ private fun DebuggerTabContent(
             item {
                 Surface(
                     color = Color(0xFF1D1A18),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
@@ -952,7 +1332,7 @@ private fun DebuggerTabContent(
             items(variables.toList(), key = { it.first }) { (varName, varValue) ->
                 Surface(
                     color = Color(0xFF1F1C1A),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(10.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF36312C)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -996,7 +1376,8 @@ private fun ProblemsTabContent(
     diagnostics: List<KotlinDiagnostic>,
     filterLevel: LogFilterLevel,
     filterQuery: String,
-    onJumpToLine: (Int) -> Unit
+    onJumpToLine: (Int) -> Unit,
+    onApplyQuickFixCode: (String) -> Unit = {}
 ) {
     val filtered = remember(diagnostics, filterLevel, filterQuery) {
         diagnostics.filter { diag ->
@@ -1042,7 +1423,7 @@ private fun ProblemsTabContent(
                 val isErr = diag.severity == DiagnosticSeverity.ERROR
                 Surface(
                     color = if (isErr) Color(0xFF2B1817) else Color(0xFF282319),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(10.dp),
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
                         if (isErr) Color(0xFF5E2724) else Color(0xFF5E4924)
@@ -1064,7 +1445,7 @@ private fun ProblemsTabContent(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = if (isErr) "✕ Error" else "▲ Warning",
+                                text = if (isErr) "✕ Error" else "▲ Fix/Warn",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
@@ -1082,16 +1463,22 @@ private fun ProblemsTabContent(
 
                         if (diag.quickFixLabel != null) {
                             Surface(
-                                color = Color(0xFFD4883A).copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(4.dp)
+                                color = Color(0xFFD4883A).copy(alpha = 0.25f),
+                                shape = RoundedCornerShape(999.dp),
+                                border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFD4883A)),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .clickable {
+                                        diag.fixedCode?.let(onApplyQuickFixCode)
+                                    }
                             ) {
                                 Text(
                                     text = diag.quickFixLabel,
                                     fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 9.sp,
-                                    color = Color(0xFFD4883A),
+                                    fontSize = 9.5.sp,
+                                    color = Color(0xFFFFC66D),
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 )
                             }
                         }

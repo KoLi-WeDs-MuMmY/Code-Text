@@ -117,6 +117,7 @@ import com.example.model.FloatingWindowType
 import com.example.model.IslandDropdownMenu
 import com.example.model.LanguageType
 import com.example.model.LeftActivityTab
+import com.example.model.LocalCodeSnapshot
 import com.example.model.SplitScreenOrientation
 import com.example.model.TextAlignmentChoice
 import com.example.model.ToolchainPluginItem
@@ -206,6 +207,14 @@ fun DocumentEditorScreen(
     onCloseEditorTab: (Long) -> Unit = {},
     onInstallOrTogglePlugin: (String) -> Unit = {},
     onInstallAllSdks: () -> Unit = {},
+    onToggleLineBreakpoint: (Long, Int) -> Unit = { _, _ -> },
+    onAddWatchExpression: (String) -> Unit = {},
+    onRemoveWatchExpression: (String) -> Unit = {},
+    onOptimizeSectionImports: (Long) -> Unit = {},
+    onJumpToCodeLine: (Int) -> Unit = {},
+    onUpdateTerminalStdin: (String) -> Unit = {},
+    onCreateLocalSnapshot: (Long) -> Unit = {},
+    onRestoreLocalSnapshot: (Long, Long) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -225,6 +234,17 @@ fun DocumentEditorScreen(
             ?: (uiState.activeTarget as? ActiveEditorTarget.SectionExplanation)?.sectionId
         openTabSections.firstOrNull { it.id == targetId }
             ?: openTabSections.firstOrNull()
+    }
+
+    val allProjectSymbols = remember(document.sections) {
+        document.sections.flatMap { sec ->
+            CodeLanguageEngine.extractSymbolsForSection(
+                code = sec.codeContent,
+                language = sec.language,
+                sectionId = sec.id,
+                fileName = sec.nativeFileName
+            )
+        }
     }
 
     val allDiagnostics = remember(activeSection?.codeContent, activeSection?.language) {
@@ -445,6 +465,7 @@ fun DocumentEditorScreen(
                         allFolders = allFolders,
                         activeSection = activeSection,
                         uiState = uiState,
+                        allProjectSymbols = allProjectSymbols,
                         onSelectFileSection = onJumpToSectionConcept,
                         onInsertNewFile = onInsertCodeBlock,
                         onInsertLanguageFile = onInsertLanguageCodeBlock,
@@ -470,6 +491,10 @@ fun DocumentEditorScreen(
                         onRequestAiExplain = onRequestAiExplain,
                         onInstallOrTogglePlugin = onInstallOrTogglePlugin,
                         onInstallAllSdks = onInstallAllSdks,
+                        onOptimizeActiveImports = { activeSection?.let { onOptimizeSectionImports(it.id) } },
+                        onFormatActiveCode = { activeSection?.let { onFormatSectionCode(it.id) } },
+                        onToggleBreakpoint = { line -> activeSection?.let { onToggleLineBreakpoint(it.id, line) } },
+                        onJumpToCodeLine = onJumpToCodeLine,
                         onCollapsePanel = { onToggleLeftActivityTab(uiState.activeLeftActivityTab) }
                     )
                 }
@@ -583,7 +608,20 @@ fun DocumentEditorScreen(
                                                         launchShareSheet = openShare,
                                                         onStatusBanner = onShowStatusToast
                                                     )
-                                                }
+                                                },
+                                                activeBreakpoints = uiState.breakpointsBySectionId[activeSection.id] ?: emptySet(),
+                                                onToggleBreakpoint = { line -> onToggleLineBreakpoint(activeSection.id, line) },
+                                                onOptimizeImports = { onOptimizeSectionImports(activeSection.id) },
+                                                projectSymbols = allProjectSymbols,
+                                                onNavigateToSymbolDefinition = { sym ->
+                                                    onJumpToSectionConcept(sym.sectionId)
+                                                    onJumpToCodeLine(sym.line)
+                                                },
+                                                requestedJumpLine = uiState.requestedJumpLine,
+                                                jumpLineTrigger = uiState.jumpLineTrigger,
+                                                localSnapshots = uiState.localSnapshotsBySectionId[activeSection.id].orEmpty(),
+                                                onCreateSnapshot = { onCreateLocalSnapshot(activeSection.id) },
+                                                onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) }
                                             )
                                         }
 
@@ -730,7 +768,20 @@ fun DocumentEditorScreen(
                                                         launchShareSheet = openShare,
                                                         onStatusBanner = onShowStatusToast
                                                     )
-                                                }
+                                                },
+                                                activeBreakpoints = uiState.breakpointsBySectionId[activeSection.id] ?: emptySet(),
+                                                onToggleBreakpoint = { line -> onToggleLineBreakpoint(activeSection.id, line) },
+                                                onOptimizeImports = { onOptimizeSectionImports(activeSection.id) },
+                                                projectSymbols = allProjectSymbols,
+                                                onNavigateToSymbolDefinition = { sym ->
+                                                    onJumpToSectionConcept(sym.sectionId)
+                                                    onJumpToCodeLine(sym.line)
+                                                },
+                                                requestedJumpLine = uiState.requestedJumpLine,
+                                                jumpLineTrigger = uiState.jumpLineTrigger,
+                                                localSnapshots = uiState.localSnapshotsBySectionId[activeSection.id].orEmpty(),
+                                                onCreateSnapshot = { onCreateLocalSnapshot(activeSection.id) },
+                                                onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) }
                                             )
                                         }
 
@@ -881,7 +932,20 @@ fun DocumentEditorScreen(
                                                 launchShareSheet = openShare,
                                                 onStatusBanner = onShowStatusToast
                                             )
-                                        }
+                                        },
+                                        activeBreakpoints = uiState.breakpointsBySectionId[activeSection.id] ?: emptySet(),
+                                        onToggleBreakpoint = { line -> onToggleLineBreakpoint(activeSection.id, line) },
+                                        onOptimizeImports = { onOptimizeSectionImports(activeSection.id) },
+                                        projectSymbols = allProjectSymbols,
+                                        onNavigateToSymbolDefinition = { sym ->
+                                            onJumpToSectionConcept(sym.sectionId)
+                                            onJumpToCodeLine(sym.line)
+                                        },
+                                        requestedJumpLine = uiState.requestedJumpLine,
+                                        jumpLineTrigger = uiState.jumpLineTrigger,
+                                        localSnapshots = uiState.localSnapshotsBySectionId[activeSection.id].orEmpty(),
+                                        onCreateSnapshot = { onCreateLocalSnapshot(activeSection.id) },
+                                        onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) }
                                     )
                                 }
                             }
@@ -1033,6 +1097,7 @@ fun DocumentEditorScreen(
                                     "ai_explain" -> activeSection?.let { onRequestAiExplain(it.id) }
                                     "ai_refactor" -> activeSection?.let { onRequestAiRefactor(it.id) }
                                     "format_code" -> activeSection?.let { onFormatSectionCode(it.id) }
+                                    "optimize_imports" -> activeSection?.let { onOptimizeSectionImports(it.id) }
                                     "toggle_split" -> onDockWindowToSplitScreen(FloatingWindowType.EXPLANATION)
                                     "float_explain" -> onToggleFloatingWindow(FloatingWindowType.EXPLANATION)
                                     "run_code" -> onRunActiveSectionInTerminal()
@@ -1059,14 +1124,24 @@ fun DocumentEditorScreen(
                 executionOutput = uiState.terminalExecutionOutput,
                 heightFraction = uiState.bottomDrawerHeightFraction,
                 toolchainPlugins = uiState.toolchainPlugins,
+                activeBreakpoints = uiState.breakpointsBySectionId[activeSection?.id ?: -1L] ?: emptySet(),
+                watchExpressions = uiState.watchExpressions,
+                stdinInput = uiState.terminalStdinInput,
+                onUpdateStdinInput = onUpdateTerminalStdin,
                 onTabSelected = onSetBottomDrawerTab,
                 onHeightFractionChange = onSetBottomDrawerHeightFraction,
                 onRunCode = onRunActiveSectionInTerminal,
                 onClearTerminal = onClearTerminal,
                 onCloseDrawer = onCloseBottomDrawer,
-                onJumpToLine = { /* Line jumping */ },
+                onJumpToLine = onJumpToCodeLine,
                 onInstallPlugin = onInstallOrTogglePlugin,
                 onOpenPluginManager = { onToggleLeftActivityTab(LeftActivityTab.PLUGINS) },
+                onToggleBreakpoint = { line -> activeSection?.let { onToggleLineBreakpoint(it.id, line) } },
+                onAddWatchExpression = onAddWatchExpression,
+                onRemoveWatchExpression = onRemoveWatchExpression,
+                onApplyQuickFixCode = { fixedCode ->
+                    activeSection?.let { onUpdateSectionCode(it.id, fixedCode) }
+                },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
@@ -1662,6 +1737,7 @@ private fun CodeAssistSidePanel(
     allFolders: List<DocumentSummaryUiModel>,
     activeSection: CodeSectionUiModel?,
     uiState: EditorUiState,
+    allProjectSymbols: List<CodeLanguageEngine.CodeSymbolDefinition> = emptyList(),
     onSelectFileSection: (Long) -> Unit,
     onInsertNewFile: () -> Unit,
     onInsertLanguageFile: (LanguageType) -> Unit,
@@ -1678,6 +1754,10 @@ private fun CodeAssistSidePanel(
     onRequestAiExplain: (Long) -> Unit,
     onInstallOrTogglePlugin: (String) -> Unit,
     onInstallAllSdks: () -> Unit,
+    onOptimizeActiveImports: () -> Unit = {},
+    onFormatActiveCode: () -> Unit = {},
+    onToggleBreakpoint: (Int) -> Unit = {},
+    onJumpToCodeLine: (Int) -> Unit = {},
     onCollapsePanel: () -> Unit
 ) {
     var expandedAppRoot by remember { mutableStateOf(true) }
@@ -2025,24 +2105,39 @@ private fun CodeAssistSidePanel(
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             matches.forEach { sec ->
+                                val matchLineIdx = remember(sec.codeContent, searchFilter) {
+                                    if (searchFilter.isBlank()) -1
+                                    else sec.codeContent.lines().indexOfFirst {
+                                        it.contains(searchFilter, ignoreCase = true)
+                                    }
+                                }
                                 Surface(
                                     color = Color(0xFF26211E),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp))
-                                        .clickable { onSelectFileSection(sec.id) }
+                                        .clickable {
+                                            onSelectFileSection(sec.id)
+                                            if (matchLineIdx >= 0) {
+                                                onJumpToCodeLine(matchLineIdx + 1)
+                                            }
+                                        }
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
                                         Text(
-                                            text = sec.nativeFileName,
+                                            text = if (matchLineIdx >= 0) "${sec.nativeFileName}:${matchLineIdx + 1}" else sec.nativeFileName,
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 10.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = sec.language.badgeColor
                                         )
                                         Text(
-                                            text = sec.codeContent.lines().firstOrNull { it.isNotBlank() } ?: "// empty",
+                                            text = if (matchLineIdx >= 0) {
+                                                sec.codeContent.lines().getOrNull(matchLineIdx)?.trim() ?: ""
+                                            } else {
+                                                sec.codeContent.lines().firstOrNull { it.isNotBlank() } ?: "// empty"
+                                            },
                                             fontFamily = JetBrainsMonoFontFamily,
                                             fontSize = 9.5.sp,
                                             color = Color(0xFFA39C93),
@@ -2061,11 +2156,144 @@ private fun CodeAssistSidePanel(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
-                            .padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                            .padding(8.dp)
+                            .testTag("codeassist_structure_side_panel"),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // Quick Actions: Optimize Imports + Format Code
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                color = Color(0xFF283226),
+                                shape = RoundedCornerShape(999.dp),
+                                border = BorderStroke(0.8.dp, Color(0xFF6A8759)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .clickable(onClick = onOptimizeActiveImports)
+                                    .testTag("side_panel_optimize_imports_btn")
+                            ) {
+                                Text(
+                                    text = "Optimize Imports",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF81C784),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                )
+                            }
+                            Surface(
+                                color = Color(0xFF332922),
+                                shape = RoundedCornerShape(999.dp),
+                                border = BorderStroke(0.8.dp, Color(0xFFD4883A)),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .clickable(onClick = onFormatActiveCode)
+                            ) {
+                                Text(
+                                    text = "Format",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFFC66D),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+
+                        // 1. Go-to-Definition Project Symbol Index
                         Text(
-                            text = "AST & Symbol Outline",
+                            text = "Go to Definition (${allProjectSymbols.size} symbols)",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF7CB7FF)
+                        )
+                        if (allProjectSymbols.isEmpty()) {
+                            Text(
+                                text = "No functions, classes, or properties indexed yet.",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 9.5.sp,
+                                color = Color(0xFFA39C93)
+                            )
+                        } else {
+                            allProjectSymbols.forEach { sym ->
+                                val isCurrentFile = sym.sectionId == activeSection?.id
+                                Surface(
+                                    color = if (isCurrentFile) Color(0xFF2D2622) else Color(0xFF231F1C),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(
+                                        0.6.dp,
+                                        if (isCurrentFile) Color(0xFFD4883A).copy(alpha = 0.6f) else Color(0xFF352F2B)
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            onSelectFileSection(sym.sectionId)
+                                            onJumpToCodeLine(sym.line)
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Surface(
+                                                color = Color(0xFF3E3127),
+                                                shape = CircleShape
+                                            ) {
+                                                Text(
+                                                    text = sym.kindBadge.toString(),
+                                                    fontFamily = JetBrainsMonoFontFamily,
+                                                    fontSize = 8.5.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = Color(0xFFFFC66D),
+                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                            Column {
+                                                Text(
+                                                    text = sym.name,
+                                                    fontFamily = JetBrainsMonoFontFamily,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFE6E1DC),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    text = "${sym.fileName}:${sym.line}",
+                                                    fontFamily = JetBrainsMonoFontFamily,
+                                                    fontSize = 8.5.sp,
+                                                    color = Color(0xFFA39C93)
+                                                )
+                                            }
+                                        }
+                                        Text(
+                                            text = "Jump →",
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF7CB7FF)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(thickness = 0.5.dp, color = Color(0xFF332D29))
+
+                        // 2. Foldable Regions & AST Debugger Snapshot
+                        Text(
+                            text = "AST & Foldable Regions",
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.Bold,
@@ -2074,6 +2302,30 @@ private fun CodeAssistSidePanel(
                         if (activeSection == null) {
                             Text("No active file selected.", fontSize = 10.5.sp, color = Color(0xFFA39C93))
                         } else {
+                            val regions = remember(activeSection.codeContent, activeSection.language) {
+                                CodeLanguageEngine.detectFoldableRegions(activeSection.codeContent, activeSection.language)
+                            }
+                            regions.forEach { reg ->
+                                Surface(
+                                    color = Color(0xFF26211E),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { onJumpToCodeLine(reg.startLine) }
+                                ) {
+                                    Text(
+                                        text = "▾ Ln ${reg.startLine}..${reg.endLine}: ${reg.summaryLabel}",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 9.5.sp,
+                                        color = Color(0xFFD5CEC6),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
                             val debugInfo = remember(activeSection.codeContent, activeSection.language) {
                                 CodeLanguageEngine.executeAndDebug(activeSection.codeContent, activeSection.language)
                             }
@@ -2086,7 +2338,7 @@ private fun CodeAssistSidePanel(
                             debugInfo.variables.forEach { (varName, varVal) ->
                                 Surface(
                                     color = Color(0xFF26211E),
-                                    shape = RoundedCornerShape(6.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Row(
@@ -2902,7 +3154,17 @@ private fun FullScreenAppleCmdSectionEditor(
     onSelectThemeOverride: (com.example.ui.theme.AppThemeId?) -> Unit = {},
     onOpenFileSettings: () -> Unit = {},
     onRunCode: () -> Unit = {},
-    onExportOrCopyFile: (Boolean) -> Unit = {}
+    onExportOrCopyFile: (Boolean) -> Unit = {},
+    activeBreakpoints: Set<Int> = emptySet(),
+    onToggleBreakpoint: (Int) -> Unit = {},
+    onOptimizeImports: () -> Unit = {},
+    projectSymbols: List<CodeLanguageEngine.CodeSymbolDefinition> = emptyList(),
+    onNavigateToSymbolDefinition: (CodeLanguageEngine.CodeSymbolDefinition) -> Unit = {},
+    requestedJumpLine: Int? = null,
+    jumpLineTrigger: Int = 0,
+    localSnapshots: List<LocalCodeSnapshot> = emptyList(),
+    onCreateSnapshot: () -> Unit = {},
+    onRestoreSnapshot: (Long) -> Unit = {}
 ) {
     KotlinCodeSectionCard(
         section = section,
@@ -2947,6 +3209,16 @@ private fun FullScreenAppleCmdSectionEditor(
         onSelectThemeOverride = onSelectThemeOverride,
         onOpenFileSettings = onOpenFileSettings,
         onRunCode = onRunCode,
-        onExportOrCopyFile = onExportOrCopyFile
+        onExportOrCopyFile = onExportOrCopyFile,
+        activeBreakpoints = activeBreakpoints,
+        onToggleBreakpoint = onToggleBreakpoint,
+        onOptimizeImports = onOptimizeImports,
+        projectSymbols = projectSymbols,
+        onNavigateToSymbolDefinition = onNavigateToSymbolDefinition,
+        requestedJumpLine = requestedJumpLine,
+        jumpLineTrigger = jumpLineTrigger,
+        localSnapshots = localSnapshots,
+        onCreateSnapshot = onCreateSnapshot,
+        onRestoreSnapshot = onRestoreSnapshot
     )
 }

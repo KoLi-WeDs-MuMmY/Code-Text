@@ -2,8 +2,10 @@ package com.example.code
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import com.example.model.LanguageType
 import com.example.ui.theme.KotlinSyntaxColors
 
@@ -306,10 +308,32 @@ object CodeLanguageEngine {
      * Syntactic and semantic validator for all supported programming languages.
      */
     fun getDiagnosticsForLanguage(code: String, language: LanguageType): List<KotlinDiagnostic> {
-        if (language == LanguageType.KOTLIN) {
-            return KotlinCodeEngine.diagnoseKotlinSyntax(code)
+        val baseDiagnostics = if (language == LanguageType.KOTLIN) {
+            KotlinCodeEngine.diagnoseKotlinSyntax(code).toMutableList()
+        } else {
+            diagnoseNonKotlinSyntax(code, language).toMutableList()
         }
 
+        // Append CodeAssist Auto-Import quick fixes for unimported stdlib/framework symbols
+        val missingImports = getMissingImportsForLanguage(code, language)
+        missingImports.forEach { fix ->
+            val fixedWithImport = applyAutoImport(code, fix.importStatement, language)
+            baseDiagnostics.add(
+                KotlinDiagnostic(
+                    line = fix.line,
+                    startOffset = 0,
+                    endOffset = fix.symbol.length,
+                    message = "Unresolved import: '${fix.symbol}' (${fix.importStatement})",
+                    severity = DiagnosticSeverity.WARNING,
+                    quickFixLabel = "+ Import ${fix.symbol}",
+                    fixedCode = fixedWithImport
+                )
+            )
+        }
+        return baseDiagnostics
+    }
+
+    private fun diagnoseNonKotlinSyntax(code: String, language: LanguageType): List<KotlinDiagnostic> {
         val lines = code.split('\n')
         val diagnostics = mutableListOf<KotlinDiagnostic>()
         var parenCount = 0
@@ -500,7 +524,8 @@ object CodeLanguageEngine {
     fun executeAndDebug(
         code: String,
         language: LanguageType,
-        isSdkInstalled: Boolean = true
+        isSdkInstalled: Boolean = true,
+        stdinInput: String = ""
     ): DebugSessionInfo {
         val trimmed = code.trim()
         val diagnostics = getDiagnosticsForLanguage(code, language)
@@ -515,15 +540,39 @@ object CodeLanguageEngine {
             LanguageType.RUST -> "Rust Cargo & Rust-GDB Toolchain"
         }
 
+        val stdinLines = stdinInput.lines().filter { it.isNotEmpty() }.toMutableList()
+        var stdinCursor = 0
+        fun nextStdinValue(defaultVal: String = "KtScribeUser"): String {
+            return if (stdinCursor < stdinLines.size) {
+                stdinLines[stdinCursor++]
+            } else {
+                defaultVal
+            }
+        }
+
         // Extract variables from assignments across languages
         val variables = mutableMapOf<String, String>()
         val varRegex = Regex("""(?:val|var|int|String|double|float|boolean|let|mut|const|final)?\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*([^;\n]+)""")
         varRegex.findAll(code).forEach { match ->
             val name = match.groupValues[1].trim()
-            val value = match.groupValues[2].trim()
+            val rawRhs = match.groupValues[2].trim()
             if (name !in setOf("if", "for", "while", "class", "def", "fun", "return", "public", "private", "print", "println", "package", "import")) {
-                variables[name] = value.take(40)
+                val resolvedVal = when {
+                    rawRhs.contains("readln") || rawRhs.contains("readLine") ||
+                        rawRhs.contains("nextLine") || rawRhs.contains("next(") ||
+                        rawRhs.startsWith("input(") || rawRhs.contains("readLineSync") -> {
+                        "\"${nextStdinValue()}\""
+                    }
+                    else -> rawRhs.take(40)
+                }
+                variables[name] = resolvedVal
             }
+        }
+
+        // Also check C++ `cin >> varName`
+        Regex("""(?:std::)?cin\s*>>\s*([A-Za-z_][A-Za-z0-9_]*)""").findAll(code).forEach { match ->
+            val vName = match.groupValues[1]
+            variables[vName] = nextStdinValue("42")
         }
 
         // Build call stack frames
@@ -630,13 +679,54 @@ object CodeLanguageEngine {
             )
         }
 
+        fun evaluatePrintedArg(rawArg: String): String {
+            val cleaned = rawArg.trim()
+            if (cleaned.isEmpty()) return ""
+            // Direct variable reference
+            variables[cleaned]?.let { return it.removeSurrounding("\"").removeSurrounding("'") }
+            // Python f-string `f"Hello {name}"` or Rust `"{name}"`
+            var text = cleaned.removePrefix("f\"").removePrefix("f'").removeSurrounding("\"").removeSurrounding("'")
+            variables.forEach { (k, v) ->
+                val cleanVal = v.removeSurrounding("\"").removeSurrounding("'")
+                text = text
+                    .replace("\${$k}", cleanVal)
+                    .replace("\$$k", cleanVal)
+                    .replace("{$k}", cleanVal)
+            }
+            // Handle string concatenation like `"Sum: " + total`
+            if (cleaned.contains("+") && (cleaned.contains("\"") || cleaned.contains("'"))) {
+                return cleaned.split("+").joinToString("") { part ->
+                    val p = part.trim()
+                    variables[p]?.removeSurrounding("\"")?.removeSurrounding("'")
+                        ?: p.removeSurrounding("\"").removeSurrounding("'")
+                }
+            }
+            return evaluateWatchExpression(cleaned, variables).let { eval ->
+                if (eval.startsWith("unresolved:")) text else eval.removeSurrounding("\"")
+            }
+        }
+
         // Success execution output
         val output = buildString {
+            if (stdinLines.isNotEmpty()) {
+                appendLine("[stdin] ${stdinLines.joinToString(" | ")}")
+            }
             when (language) {
-                LanguageType.KOTLIN -> append(KotlinCodeEngine.simulateKotlinExecution(code))
+                LanguageType.KOTLIN -> {
+                    // Replace readln() calls with supplied stdin before simulating Kotlin execution
+                    var effectiveKotlin = code
+                    if (code.contains("readln") || code.contains("readLine")) {
+                        var idx = 0
+                        effectiveKotlin = Regex("""read(?:ln|Line)\s*\(\s*\)""").replace(code) {
+                            val v = stdinLines.getOrElse(idx++) { "KtScribeInput" }
+                            "\"$v\""
+                        }
+                    }
+                    append(KotlinCodeEngine.simulateKotlinExecution(effectiveKotlin))
+                }
                 LanguageType.JAVA -> {
                     val printMatches = Regex("""System\.(?:out|err)\.print(?:ln)?\s*\(([^)]*)\)""").findAll(trimmed)
-                    val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }.toList()
+                    val outputs = printMatches.map { evaluatePrintedArg(it.groupValues[1]) }.toList()
                     appendLine("$ javac Main.java && java Main")
                     if (outputs.isEmpty()) {
                         appendLine("(Process executed without printing to standard output)")
@@ -647,7 +737,7 @@ object CodeLanguageEngine {
                 }
                 LanguageType.PYTHON -> {
                     val printMatches = Regex("""print\s*\(([^)]*)\)""").findAll(trimmed)
-                    val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }.toList()
+                    val outputs = printMatches.map { evaluatePrintedArg(it.groupValues[1]) }.toList()
                     appendLine("$ python3 main.py")
                     if (outputs.isEmpty()) {
                         appendLine("(Script finished with no output)")
@@ -658,7 +748,7 @@ object CodeLanguageEngine {
                 }
                 LanguageType.DART -> {
                     val printMatches = Regex("""print\s*\(([^)]*)\)""").findAll(trimmed)
-                    val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }.toList()
+                    val outputs = printMatches.map { evaluatePrintedArg(it.groupValues[1]) }.toList()
                     appendLine("$ dart run main.dart")
                     if (outputs.isEmpty()) {
                         appendLine("(Dart program exited cleanly)")
@@ -668,9 +758,14 @@ object CodeLanguageEngine {
                     append("\nProcess finished with exit code 0")
                 }
                 LanguageType.CPP -> {
-                    val printMatches = Regex("""(?:std::)?cout\s*<<\s*([^;<]+)""").findAll(trimmed)
-                    val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }
-                        .filter { it != "std::endl" && it != "endl" }.toList()
+                    val printMatches = Regex("""(?:std::)?cout\s*<<\s*([^;]+)""").findAll(trimmed)
+                    val outputs = printMatches.map { match ->
+                        match.groupValues[1]
+                            .split("<<")
+                            .map { it.trim() }
+                            .filter { it != "std::endl" && it != "endl" && it != "\"\\n\"" && it != "'\\n'" }
+                            .joinToString("") { evaluatePrintedArg(it) }
+                    }.toList()
                     appendLine("$ g++ main.cpp -o main && ./main")
                     if (outputs.isEmpty()) {
                         appendLine("(Binary executed successfully with no output)")
@@ -681,7 +776,18 @@ object CodeLanguageEngine {
                 }
                 LanguageType.RUST -> {
                     val printMatches = Regex("""println!\s*\(([^)]*)\)""").findAll(trimmed)
-                    val outputs = printMatches.map { it.groupValues[1].trim().removeSurrounding("\"").removeSurrounding("'") }.toList()
+                    val outputs = printMatches.map { match ->
+                        val args = match.groupValues[1].split(",").map { it.trim() }
+                        if (args.size > 1 && args[0].contains("{}")) {
+                            var fmt = args[0].removeSurrounding("\"")
+                            for (arg in args.drop(1)) {
+                                fmt = fmt.replaceFirst("{}", evaluatePrintedArg(arg))
+                            }
+                            fmt
+                        } else {
+                            evaluatePrintedArg(match.groupValues[1])
+                        }
+                    }.toList()
                     appendLine("$ rustc main.rs && ./main")
                     if (outputs.isEmpty()) {
                         appendLine("(Rust binary exited cleanly)")
@@ -696,6 +802,9 @@ object CodeLanguageEngine {
         val logcat = buildList {
             add("I/Toolchain: Verified $sdkTitle")
             add("I/Compiler: Indexed & compiled ${language.defaultFileName} in 142ms")
+            if (stdinLines.isNotEmpty()) {
+                add("D/StdinPipe: Fed ${stdinLines.size} line(s) into standard input stream")
+            }
             add("D/Debugger: Attached to process PID 4821 (${variables.size} active local symbol(s))")
             diagnostics.filter { it.severity == DiagnosticSeverity.WARNING }.forEach { warn ->
                 add("W/Linter: Ln ${warn.line}: ${warn.message}")
@@ -719,7 +828,574 @@ object CodeLanguageEngine {
     /**
      * Simulates terminal script execution for the given language.
      */
-    fun simulateExecutionForLanguage(code: String, language: LanguageType): String {
-        return executeAndDebug(code, language, isSdkInstalled = true).output
+    fun simulateExecutionForLanguage(code: String, language: LanguageType, stdinInput: String = ""): String {
+        return executeAndDebug(code, language, isSdkInstalled = true, stdinInput = stdinInput).output
+    }
+
+    // =========================================================================
+    // CODEASSIST AUTO-IMPORT QUICK FIXES & OPTIMIZE IMPORTS ENGINE
+    // =========================================================================
+
+    data class AutoImportQuickFix(
+        val symbol: String,
+        val importStatement: String,
+        val line: Int
+    )
+
+    private val KOTLIN_AUTO_IMPORTS = mapOf(
+        "File" to "import java.io.File",
+        "UUID" to "import java.util.UUID",
+        "Scanner" to "import java.util.Scanner",
+        "LocalDate" to "import java.time.LocalDate",
+        "LocalDateTime" to "import java.time.LocalDateTime",
+        "CoroutineScope" to "import kotlinx.coroutines.CoroutineScope",
+        "Dispatchers" to "import kotlinx.coroutines.Dispatchers",
+        "Flow" to "import kotlinx.coroutines.flow.Flow",
+        "MutableStateFlow" to "import kotlinx.coroutines.flow.MutableStateFlow",
+        "delay" to "import kotlinx.coroutines.delay",
+        "launch" to "import kotlinx.coroutines.launch",
+        "sqrt" to "import kotlin.math.sqrt",
+        "sin" to "import kotlin.math.sin",
+        "cos" to "import kotlin.math.cos",
+        "abs" to "import kotlin.math.abs"
+    )
+
+    private val JAVA_AUTO_IMPORTS = mapOf(
+        "Scanner" to "import java.util.Scanner;",
+        "List" to "import java.util.List;",
+        "ArrayList" to "import java.util.ArrayList;",
+        "Map" to "import java.util.Map;",
+        "HashMap" to "import java.util.HashMap;",
+        "Set" to "import java.util.Set;",
+        "HashSet" to "import java.util.HashSet;",
+        "File" to "import java.io.File;",
+        "UUID" to "import java.util.UUID;",
+        "LocalDate" to "import java.time.LocalDate;",
+        "Optional" to "import java.util.Optional;"
+    )
+
+    private val PYTHON_AUTO_IMPORTS = mapOf(
+        "math" to "import math",
+        "json" to "import json",
+        "os" to "import os",
+        "sys" to "import sys",
+        "re" to "import re",
+        "random" to "import random",
+        "datetime" to "import datetime",
+        "Path" to "from pathlib import Path"
+    )
+
+    private val CPP_AUTO_IMPORTS = mapOf(
+        "cout" to "#include <iostream>",
+        "cin" to "#include <iostream>",
+        "vector" to "#include <vector>",
+        "string" to "#include <string>",
+        "map" to "#include <map>",
+        "sort" to "#include <algorithm>",
+        "sqrt" to "#include <cmath>"
+    )
+
+    private val DART_AUTO_IMPORTS = mapOf(
+        "jsonDecode" to "import 'dart:convert';",
+        "jsonEncode" to "import 'dart:convert';",
+        "Timer" to "import 'dart:async';",
+        "sqrt" to "import 'dart:math';",
+        "Random" to "import 'dart:math';",
+        "File" to "import 'dart:io';"
+    )
+
+    private val RUST_AUTO_IMPORTS = mapOf(
+        "HashMap" to "use std::collections::HashMap;",
+        "HashSet" to "use std::collections::HashSet;",
+        "VecDeque" to "use std::collections::VecDeque;",
+        "File" to "use std::fs::File;",
+        "Arc" to "use std::sync::Arc;",
+        "Mutex" to "use std::sync::Mutex;"
+    )
+
+    fun getMissingImportsForLanguage(code: String, language: LanguageType): List<AutoImportQuickFix> {
+        val importTable = when (language) {
+            LanguageType.KOTLIN -> KOTLIN_AUTO_IMPORTS
+            LanguageType.JAVA -> JAVA_AUTO_IMPORTS
+            LanguageType.PYTHON -> PYTHON_AUTO_IMPORTS
+            LanguageType.CPP -> CPP_AUTO_IMPORTS
+            LanguageType.DART -> DART_AUTO_IMPORTS
+            LanguageType.RUST -> RUST_AUTO_IMPORTS
+        }
+        val lines = code.lines()
+        val results = mutableListOf<AutoImportQuickFix>()
+        val seenSymbols = mutableSetOf<String>()
+
+        lines.forEachIndexed { idx, rawLine ->
+            val trimmed = rawLine.trim()
+            if (trimmed.startsWith("import ") || trimmed.startsWith("from ") ||
+                trimmed.startsWith("#include") || trimmed.startsWith("use ") ||
+                trimmed.startsWith("//") || trimmed.startsWith("#")
+            ) {
+                return@forEachIndexed
+            }
+            for ((symbol, statement) in importTable) {
+                if (symbol in seenSymbols) continue
+                if (code.contains(statement)) continue
+                val regex = Regex("""\b${Regex.escape(symbol)}\b""")
+                if (regex.containsMatchIn(rawLine)) {
+                    seenSymbols.add(symbol)
+                    results.add(AutoImportQuickFix(symbol = symbol, importStatement = statement, line = idx + 1))
+                }
+            }
+        }
+        return results
+    }
+
+    fun applyAutoImport(code: String, importStatement: String, language: LanguageType): String {
+        if (code.contains(importStatement)) return code
+        val lines = code.lines().toMutableList()
+        val packageIdx = lines.indexOfFirst { it.trim().startsWith("package ") }
+        val firstImportIdx = lines.indexOfFirst {
+            val t = it.trim()
+            t.startsWith("import ") || t.startsWith("from ") || t.startsWith("#include") || t.startsWith("use ")
+        }
+        when {
+            firstImportIdx >= 0 -> lines.add(firstImportIdx, importStatement)
+            packageIdx >= 0 -> {
+                lines.add(packageIdx + 1, "")
+                lines.add(packageIdx + 2, importStatement)
+            }
+            else -> {
+                lines.add(0, importStatement)
+                if (lines.getOrNull(1)?.isNotBlank() == true) {
+                    lines.add(1, "")
+                }
+            }
+        }
+        return lines.joinToString("\n")
+    }
+
+    /**
+     * CodeAssist Optimize Imports:
+     * Deduplicates, sorts alphabetically, and removes unused import/include/use statements.
+     */
+    fun optimizeImportsForLanguage(code: String, language: LanguageType): String {
+        val lines = code.lines()
+        val importPrefixPredicate: (String) -> Boolean = { trimmed ->
+            when (language) {
+                LanguageType.KOTLIN, LanguageType.JAVA, LanguageType.DART -> trimmed.startsWith("import ")
+                LanguageType.PYTHON -> trimmed.startsWith("import ") || trimmed.startsWith("from ")
+                LanguageType.CPP -> trimmed.startsWith("#include")
+                LanguageType.RUST -> trimmed.startsWith("use ")
+            }
+        }
+
+        val packageLines = mutableListOf<String>()
+        val importLines = mutableListOf<String>()
+        val bodyLines = mutableListOf<String>()
+        var inHeader = true
+
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (inHeader && trimmed.startsWith("package ")) {
+                packageLines.add(trimmed)
+            } else if (importPrefixPredicate(trimmed)) {
+                importLines.add(trimmed)
+            } else if (inHeader && trimmed.isEmpty() && (packageLines.isNotEmpty() || importLines.isNotEmpty())) {
+                // Skip extra blank lines between package and imports
+            } else {
+                if (trimmed.isNotEmpty()) inHeader = false
+                bodyLines.add(line)
+            }
+        }
+
+        val bodyText = bodyLines.joinToString("\n")
+        // Filter out unused imports (keep wildcard imports and imports whose terminal identifier appears in bodyText)
+        val usedAndSortedImports = importLines
+            .distinct()
+            .filter { imp ->
+                if (imp.contains("*")) return@filter true
+                val symbolMatch = Regex("""([A-Za-z0-9_]+)\s*[;>'"\s]*$""").find(imp)
+                val importedSymbol = symbolMatch?.groupValues?.get(1) ?: return@filter true
+                if (importedSymbol == "iostream") {
+                    bodyText.contains("cout") || bodyText.contains("cin") || bodyText.contains("endl")
+                } else {
+                    Regex("""\b${Regex.escape(importedSymbol)}\b""").containsMatchIn(bodyText)
+                }
+            }
+            .sorted()
+
+        return buildString {
+            if (packageLines.isNotEmpty()) {
+                appendLine(packageLines.joinToString("\n"))
+                appendLine()
+            }
+            if (usedAndSortedImports.isNotEmpty()) {
+                appendLine(usedAndSortedImports.joinToString("\n"))
+                appendLine()
+            }
+            append(bodyLines.dropWhile { it.isBlank() }.joinToString("\n"))
+        }
+    }
+
+    // =========================================================================
+    // CODEASSIST CODE FOLDING & GO-TO-DEFINITION ENGINE
+    // =========================================================================
+
+    data class FoldableCodeRegion(
+        val startLine: Int,
+        val endLine: Int,
+        val headerPreview: String
+    ) {
+        val lineSpan: Int get() = (endLine - startLine + 1).coerceAtLeast(1)
+        val summaryLabel: String get() = headerPreview
+    }
+
+    fun detectFoldableRegions(code: String, language: LanguageType): List<FoldableCodeRegion> {
+        val lines = code.lines()
+        val regions = mutableListOf<FoldableCodeRegion>()
+
+        if (language == LanguageType.PYTHON) {
+            for (i in lines.indices) {
+                val raw = lines[i]
+                val trimmed = raw.trim()
+                if ((trimmed.startsWith("def ") || trimmed.startsWith("class ") || trimmed.startsWith("if ") || trimmed.startsWith("for ")) &&
+                    trimmed.endsWith(":")
+                ) {
+                    val baseIndent = raw.takeWhile { it == ' ' || it == '\t' }.length
+                    var endIdx = i
+                    for (j in (i + 1) until lines.size) {
+                        val nextLine = lines[j]
+                        if (nextLine.isBlank()) continue
+                        val nextIndent = nextLine.takeWhile { it == ' ' || it == '\t' }.length
+                        if (nextIndent > baseIndent) {
+                            endIdx = j
+                        } else {
+                            break
+                        }
+                    }
+                    if (endIdx > i) {
+                        regions.add(
+                            FoldableCodeRegion(
+                                startLine = i + 1,
+                                endLine = endIdx + 1,
+                                headerPreview = trimmed.take(42)
+                            )
+                        )
+                    }
+                }
+            }
+            return regions
+        }
+
+        // Brace-delimited languages (Kotlin, Java, C++, Dart, Rust)
+        val openStack = ArrayDeque<Pair<Int, String>>()
+        lines.forEachIndexed { idx, raw ->
+            val trimmed = raw.trim()
+            if (trimmed.startsWith("//")) return@forEachIndexed
+            val opens = trimmed.count { it == '{' }
+            val closes = trimmed.count { it == '}' }
+            repeat(opens) {
+                openStack.addLast((idx + 1) to trimmed.removeSuffix("{").trim())
+            }
+            repeat(closes) {
+                if (openStack.isNotEmpty()) {
+                    val (startLine, preview) = openStack.removeLast()
+                    val endLine = idx + 1
+                    if (endLine > startLine && preview.isNotBlank()) {
+                        regions.add(
+                            FoldableCodeRegion(
+                                startLine = startLine,
+                                endLine = endLine,
+                                headerPreview = preview.take(44)
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        return regions.sortedBy { it.startLine }
+    }
+
+    data class CodeSymbolDefinition(
+        val name: String,
+        val kind: String,
+        val signature: String,
+        val line: Int,
+        val sectionId: Long = 0L,
+        val fileName: String = ""
+    ) {
+        val kindBadge: Char
+            get() = when (kind) {
+                "Function" -> 'f'
+                "Class/Type" -> 'C'
+                "Interface/Enum" -> 'I'
+                else -> 'v'
+            }
+    }
+
+    fun extractSymbolsForSection(
+        code: String,
+        language: LanguageType,
+        sectionId: Long = 0L,
+        fileName: String = ""
+    ): List<CodeSymbolDefinition> {
+        val symbols = mutableListOf<CodeSymbolDefinition>()
+        val declRegex = Regex(
+            """^\s*(?:public\s+|private\s+|protected\s+|internal\s+|suspend\s+|inline\s+|data\s+|sealed\s+|open\s+|abstract\s+|static\s+|final\s+)*(fun|def|class|interface|object|struct|enum|impl|void|int|val|var|let)\s+([A-Za-z_][A-Za-z0-9_]*)"""
+        )
+        code.lines().forEachIndexed { idx, rawLine ->
+            val match = declRegex.find(rawLine) ?: return@forEachIndexed
+            val keyword = match.groupValues[1]
+            val name = match.groupValues[2]
+            if (name in setOf("if", "for", "while", "switch", "when", "return")) return@forEachIndexed
+            val kind = when (keyword) {
+                "fun", "def", "void", "int" -> "Function"
+                "class", "struct", "object", "impl" -> "Class/Type"
+                "interface", "enum" -> "Interface/Enum"
+                else -> "Property"
+            }
+            symbols.add(
+                CodeSymbolDefinition(
+                    name = name,
+                    kind = kind,
+                    signature = rawLine.trim().removeSuffix("{").trim().take(54),
+                    line = idx + 1,
+                    sectionId = sectionId,
+                    fileName = fileName.ifBlank { language.defaultFileName }
+                )
+            )
+        }
+        return symbols
+    }
+
+    fun findDefinitionAtCursor(
+        code: String,
+        cursorPosition: Int,
+        allProjectSymbols: List<CodeSymbolDefinition>
+    ): CodeSymbolDefinition? {
+        if (code.isEmpty()) return null
+        val safeCursor = cursorPosition.coerceIn(0, code.length)
+        var start = safeCursor
+        while (start > 0 && (code[start - 1].isLetterOrDigit() || code[start - 1] == '_')) {
+            start--
+        }
+        var end = safeCursor
+        while (end < code.length && (code[end].isLetterOrDigit() || code[end] == '_')) {
+            end++
+        }
+        if (start >= end) return null
+        val token = code.substring(start, end)
+        return allProjectSymbols.firstOrNull { it.name == token }
+    }
+
+    // =========================================================================
+    // CODEASSIST DEBUGGER EXPRESSION WATCH EVALUATOR
+    // =========================================================================
+
+    fun evaluateWatchExpression(
+        expression: String,
+        variables: Map<String, String>
+    ): String {
+        val expr = expression.trim()
+        if (expr.isEmpty()) return "<empty>"
+
+        // Direct variable match
+        variables[expr]?.let { return it }
+
+        // Property/method calls on variables (`name.length`, `name.uppercase()`, `name.lowercase()`, `items.size`)
+        if (expr.contains(".")) {
+            val targetVar = expr.substringBefore(".").trim()
+            val member = expr.substringAfter(".").trim()
+            val rawVal = variables[targetVar]?.removeSurrounding("\"")?.removeSurrounding("'")
+            if (rawVal != null) {
+                return when (member) {
+                    "length", "length()", "size", "count()" -> {
+                        if (rawVal.startsWith("listOf(") || rawVal.startsWith("[")) {
+                            rawVal.split(",").filter { it.isNotBlank() }.size.toString()
+                        } else {
+                            rawVal.length.toString()
+                        }
+                    }
+                    "uppercase()", "toUpperCase()", "upper()" -> "\"${rawVal.uppercase()}\""
+                    "lowercase()", "toLowerCase()", "lower()" -> "\"${rawVal.lowercase()}\""
+                    "isEmpty()", "isBlank()" -> rawVal.isBlank().toString()
+                    else -> "$rawVal.$member"
+                }
+            }
+        }
+
+        // Substitute known variable values into arithmetic or comparison expressions
+        var substituted = expr
+        for ((k, v) in variables) {
+            substituted = substituted.replace(Regex("""\b${Regex.escape(k)}\b"""), v.removeSurrounding("\""))
+        }
+
+        // Binary numeric operations (`+`, `-`, `*`, `/`, `%`, `>`, `<`, `==`)
+        val binaryMatch = Regex("""^\s*(-?\d+(?:\.\d+)?)\s*(\+|\-|\*|/|%|==|!=|>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)\s*$""")
+            .find(substituted)
+        if (binaryMatch != null) {
+            val left = binaryMatch.groupValues[1].toDoubleOrNull()
+            val op = binaryMatch.groupValues[2]
+            val right = binaryMatch.groupValues[3].toDoubleOrNull()
+            if (left != null && right != null) {
+                val isIntegerMath = !binaryMatch.groupValues[1].contains(".") && !binaryMatch.groupValues[3].contains(".")
+                return when (op) {
+                    "+" -> if (isIntegerMath) (left.toLong() + right.toLong()).toString() else (left + right).toString()
+                    "-" -> if (isIntegerMath) (left.toLong() - right.toLong()).toString() else (left - right).toString()
+                    "*" -> if (isIntegerMath) (left.toLong() * right.toLong()).toString() else (left * right).toString()
+                    "/" -> if (right == 0.0) "ArithmeticException: / by zero" else if (isIntegerMath) (left.toLong() / right.toLong()).toString() else (left / right).toString()
+                    "%" -> if (right == 0.0) "NaN" else (left.toLong() % right.toLong()).toString()
+                    "==" -> (left == right).toString()
+                    "!=" -> (left != right).toString()
+                    ">" -> (left > right).toString()
+                    "<" -> (left < right).toString()
+                    ">=" -> (left >= right).toString()
+                    "<=" -> (left <= right).toString()
+                    else -> substituted
+                }
+            }
+        }
+
+        return if (substituted != expr) substituted else "unresolved: $expr"
+    }
+
+    // =========================================================================
+    // MULTI-LANGUAGE CODE FORMATTER, LINE COMMENTS & LIVE TEMPLATES
+    // =========================================================================
+
+    /**
+     * Formats source code according to the target language's indentation rules.
+     * Prevents applying brace-based Kotlin formatting to Python indentation blocks.
+     */
+    fun formatCodeForLanguage(code: String, language: LanguageType): String {
+        if (code.isBlank()) return code
+        if (language == LanguageType.KOTLIN) {
+            return KotlinCodeEngine.formatKotlinCode(code)
+        }
+        if (language == LanguageType.PYTHON) {
+            val rawLines = code.replace("\t", "    ").lines()
+            val formatted = mutableListOf<String>()
+            var indentLevel = 0
+            for (raw in rawLines) {
+                val trimmed = raw.trim()
+                if (trimmed.isEmpty()) {
+                    formatted.add("")
+                    continue
+                }
+                if (trimmed.startsWith("elif ") || trimmed.startsWith("else:") ||
+                    trimmed.startsWith("except") || trimmed.startsWith("finally:")
+                ) {
+                    indentLevel = (indentLevel - 1).coerceAtLeast(0)
+                }
+                val existingSpaces = raw.takeWhile { it == ' ' }.length
+                // Respect user dedent if they explicitly unindented to top-level
+                if (existingSpaces == 0 && !trimmed.startsWith("elif ") &&
+                    !trimmed.startsWith("else:") && !trimmed.startsWith("except") &&
+                    !trimmed.startsWith("finally:") && formatted.lastOrNull()?.isBlank() == true
+                ) {
+                    indentLevel = 0
+                }
+                val indent = "    ".repeat(indentLevel)
+                formatted.add("$indent$trimmed")
+                when {
+                    trimmed.endsWith(":") -> indentLevel++
+                    trimmed == "return" || trimmed.startsWith("return ") ||
+                        trimmed == "pass" || trimmed == "break" || trimmed == "continue" ||
+                        trimmed.startsWith("raise ") -> {
+                        indentLevel = (indentLevel - 1).coerceAtLeast(0)
+                    }
+                }
+            }
+            return formatted.joinToString("\n").trimEnd()
+        }
+
+        // Brace-delimited formatting for Java, C++, Dart, and Rust
+        val indentUnit = if (language == LanguageType.DART) "  " else "    "
+        var indentLevel = 0
+        val out = mutableListOf<String>()
+        for (rawLine in code.lines()) {
+            val trimmed = rawLine.trim()
+            if (trimmed.isEmpty()) {
+                out.add("")
+                continue
+            }
+            val leadingCloses = trimmed.takeWhile { it == '}' || it == ')' || it == ']' }.length
+            val effectiveIndent = (indentLevel - leadingCloses).coerceAtLeast(0)
+            out.add(indentUnit.repeat(effectiveIndent) + trimmed)
+            val netBraces = trimmed.count { it == '{' } - trimmed.count { it == '}' }
+            indentLevel = (indentLevel + netBraces).coerceAtLeast(0)
+        }
+        return out.joinToString("\n").trimEnd()
+    }
+
+    /**
+     * Toggles line comment at the current cursor line using `# ` for Python and `// ` for C-style languages.
+     */
+    fun toggleLineCommentForLanguage(value: TextFieldValue, language: LanguageType): TextFieldValue {
+        if (language != LanguageType.PYTHON) {
+            return KotlinCodeEngine.toggleLineCommentAtCursor(value)
+        }
+        val text = value.text
+        val cursor = value.selection.start.coerceIn(0, text.length)
+        val lineStart = text.lastIndexOf('\n', (cursor - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+        val lineEnd = text.indexOf('\n', cursor).let { if (it < 0) text.length else it }
+        val line = text.substring(lineStart, lineEnd)
+        val leadingSpaces = line.takeWhile { it == ' ' || it == '\t' }
+        val content = line.substring(leadingSpaces.length)
+
+        val newLine: String
+        val cursorDelta: Int
+        if (content.startsWith("# ")) {
+            newLine = leadingSpaces + content.removePrefix("# ")
+            cursorDelta = -2
+        } else if (content.startsWith("#")) {
+            newLine = leadingSpaces + content.removePrefix("#")
+            cursorDelta = -1
+        } else {
+            newLine = "$leadingSpaces# $content"
+            cursorDelta = 2
+        }
+        val updated = text.substring(0, lineStart) + newLine + text.substring(lineEnd)
+        val newCursor = (cursor + cursorDelta).coerceIn(lineStart, lineStart + newLine.length)
+        return TextFieldValue(text = updated, selection = TextRange(newCursor))
+    }
+
+    /**
+     * Language-specific live templates for the editor's `⌘/` Live Templates bar.
+     */
+    fun getLiveTemplatesForLanguage(language: LanguageType): List<KotlinLiveTemplate> = when (language) {
+        LanguageType.KOTLIN -> KotlinCodeEngine.LIVE_TEMPLATES
+        LanguageType.JAVA -> listOf(
+            KotlinLiveTemplate("java_psvm", "psvm", "main()", "public static void main(String[] args) {\n    |\n}"),
+            KotlinLiveTemplate("java_sout", "sout", "println", "System.out.println(\"|\");"),
+            KotlinLiveTemplate("java_fori", "fori", "for loop", "for (int i = 0; i < n; i++) {\n    |\n}"),
+            KotlinLiveTemplate("java_tryc", "tryc", "try/catch", "try {\n    |\n} catch (Exception e) {\n    e.printStackTrace();\n}"),
+            KotlinLiveTemplate("java_cls", "cls", "class", "public class | {\n    \n}")
+        )
+        LanguageType.PYTHON -> listOf(
+            KotlinLiveTemplate("py_def", "def", "def fn", "def |(args):\n    pass"),
+            KotlinLiveTemplate("py_main", "main", "__main__", "if __name__ == '__main__':\n    |"),
+            KotlinLiveTemplate("py_for", "for", "for in", "for item in |:\n    print(item)"),
+            KotlinLiveTemplate("py_comp", "comp", "list comp", "[x for x in |]"),
+            KotlinLiveTemplate("py_try", "try", "try/except", "try:\n    |\nexcept Exception as e:\n    print(e)")
+        )
+        LanguageType.CPP -> listOf(
+            KotlinLiveTemplate("cpp_main", "main", "int main", "#include <iostream>\n\nint main() {\n    |\n    return 0;\n}"),
+            KotlinLiveTemplate("cpp_cout", "cout", "std::cout", "std::cout << \"|\" << std::endl;"),
+            KotlinLiveTemplate("cpp_for", "for", "for loop", "for (int i = 0; i < n; ++i) {\n    |\n}"),
+            KotlinLiveTemplate("cpp_vec", "vec", "vector", "std::vector<int> items = {|};"),
+            KotlinLiveTemplate("cpp_cls", "cls", "class", "class | {\npublic:\n    \n};")
+        )
+        LanguageType.DART -> listOf(
+            KotlinLiveTemplate("dart_main", "main", "void main", "void main() {\n  |\n}"),
+            KotlinLiveTemplate("dart_pr", "pr", "print()", "print('|');"),
+            KotlinLiveTemplate("dart_async", "async", "Future", "Future<void> |() async {\n  \n}"),
+            KotlinLiveTemplate("dart_for", "for", "for in", "for (final item in |) {\n  print(item);\n}"),
+            KotlinLiveTemplate("dart_cls", "cls", "class", "class | {\n  const ();\n}")
+        )
+        LanguageType.RUST -> listOf(
+            KotlinLiveTemplate("rs_main", "main", "fn main", "fn main() {\n    println!(\"|\");\n}"),
+            KotlinLiveTemplate("rs_fn", "fn", "fn def", "fn |() {\n    \n}"),
+            KotlinLiveTemplate("rs_match", "match", "match", "match | {\n    _ => (),\n}"),
+            KotlinLiveTemplate("rs_struct", "struct", "struct", "#[derive(Debug, Clone)]\nstruct | {\n    \n}"),
+            KotlinLiveTemplate("rs_for", "for", "for in", "for item in | {\n    println!(\"{:?}\", item);\n}")
+        )
     }
 }

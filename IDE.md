@@ -79,3 +79,38 @@
 - **Decluttered CodeAssist + iOS Glass Workspace**: Consolidated redundant headers into a single CodeAssist Top Bar, Slim Left Activity Rail, Collapsible `Files` Project Tree (`app/src/main/<lang>`), Editor File Tab Bar (`K Main.kt • ×`), Breadcrumb Bar (`app > example > myapp > Main.kt`), and "No file open" Zero-State Screen.
 - **Real-Time Caret & Keyboard Auto-Scroll**: Updated `KotlinCodeSectionCard.kt` so `bringActiveCodeLineIntoView` runs on every character typed, cursor change, and soft-keyboard (`IME`) height change using `TextLayoutResult.getCursorRect()`.
 - **SDK & Plugin Toolchain Manager + iOS Grouped Settings**: Added downloadable language SDKs & debuggers (Kotlin, Java, Python, C++, Dart, Rust) and IDE extensions in `ShortcutAndSettingsDialog.kt` and the workspace `Plugins` panel, and restructured both Main Studio Settings and File Settings into categorized iOS-style grouped cards.
+
+
+---
+
+## 10. CodeAssist Deep IDE & Debugger Integration + Rounded UI Redesign
+
+- **Interactive Gutter Breakpoints & Expression Watch Debugger (`KotlinCodeSectionCard.kt`, `IdeBottomDrawer.kt`, `CodeLanguageEngine.kt`)**:
+  - Clickable line-number gutter (`gutter_line_${orderIndex}_$lineNum`) toggles red **Breakpoint dots (`●`)** with crimson active-line tinting while strictly preserving 1:1 `TextLayoutResult` vertical synchronization.
+  - Debugger drawer supports **Resume to Next Breakpoint**, **Step Over (`F8`)**, **Step Into (`F7`)**, **Reset**, active breakpoint pill chips, and an **Interactive Expression Watch Evaluator (`+ Watch`)** that evaluates arithmetic, boolean comparisons, and string/collection properties (`.length`, `.size`, `.uppercase()`, `.lowercase()`) against live stack variables.
+- **Auto-Import Quick Fixes & Optimize Imports (`CodeLanguageEngine.kt`, `KotlinCodeSectionCard.kt`, `IdeBottomDrawer.kt`)**:
+  - Detects unresolved standard library & Android/JDK/Python/C++/Dart/Rust symbols (`UUID`, `LocalDate`, `File`, `AtomicInteger`, `Dispatchers`, `Flow`, `Json`, `ArrayList`, `HashMap`, `Scanner`, `Math`, etc.) and surfaces 1-tap **`+ Import <package>`** pills inline on the error line and in the `Problems` drawer.
+  - **Optimize Imports (`optimize_imports_button_${orderIndex}`)** deduplicates, alphabetically sorts, and removes unused `import`, `#include`, and `use` statements.
+- **Code Folding & Go-to-Definition Symbol Navigation (`KotlinCodeSectionCard.kt`, `DocumentEditorScreen.kt`)**:
+  - Detects multi-line classes, functions, control blocks, and import blocks across all 6 languages with gutter fold chevrons (`▾`/`▸`) and expandable folded-region pills.
+  - Indexes all project symbols (`extractSymbolsForSection` & `findDefinitionAtCursor`) for 1-tap **`⌘B Go to Def`** jumping across files and inside the `Structure` side panel.
+- **CodeAssist Rounded Project Home & Spring-Physics Navigation (`DocumentListScreen.kt`, `MainActivity.kt`)**:
+  - Redesigned Project Home with warm Darcula-Trench pill-rounded cards (`22.dp`), live SDK Toolchain readiness bar (`X/6 SDKs Ready`), 1-tap Quick Start Language Templates, a New Project Template Wizard modal, and spring-physics screen transitions (`AnimatedContent`).
+
+---
+
+## 11. Zero-Server On-Device AST Engine, Interactive `stdin` Pipe, Line Jumping & Local Snapshots
+
+- **100% On-Device Zero-Server AST Engine (`AiSectionNamingService.kt`)**:
+  - Enabled instant local AST execution (`preferOfflineLocalEngine = true`, `<5ms` latency, `$0` server cost) for Smart File Naming, 3-Part Deep-Dive Explanations, Idiomatic Refactor & Auto-Fix, and Documentation Generation across all 6 languages (**PEP-257 `"""` docstrings** for Python, **`///` Rustdoc/Dartdoc** for Rust/Dart, and **`/** ... */` KDoc/Javadoc/Doxygen** for Kotlin/Java/C++).
+- **End-to-End Line Jumping Across All IDE Panels (`DocumentEditorScreen.kt`, `KotlinCodeSectionCard.kt`, `EditorViewModel.kt`)**:
+  - Fixed the previously unwired `onJumpToLine` callback in `IdeBottomDrawer`. Clicking a diagnostic in `Problems`, stepping through `Step Over`/`Step Into`/`Resume` in `Debugger`, clicking a symbol in `Structure` or `⌘B Go to Def`, or clicking a search match in `Find in Files` now moves the editor caret to the exact 1-based line, unfolds any collapsed region containing that line, focuses the editor, and smoothly scrolls the line into view.
+- **Full Multi-Language Formatter, Comment Toggle & Live Templates (`CodeLanguageEngine.kt`, `KotlinCodeSectionCard.kt`)**:
+  - Added `formatCodeForLanguage` (Python 4-space colon-block indentation, Dart 2-space brace indentation, and Java/C++/Rust/Kotlin 4-space brace indentation).
+  - Added `toggleLineCommentForLanguage` (`# ` for Python, `// ` for C-style languages) and `getLiveTemplatesForLanguage` with native snippets for all 6 languages.
+  - Fixed Markdown export (`exportActiveDocumentAsMarkdown`) to use the section's real language fence (```` ```${sec.language.id} ````) and Floating/Split `RUN_OUTPUT` windows to execute with the active language engine instead of hardcoded Kotlin.
+- **Interactive Terminal `stdin` Input Pipe & Variable Interpolation (`IdeBottomDrawer.kt`, `CodeLanguageEngine.kt`)**:
+  - Added a live **`stdin >` Console Input Bar** inside the Terminal drawer that feeds user input into `readln()`, `Scanner`, `input()`, `std::cin >>`, and `stdin.readLineSync()` with full variable interpolation across `println`, `print`, `System.out.println`, and `std::cout`.
+- **On-Device Local Version History & 1-Tap Rollback (`KotlinCodeSectionCard.kt`, `EditorViewModel.kt`)**:
+  - Added a **`⏱ History` pill** in the editor breadcrumb bar and a collapsible **Local Snapshots** drawer for manual checkpoints (`+ Save Snapshot`), automatic pre-refactor/pre-docstring checkpoints, and 1-tap rollback.
+

@@ -672,20 +672,46 @@ data class CodeSectionUiModel(
                     "Collection Pipeline"
                 trimmed.contains("when (") || trimmed.contains("when(") ->
                     "Pattern Matching (when)"
+                trimmed.contains("match ") && trimmed.contains("=>") ->
+                    "Rust Pattern Matching"
                 trimmed.contains("try {") && trimmed.contains("catch") ->
                     "Exception Handling"
-                trimmed.contains("Color(0x") || trimmed.contains("#") ->
+                trimmed.contains("try:") && trimmed.contains("except") ->
+                    "Python Exception Block"
+                trimmed.contains("Color(0x") || (trimmed.contains("#") && !trimmed.startsWith("#include")) ->
                     "Color Literal Styling"
+                trimmed.contains("public static void main") ->
+                    "Java Main Entry Point"
+                trimmed.contains("if __name__ ==") || trimmed.contains("def main(") ->
+                    "Python Script Entry"
+                trimmed.contains("#include <iostream>") || trimmed.contains("int main(") ->
+                    "C++ Native Entry Point"
+                trimmed.contains("fn main()") ->
+                    "Rust Binary Entry Point"
+                trimmed.contains("void main()") ->
+                    "Dart Main Entry Point"
                 trimmed.contains("fun main") ->
                     "Kotlin Entry Point"
+                trimmed.contains("def ") -> {
+                    val fnName = Regex("""\bdef\s+([A-Za-z_][A-Za-z0-9_]*)""")
+                        .find(trimmed)?.groupValues?.getOrNull(1)
+                    if (!fnName.isNullOrBlank()) "Python Def: $fnName()" else "Python Function"
+                }
+                trimmed.contains("fn ") -> {
+                    val fnName = Regex("""\bfn\s+([A-Za-z_][A-Za-z0-9_]*)""")
+                        .find(trimmed)?.groupValues?.getOrNull(1)
+                    if (!fnName.isNullOrBlank()) "Rust Fn: $fnName()" else "Rust Function"
+                }
                 trimmed.contains("fun ") -> {
                     val fnName = Regex("""\bfun\s+([A-Za-z_][A-Za-z0-9_]*)""")
                         .find(trimmed)?.groupValues?.getOrNull(1)
                     if (!fnName.isNullOrBlank()) "Function: $fnName()" else "Kotlin Function"
                 }
+                trimmed.contains("struct ") ->
+                    "Struct Definition"
                 trimmed.contains("class ") ->
                     "Class Architecture"
-                trimmed.contains("val ") || trimmed.contains("var ") ->
+                trimmed.contains("val ") || trimmed.contains("var ") || trimmed.contains("let ") ->
                     "Property & Type Inference"
                 sectionTitle.isNotBlank() && !sectionTitle.startsWith("Section ") ->
                     sectionTitle.take(24)
@@ -707,6 +733,18 @@ data class CodeSectionUiModel(
         }
     }
 }
+
+/**
+ * Local on-device code snapshot for instant zero-server version history and rollback.
+ */
+data class LocalCodeSnapshot(
+    val id: Long,
+    val sectionId: Long,
+    val label: String,
+    val codeContent: String,
+    val timestampMs: Long,
+    val lineCount: Int = codeContent.lines().size.coerceAtLeast(1)
+)
 
 data class DocumentSummaryUiModel(
     val id: Long,

@@ -1,6 +1,0 @@
-{
-  "summary":  "Comprehensive redesign and functional overhaul plan for KtScribe IDE combining the CodeAssist IDE layout with iOS glassmorphism, bottom-anchored Build/Terminal/Debugger drawer, real-time caret auto-scrolling, an SDK & Plugin Toolchain Manager, and categorized iOS-style grouped Settings.",
-  "updatedAt":  "2026-11-10T16:09:42.499750763Z",
-  "requestFeedback":  true,
-  "userFacing":  true
-}
