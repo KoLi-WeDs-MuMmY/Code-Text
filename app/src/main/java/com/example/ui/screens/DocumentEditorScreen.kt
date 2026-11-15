@@ -5,10 +5,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
@@ -16,7 +14,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -39,30 +36,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.VerticalSplit
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -70,33 +60,36 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -113,6 +106,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.code.CodeLanguageEngine
 import com.example.code.DiagnosticSeverity
+import com.example.learning.LearningTrack
+import com.example.learning.StudentCurriculumCatalog
 import com.example.model.ActiveEditorTarget
 import com.example.model.BottomDrawerTab
 import com.example.model.CodeSectionUiModel
@@ -126,9 +121,11 @@ import com.example.model.LanguageType
 import com.example.model.LeftActivityTab
 import com.example.model.LocalCodeSnapshot
 import com.example.model.SplitScreenOrientation
-import com.example.model.TextAlignmentChoice
-import com.example.model.ToolchainPluginItem
-import com.example.codeassist.AndroidProjectToolkit
+import com.example.ui.components.ActiveLessonBannerCard
+import com.example.ui.components.CodeAssistBottomSheetPeekBar
+import com.example.ui.components.CodeAssistDrawerContent
+import com.example.ui.components.CodeAssistOpenFileTabs
+import com.example.ui.components.CodeAssistThemeQuickPickerDialog
 import com.example.ui.components.CommandPaletteDropdownContent
 import com.example.ui.components.ExplanationWindowBodyContent
 import com.example.ui.components.FileSettingsDialog
@@ -139,14 +136,15 @@ import com.example.ui.components.LeftRailIdeTool
 import com.example.ui.components.MacDraggableFloatingWindow
 import com.example.ui.components.RecentFilesModalDialog
 import com.example.ui.components.ResizableIslandDropdownWindow
-import com.example.ui.components.ToolchainPluginRowItem
 import com.example.ui.components.exportOrCopyCodePayload
+import com.example.ui.theme.AppThemeId
+import com.example.ui.theme.CodeAssistAppTheme
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.LocalAdaptiveThemeSpec
-import com.example.ui.theme.ScreenRatioTier
 import com.example.ui.theme.Tier2CompletionSelectedBg
 import com.example.ui.theme.Tier3FloatingWindowActiveBevel
 import com.example.viewmodel.EditorUiState
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -185,7 +183,7 @@ fun DocumentEditorScreen(
     onToggleItalic: () -> Unit,
     onToggleUnderline: () -> Unit,
     onToggleStrikethrough: () -> Unit,
-    onAlignmentChange: (TextAlignmentChoice) -> Unit,
+    onAlignmentChange: (com.example.model.TextAlignmentChoice) -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onCycleThemeMode: () -> Unit,
@@ -206,7 +204,7 @@ fun DocumentEditorScreen(
     onRunActiveSectionInTerminal: () -> Unit = {},
     onOpenVaultModal: () -> Unit = {},
     onUpdateSectionLanguage: (Long, LanguageType) -> Unit = { _, _ -> },
-    onUpdateSectionThemeOverride: (Long, com.example.ui.theme.AppThemeId?) -> Unit = { _, _ -> },
+    onUpdateSectionThemeOverride: (Long, AppThemeId?) -> Unit = { _, _ -> },
     onInsertLanguageCodeBlock: (LanguageType) -> Unit = {},
     onToggleBottomDrawer: (BottomDrawerTab) -> Unit = {},
     onCloseBottomDrawer: () -> Unit = {},
@@ -237,7 +235,7 @@ fun DocumentEditorScreen(
     onRunAndGradeLesson: () -> Unit = {},
     onLoadLessonSolution: () -> Unit = {},
     onCloseLessonMode: () -> Unit = {},
-    onOpenQuiz: (com.example.learning.LearningTrack?) -> Unit = {},
+    onOpenQuiz: (LearningTrack?) -> Unit = {},
     onToggleGuidedBeginnerMode: () -> Unit = {},
     onToggleRecentFilesDialog: (Boolean?) -> Unit = {},
     onExecuteShellCommand: (String) -> Unit = {},
@@ -246,6 +244,8 @@ fun DocumentEditorScreen(
     onSwitchGitBranch: (String) -> Unit = {},
     onAddManifestPermission: (String) -> Unit = {},
     onCreateStarterFile: (String, String) -> Unit = { _, _ -> },
+    onSelectCodeAssistAppTheme: (CodeAssistAppTheme) -> Unit = {},
+    onSelectEditorScheme: (AppThemeId) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -253,15 +253,15 @@ fun DocumentEditorScreen(
     val clipboardManager = LocalClipboardManager.current
     val density = LocalDensity.current
     val adaptive = LocalAdaptiveThemeSpec.current
-    var activeLeftRailTool by remember { mutableStateOf(LeftRailIdeTool.NONE) }
-    var showFileSettingsDialog by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
-    // On narrow portrait phones, collapse the initial inline Files tree so the code editor gets 100% width
-    LaunchedEffect(Unit) {
-        if (!adaptive.useNavigationRail && uiState.activeLeftActivityTab == LeftActivityTab.FILES) {
-            onToggleLeftActivityTab(LeftActivityTab.FILES)
-        }
-    }
+    var showFileSettingsDialog by remember { mutableStateOf(false) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
+    var showThemeQuickPicker by remember { mutableStateOf(false) }
+    var expandActiveLessonCard by remember { mutableStateOf(false) }
+    var cursorLine by remember { mutableIntStateOf(1) }
+    var cursorColumn by remember { mutableIntStateOf(1) }
 
     val openTabSections = remember(document.sections, uiState.closedTabSectionIds) {
         document.sections.filter { it.id !in uiState.closedTabSectionIds }
@@ -294,6 +294,9 @@ fun DocumentEditorScreen(
     val syntaxErrors = remember(allDiagnostics) {
         allDiagnostics.filter { it.severity == DiagnosticSeverity.ERROR }
     }
+    val warningCount = remember(allDiagnostics) {
+        allDiagnostics.count { it.severity == DiagnosticSeverity.WARNING }
+    }
 
     val effectiveSplitWindow: FloatingWindowType? = uiState.dockedSplitWindow
         ?: if (uiState.explanationWindowMode == ExplanationWindowMode.SPLIT_SCREEN) {
@@ -303,7 +306,9 @@ fun DocumentEditorScreen(
         }
 
     BackHandler {
-        if (uiState.showRecentFilesDialog) {
+        if (drawerState.isOpen) {
+            coroutineScope.launch { drawerState.close() }
+        } else if (uiState.showRecentFilesDialog) {
             onToggleRecentFilesDialog(false)
         } else if (uiState.extensionRenameWarningDialog != null) {
             onDismissExtensionRenameWarning()
@@ -315,10 +320,6 @@ fun DocumentEditorScreen(
             onCloseFloatingWindow(uiState.openFloatingWindows.last())
         } else if (effectiveSplitWindow != null) {
             onCloseSplitScreenWindow()
-        } else if (uiState.activeLeftActivityTab != LeftActivityTab.NONE) {
-            onToggleLeftActivityTab(uiState.activeLeftActivityTab)
-        } else if (activeLeftRailTool != LeftRailIdeTool.NONE) {
-            activeLeftRailTool = LeftRailIdeTool.NONE
         } else {
             focusManager.clearFocus()
             onCloseDocument()
@@ -327,281 +328,424 @@ fun DocumentEditorScreen(
 
     val expectedAndroidKeyCode = AndroidKeyEvent.KEYCODE_A + (uiState.shortcutLetter - 'A')
 
-    Scaffold(
-        contentWindowInsets = WindowInsets.systemBars,
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                tonalElevation = 4.dp,
-                shadowElevation = adaptive.cardElevation,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = true,
+        drawerContent = {
+            CodeAssistDrawerContent(
+                document = document,
+                activeSectionId = activeSection?.id,
+                activeGitBranch = uiState.activeGitBranch,
+                hasUnsavedChanges = uiState.hasUnsavedChanges,
+                onSelectFile = { sec -> onJumpToSectionConcept(sec.id) },
+                onNewFileLanguage = { lang -> onInsertLanguageCodeBlock(lang) },
+                onCreateStarterFile = onCreateStarterFile,
+                onDeleteFile = onDeleteSection,
+                onCloseDrawer = { coroutineScope.launch { drawerState.close() } }
+            )
+        }
+    ) {
+        Scaffold(
+            contentWindowInsets = WindowInsets.systemBars,
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     // =========================================================================
-                    // 1. ADAPTIVE M3 TOP WORKSPACE BAR
+                    // 1. 1:1 CODEASSIST SINGLE-ROW TOP APP BAR (Drawer Menu, Title, Undo/Redo, Save, Run, Overflow)
                     // =========================================================================
-                    CodeAssistTopWorkspaceBar(
-                        activeFolder = document,
-                        activeSection = activeSection,
-                        activeLeftActivityTab = uiState.activeLeftActivityTab,
-                        openFloatingWindows = uiState.openFloatingWindows,
-                        activeDropdown = uiState.activeIslandDropdown,
-                        isBottomDrawerOpen = uiState.isBottomDrawerOpen,
-                        syntaxErrorCount = syntaxErrors.size,
-                        hasUnsavedChanges = uiState.hasUnsavedChanges,
-                        secondsUntilAutoSave = uiState.secondsUntilAutoSave,
-                        canUndo = uiState.canUndo,
-                        canRedo = uiState.canRedo,
-                        onBackToFolders = onCloseDocument,
-                        onToggleFilesSidebar = { onToggleLeftActivityTab(LeftActivityTab.FILES) },
-                        onSaveNow = onSaveNow,
-                        onUndo = onUndo,
-                        onRedo = onRedo,
-                        onRunCode = onRunActiveSectionInTerminal,
-                        onToggleFloatingWindow = onToggleFloatingWindow,
-                        onToggleTerminalDrawer = {
-                            onToggleBottomDrawer(uiState.activeBottomDrawerTab)
-                        },
-                        onOpenDrawerTab = { tab ->
-                            onSetBottomDrawerTab(tab)
-                            if (!uiState.isBottomDrawerOpen) {
-                                onToggleBottomDrawer(tab)
+                    TopAppBar(
+                        navigationIcon = {
+                            IconButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        if (drawerState.isOpen) drawerState.close() else drawerState.open()
+                                    }
+                                },
+                                modifier = Modifier.testTag("toggle_files_sidebar_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Menu,
+                                    contentDescription = "Open Project File Tree"
+                                )
                             }
                         },
-                        onCompileAstBytecode = { onCompileActiveSection(true) },
-                        onToggleCommandPalette = {
-                            onToggleIslandDropdown(IslandDropdownMenu.COMMAND_PALETTE)
-                        },
-                        onOpenVaultModal = onOpenVaultModal,
-                        onOpenFileSettings = {
-                            if (activeSection != null) {
-                                showFileSettingsDialog = true
-                            } else {
-                                onOpenSettings()
+                        title = {
+                            Column {
+                                Text(
+                                    text = document.title.ifBlank { "Untitled Project" },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = buildString {
+                                        append(activeSection?.nativeFileName ?: "${document.sections.size} files")
+                                        append(" • ")
+                                        append(
+                                            if (uiState.hasUnsavedChanges) {
+                                                "Sync ${uiState.secondsUntilAutoSave}s"
+                                            } else {
+                                                "Saved"
+                                            }
+                                        )
+                                    },
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.5.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = if (uiState.hasUnsavedChanges) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.testTag("autosave_status_pill")
+                                )
                             }
                         },
-                        onOpenStudioSettings = onOpenSettings,
-                        isGuidedBeginnerMode = uiState.isGuidedBeginnerMode,
-                        onToggleGuidedBeginnerMode = onToggleGuidedBeginnerMode,
-                        onOpenRecentFiles = { onToggleRecentFilesDialog(true) }
+                        actions = {
+                            if (!adaptive.useCompactTopActions) {
+                                IconButton(
+                                    onClick = onUndo,
+                                    enabled = uiState.canUndo,
+                                    modifier = Modifier.testTag("undo_top_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Undo,
+                                        contentDescription = "Undo"
+                                    )
+                                }
+                                IconButton(
+                                    onClick = onRedo,
+                                    enabled = uiState.canRedo,
+                                    modifier = Modifier.testTag("redo_top_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Redo,
+                                        contentDescription = "Redo"
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = onSaveNow,
+                                modifier = Modifier.testTag("save_now_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Save,
+                                    contentDescription = "Save Project",
+                                    tint = if (uiState.hasUnsavedChanges) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+
+                            FilledTonalIconButton(
+                                onClick = onRunActiveSectionInTerminal,
+                                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                modifier = Modifier.testTag("island_run_code_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Run & Build"
+                                )
+                            }
+
+                            Box {
+                                IconButton(
+                                    onClick = { showOverflowMenu = true },
+                                    modifier = Modifier.testTag("editor_topbar_overflow_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreVert,
+                                        contentDescription = "Workspace Menu"
+                                    )
+                                }
+
+                                DropdownMenu(
+                                    expanded = showOverflowMenu,
+                                    onDismissRequest = { showOverflowMenu = false }
+                                ) {
+                                    if (adaptive.useCompactTopActions) {
+                                        DropdownMenuItem(
+                                            text = { Text("Undo") },
+                                            enabled = uiState.canUndo,
+                                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null) },
+                                            onClick = { showOverflowMenu = false; onUndo() },
+                                            modifier = Modifier.testTag("undo_top_button")
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Redo") },
+                                            enabled = uiState.canRedo,
+                                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = null) },
+                                            onClick = { showOverflowMenu = false; onRedo() },
+                                            modifier = Modifier.testTag("redo_top_button")
+                                        )
+                                        HorizontalDivider()
+                                    }
+                                    DropdownMenuItem(
+                                        text = { Text("Recent Files (Ctrl+E)") },
+                                        onClick = { showOverflowMenu = false; onToggleRecentFilesDialog(true) }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Command Palette (⌘P)") },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            onToggleIslandDropdown(IslandDropdownMenu.COMMAND_PALETTE)
+                                        },
+                                        modifier = Modifier.testTag("island_command_palette_button")
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Layout & Compose UI Preview") },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            onSetBottomDrawerTab(BottomDrawerTab.UI_PREVIEW)
+                                            if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.UI_PREVIEW)
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Android Manifest & Resources") },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            onSetBottomDrawerTab(BottomDrawerTab.ANDROID_STUDIO)
+                                            if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.ANDROID_STUDIO)
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Memory & Stack Diagrams") },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            onCompileActiveSection(false)
+                                            onSetBottomDrawerTab(BottomDrawerTab.MEMORY_STACK)
+                                            if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.MEMORY_STACK)
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("AST & Bytecode Compiler") },
+                                        onClick = { showOverflowMenu = false; onCompileActiveSection(true) }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Optimize Imports") },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            activeSection?.let { onOptimizeSectionImports(it.id) }
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Format Active File") },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            activeSection?.let { onFormatSectionCode(it.id) }
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Explain & Notes Window") },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            onToggleFloatingWindow(FloatingWindowType.EXPLANATION)
+                                        },
+                                        modifier = Modifier.testTag("island_explanation_window_toggle")
+                                    )
+                                    HorizontalDivider()
+                                    DropdownMenuItem(
+                                        text = { Text("CodeAssist Themes & Schemes") },
+                                        leadingIcon = { Icon(Icons.Default.Palette, contentDescription = null) },
+                                        onClick = { showOverflowMenu = false; showThemeQuickPicker = true }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("File & Bundle Settings") },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            if (activeSection != null) showFileSettingsDialog = true else onOpenSettings()
+                                        },
+                                        modifier = Modifier.testTag("editor_shortcut_settings_button")
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Studio Settings") },
+                                        leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                                        onClick = { showOverflowMenu = false; onOpenSettings() }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Vault 'xyz' Recovery") },
+                                        onClick = { showOverflowMenu = false; onOpenVaultModal() },
+                                        modifier = Modifier.testTag("open_vault_modal_button")
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Close Project") },
+                                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null) },
+                                        onClick = { showOverflowMenu = false; onCloseDocument() },
+                                        modifier = Modifier.testTag("back_to_documents_button")
+                                    )
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
+                        )
                     )
 
-                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-
                     // =========================================================================
-                    // 2. FEEDBACK / NOTIFICATION TOAST BANNER (Animated when active)
+                    // 2. FEEDBACK / NOTIFICATION TOAST BANNER
                     // =========================================================================
                     AnimatedVisibility(
                         visible = uiState.aiStatusMessage != null || uiState.aiErrorBanner != null
                     ) {
-                    val isError = uiState.aiErrorBanner != null
-                    val bannerText = uiState.aiErrorBanner ?: uiState.aiStatusMessage.orEmpty()
-                    Surface(
-                        color = if (isError) Color(0xFF3B1A18) else Color(0xFF2B241E),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(0.5.dp, Color(0xFF5C4B3B))
-                            .testTag("ai_feedback_banner")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                        val isError = uiState.aiErrorBanner != null
+                        val bannerText = uiState.aiErrorBanner ?: uiState.aiStatusMessage.orEmpty()
+                        Surface(
+                            color = if (isError) {
+                                MaterialTheme.colorScheme.errorContainer
+                            } else {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 5.dp)
+                                .testTag("ai_feedback_banner")
                         ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = bannerText,
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 11.sp,
+                                    color = if (isError) {
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSecondaryContainer
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                IconButton(
+                                    onClick = onDismissBanner,
+                                    modifier = Modifier.size(22.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Dismiss Banner",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // =========================================================================
+                    // 3. 1:1 CODEASSIST OPEN-FILE SCROLLABLE TAB ROW
+                    // =========================================================================
+                    CodeAssistOpenFileTabs(
+                        openSections = openTabSections,
+                        activeSectionId = activeSection?.id,
+                        hasUnsavedChanges = uiState.hasUnsavedChanges,
+                        onSelectSection = { sec -> onJumpToSectionConcept(sec.id) },
+                        onCloseTab = onCloseEditorTab,
+                        onAddTab = onInsertCodeBlock
+                    )
+                    HorizontalDivider(thickness = 0.75.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            },
+            modifier = modifier
+                .fillMaxSize()
+                .onPreviewKeyEvent { keyEvent ->
+                    if (keyEvent.type == KeyEventType.KeyDown && keyEvent.isCtrlPressed) {
+                        when (keyEvent.nativeKeyEvent.keyCode) {
+                            expectedAndroidKeyCode -> {
+                                onInsertCodeBlock()
+                                true
+                            }
+                            AndroidKeyEvent.KEYCODE_E -> {
+                                onToggleRecentFilesDialog(null)
+                                true
+                            }
+                            else -> false
+                        }
+                    } else {
+                        false
+                    }
+                }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .imePadding()
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                // Optional compact 1-line lesson strip (keeps editor spacious; expands on tap)
+                val activeLesson = remember(uiState.activeLessonId) {
+                    StudentCurriculumCatalog.lessonById(uiState.activeLessonId)
+                }
+                if (activeLesson != null) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { expandActiveLessonCard = !expandActiveLessonCard }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.School,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.size(16.dp)
+                            )
                             Text(
-                                text = bannerText,
+                                text = "Lesson: ${activeLesson.title}",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 11.sp,
-                                color = if (isError) Color(0xFFF2B8B5) else Color(0xFFE6C39C),
-                                modifier = Modifier.weight(1f),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
                             )
-                            IconButton(
-                                onClick = onDismissBanner,
-                                modifier = Modifier.size(20.dp)
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = RoundedCornerShape(999.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .clickable(onClick = onRunAndGradeLesson)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Dismiss Banner",
-                                    tint = Color(0xFFA39C93),
-                                    modifier = Modifier.size(13.dp)
+                                Text(
+                                    text = "Check ▶",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                                 )
                             }
-                        }
-                    }
-                }
-            }
-            }
-        },
-        modifier = modifier
-            .fillMaxSize()
-            .onPreviewKeyEvent { keyEvent ->
-                if (keyEvent.type == KeyEventType.KeyDown && keyEvent.isCtrlPressed) {
-                    when (keyEvent.nativeKeyEvent.keyCode) {
-                        expectedAndroidKeyCode -> {
-                            onInsertCodeBlock()
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_E -> {
-                            onToggleRecentFilesDialog(null)
-                            true
-                        }
-                        else -> false
-                    }
-                } else {
-                    false
-                }
-            }
-    ) { innerPadding ->
-        // Keyboard-Aware Full-Screen Workspace Container (`imePadding` resizes when soft keyboard opens)
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .imePadding()
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            val totalHeightPx = with(density) { maxHeight.toPx().coerceAtLeast(1f) }
-            val totalWidthPx = with(density) { maxWidth.toPx().coerceAtLeast(1f) }
-
-            // =========================================================================
-            // MAIN WORKSPACE ROW:
-            // 1. Slim CodeAssist Left Activity Bar (adaptive width)
-            // 2. Collapsible Left Side Panel (inline on Landscape/Tablet; M3 BottomSheet on Compact Portrait)
-            // 3. Editor Area (File Tab Bar + Active Code Editor OR "No file open" Zero-State)
-            // =========================================================================
-            Row(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                // 1. Slim Left Activity Bar
-                CodeAssistSlimLeftActivityBar(
-                    activeActivityTab = uiState.activeLeftActivityTab,
-                    activeLeftRailTool = activeLeftRailTool,
-                    syntaxErrorCount = syntaxErrors.size,
-                    isBottomDrawerOpen = uiState.isBottomDrawerOpen,
-                    onToggleActivityTab = onToggleLeftActivityTab,
-                    onToggleBottomDrawer = { onToggleBottomDrawer(BottomDrawerTab.TERMINAL) },
-                    onInsertNewFile = onInsertCodeBlock,
-                    onFormatCode = { activeSection?.let { onFormatSectionCode(it.id) } },
-                    onToggleDiagnosticsTool = {
-                        val firstFixable = allDiagnostics.firstOrNull { it.fixedCode != null }
-                        if (activeSection != null && firstFixable?.fixedCode != null) {
-                            onUpdateSectionCode(activeSection.id, firstFixable.fixedCode)
-                        } else {
-                            activeLeftRailTool = if (activeLeftRailTool == LeftRailIdeTool.DIAGNOSTICS) {
-                                LeftRailIdeTool.NONE
-                            } else {
-                                LeftRailIdeTool.DIAGNOSTICS
-                            }
-                        }
-                    },
-                    onExportOrCopyFile = {
-                        if (activeSection != null) {
-                            exportOrCopyCodePayload(
-                                context = context,
-                                clipboardManager = clipboardManager,
-                                fileName = activeSection.nativeFileName,
-                                content = activeSection.codeContent,
-                                launchShareSheet = true,
-                                onStatusBanner = onShowStatusToast
+                            Icon(
+                                imageVector = if (expandActiveLessonCard) {
+                                    Icons.Default.KeyboardArrowUp
+                                } else {
+                                    Icons.Default.KeyboardArrowDown
+                                },
+                                contentDescription = "Toggle Lesson Guide",
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
-                )
 
-                // 2. Inline Collapsible Side Panel (Landscape, Foldable, Tablet ONLY — never squeezes Compact Portrait!)
-                if (adaptive.useNavigationRail) {
-                    AnimatedVisibility(
-                        visible = uiState.activeLeftActivityTab != LeftActivityTab.NONE,
-                        enter = expandHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
-                        exit = shrinkHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMedium)) + fadeOut()
-                    ) {
-                        CodeAssistSidePanel(
-                            activeTab = uiState.activeLeftActivityTab,
-                            document = document,
-                            allFolders = allFolders,
-                            activeSection = activeSection,
-                            uiState = uiState,
-                            allProjectSymbols = allProjectSymbols,
-                            panelWidthDp = if (adaptive.tier == ScreenRatioTier.COMPACT_LANDSCAPE) 204 else 235,
-                            onSelectFileSection = onJumpToSectionConcept,
-                            onInsertNewFile = onInsertCodeBlock,
-                            onInsertLanguageFile = onInsertLanguageCodeBlock,
-                            onSelectFolder = onSelectFolder,
-                            onCreateNewFolder = onCreateNewFolder,
-                            onOpenFileSettings = { showFileSettingsDialog = true },
-                            onExportFile = { sec ->
-                                exportOrCopyCodePayload(
-                                    context = context,
-                                    clipboardManager = clipboardManager,
-                                    fileName = sec.nativeFileName,
-                                    content = sec.codeContent,
-                                    launchShareSheet = true,
-                                    onStatusBanner = onShowStatusToast
-                                )
-                            },
-                            onUpdateSectionExplanation = onUpdateSectionExplanation,
-                            onUpdateSectionConceptTag = onUpdateSectionConceptTag,
-                            onFontChoiceChange = onFontChoiceChange,
-                            onToggleBold = onToggleBold,
-                            onToggleItalic = onToggleItalic,
-                            onToggleUnderline = onToggleUnderline,
-                            onRequestAiExplain = onRequestAiExplain,
-                            onInstallOrTogglePlugin = onInstallOrTogglePlugin,
-                            onInstallAllSdks = onInstallAllSdks,
-                            onOptimizeActiveImports = { activeSection?.let { onOptimizeSectionImports(it.id) } },
-                            onFormatActiveCode = { activeSection?.let { onFormatSectionCode(it.id) } },
-                            onToggleBreakpoint = { line -> activeSection?.let { onToggleLineBreakpoint(it.id, line) } },
-                            onJumpToCodeLine = onJumpToCodeLine,
-                            onCreateStarterFile = onCreateStarterFile,
-                            onCollapsePanel = { onToggleLeftActivityTab(uiState.activeLeftActivityTab) }
-                        )
-                    }
-                }
-
-                // 3. Right Editor Column: Editor File Tab Bar + Main Code Canvas (or "No file open")
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                ) {
-                    // Multi-File Project Tab Bar (with reorder & + language switcher)
-                    CodeAssistEditorTabBar(
-                        allSections = document.sections,
-                        openSections = openTabSections,
-                        activeSection = activeSection,
-                        hasUnsavedChanges = uiState.hasUnsavedChanges,
-                        onSelectSection = onJumpToSectionConcept,
-                        onCloseSectionTab = onCloseEditorTab,
-                        onReorderTab = onReorderEditorTab,
-                        onNavigateFocusedSection = onNavigateFocusedSection,
-                        onInsertNewFile = onInsertCodeBlock,
-                        onInsertLanguageFile = onInsertLanguageCodeBlock,
-                        onOpenFileSettings = { showFileSettingsDialog = true },
-                        onExportActiveFile = {
-                            val payload = activeSection?.toKtScribeFilePayload(document.title)
-                                ?: onExportMarkdown()
-                            val fileName = activeSection?.containerFileName ?: "${document.title}.md"
-                            exportOrCopyCodePayload(
-                                context = context,
-                                clipboardManager = clipboardManager,
-                                fileName = fileName,
-                                content = payload,
-                                launchShareSheet = true,
-                                onStatusBanner = onShowStatusToast
-                            )
-                        }
-                    )
-
-                    val activeLesson = remember(uiState.activeLessonId) {
-                        com.example.learning.StudentCurriculumCatalog.lessonById(uiState.activeLessonId)
-                    }
-                    if (activeLesson != null) {
-                        com.example.ui.components.ActiveLessonBannerCard(
+                    AnimatedVisibility(visible = expandActiveLessonCard) {
+                        ActiveLessonBannerCard(
                             lesson = activeLesson,
                             gradeResult = uiState.lastAutoGradeResult,
                             isGuidedBeginnerMode = uiState.isGuidedBeginnerMode,
@@ -610,432 +754,365 @@ fun DocumentEditorScreen(
                             onOpenQuiz = { onOpenQuiz(activeLesson.track) },
                             onLoadSolution = onLoadLessonSolution,
                             onCloseLessonMode = onCloseLessonMode,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                         )
                     }
+                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                }
 
-                    // Main Code Canvas OR CodeAssist "No file open" Zero-State Screen
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .padding(start = 2.dp, end = 6.dp, top = 2.dp, bottom = 6.dp)
-                    ) {
-                        if (activeSection == null) {
-                            CodeAssistNoFileOpenZeroState(
-                                document = document,
-                                onSearchEverywhere = { onToggleIslandDropdown(IslandDropdownMenu.COMMAND_PALETTE) },
-                                onGoToFile = { onToggleLeftActivityTab(LeftActivityTab.FILES) },
-                                onRecentFiles = { onToggleRecentFilesDialog(true) },
-                                onFindInFiles = { onToggleLeftActivityTab(LeftActivityTab.SEARCH) },
-                                onNewFile = onInsertCodeBlock,
-                                onProjectFiles = { onToggleLeftActivityTab(LeftActivityTab.FILES) }
-                            )
-                        } else {
-                            val isCodeActive = (uiState.activeTarget as? ActiveEditorTarget.SectionCode)?.sectionId == activeSection.id
-                            val isExplanationActive = (uiState.activeTarget as? ActiveEditorTarget.SectionExplanation)?.sectionId == activeSection.id
+                // =========================================================================
+                // MAIN CODE EDITOR AREA (Unobstructed 100% Width)
+                // =========================================================================
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    val totalHeightPx = with(density) { maxHeight.toPx().coerceAtLeast(1f) }
+                    val totalWidthPx = with(density) { maxWidth.toPx().coerceAtLeast(1f) }
 
-                            if (effectiveSplitWindow != null) {
-                                // =========================================================================
-                                // ADJUSTABLE SPLIT SCREEN (Side-by-Side or Bottom Split)
-                                // =========================================================================
-                                if (uiState.splitScreenOrientation == SplitScreenOrientation.SIDE_BY_SIDE) {
-                                    Row(
+                    if (activeSection == null) {
+                        CodeAssistNoFileOpenZeroState(
+                            onSearchEverywhere = { onToggleIslandDropdown(IslandDropdownMenu.COMMAND_PALETTE) },
+                            onGoToFile = { coroutineScope.launch { drawerState.open() } },
+                            onRecentFiles = { onToggleRecentFilesDialog(true) },
+                            onNewFile = onInsertCodeBlock,
+                            onProjectFiles = { coroutineScope.launch { drawerState.open() } }
+                        )
+                    } else {
+                        val isCodeActive = (uiState.activeTarget as? ActiveEditorTarget.SectionCode)?.sectionId == activeSection.id
+                        val isExplanationActive = (uiState.activeTarget as? ActiveEditorTarget.SectionExplanation)?.sectionId == activeSection.id
+
+                        if (effectiveSplitWindow != null) {
+                            if (uiState.splitScreenOrientation == SplitScreenOrientation.SIDE_BY_SIDE) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .testTag("two_window_split_screen_container")
+                                ) {
+                                    Box(
                                         modifier = Modifier
-                                            .fillMaxSize()
-                                            .testTag("two_window_split_screen_container")
+                                            .weight(uiState.splitScreenRatio)
+                                            .fillMaxHeight()
                                     ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(uiState.splitScreenRatio)
-                                                .fillMaxHeight()
-                                        ) {
-                                            FullScreenAppleCmdSectionEditor(
-                                                section = activeSection,
-                                                isCodeActive = isCodeActive,
-                                                isExplanationActive = isExplanationActive,
-                                                activeLeftRailTool = activeLeftRailTool,
-                                                canUndo = uiState.canUndo,
-                                                requestAutoFocus = uiState.newlyInsertedSectionId == activeSection.id,
-                                                onAutoFocusConsumed = onClearNewSectionFocusFlag,
-                                                onSetActiveTarget = onSetActiveTarget,
-                                                onUpdateSectionCode = onUpdateSectionCode,
-                                                onUpdateSectionExplanation = onUpdateSectionExplanation,
-                                                onUpdateSectionTitle = onUpdateSectionTitle,
-                                                onUpdateSectionConceptTag = onUpdateSectionConceptTag,
-                                                onActiveCodeLineChanged = { _, _ -> },
-                                                onFormatSectionCode = onFormatSectionCode,
-                                                onUndo = onUndo,
-                                                onDeactivateLeftRailTool = {
-                                                    activeLeftRailTool = LeftRailIdeTool.NONE
-                                                },
-                                                onRequestAiNaming = onRequestAiNaming,
-                                                onRequestAiExplain = onRequestAiExplain,
-                                                onRequestAiRefactor = onRequestAiRefactor,
-                                                onRequestAiKDoc = onRequestAiKDoc,
-                                                onToggleSectionDivider = onToggleSectionDivider,
-                                                onDeleteSection = onDeleteSection,
-                                                onSelectLanguage = { lang -> onUpdateSectionLanguage(activeSection.id, lang) },
-                                                onSelectThemeOverride = { theme -> onUpdateSectionThemeOverride(activeSection.id, theme) },
-                                                onOpenFileSettings = { showFileSettingsDialog = true },
-                                                onRunCode = onRunActiveSectionInTerminal,
-                                                onExportOrCopyFile = { openShare ->
-                                                    exportOrCopyCodePayload(
-                                                        context = context,
-                                                        clipboardManager = clipboardManager,
-                                                        fileName = activeSection.nativeFileName,
-                                                        content = activeSection.codeContent,
-                                                        launchShareSheet = openShare,
-                                                        onStatusBanner = onShowStatusToast
-                                                    )
-                                                },
-                                                activeBreakpoints = uiState.breakpointsBySectionId[activeSection.id] ?: emptySet(),
-                                                onToggleBreakpoint = { line -> onToggleLineBreakpoint(activeSection.id, line) },
-                                                onOptimizeImports = { onOptimizeSectionImports(activeSection.id) },
-                                                projectSymbols = allProjectSymbols,
-                                                onNavigateToSymbolDefinition = { sym ->
-                                                    onJumpToSectionConcept(sym.sectionId)
-                                                    onJumpToCodeLine(sym.line)
-                                                },
-                                                requestedJumpLine = uiState.requestedJumpLine,
-                                                jumpLineTrigger = uiState.jumpLineTrigger,
-                                                localSnapshots = uiState.localSnapshotsBySectionId[activeSection.id].orEmpty(),
-                                                onCreateSnapshot = { onCreateLocalSnapshot(activeSection.id) },
-                                                onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) },
-                                                isGuidedBeginnerMode = uiState.isGuidedBeginnerMode
-                                            )
-                                        }
-
-                                        // Vertical Draggable Split Handle (Clamped between 25% and 75%)
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .width(22.dp)
-                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                                .pointerInput(totalWidthPx) {
-                                                    detectDragGestures { change, dragAmount ->
-                                                        change.consume()
-                                                        val deltaRatio = dragAmount.x / totalWidthPx
-                                                        onUpdateSplitRatio((uiState.splitScreenRatio + deltaRatio).coerceIn(0.25f, 0.75f))
-                                                    }
-                                                }
-                                                .testTag("split_screen_resize_handle"),
-                                            verticalArrangement = Arrangement.Center,
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Surface(
-                                                color = if (uiState.splitScreenRatio <= 0.35f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                                                shape = RoundedCornerShape(3.dp),
-                                                modifier = Modifier.clickable { onUpdateSplitRatio(0.30f) }
-                                            ) {
-                                                Text(
-                                                    text = "30",
-                                                    fontSize = 7.5.sp,
-                                                    fontFamily = JetBrainsMonoFontFamily,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (uiState.splitScreenRatio <= 0.35f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)
+                                        FullScreenAppleCmdSectionEditor(
+                                            section = activeSection,
+                                            isCodeActive = isCodeActive,
+                                            isExplanationActive = isExplanationActive,
+                                            activeLeftRailTool = LeftRailIdeTool.NONE,
+                                            canUndo = uiState.canUndo,
+                                            requestAutoFocus = uiState.newlyInsertedSectionId == activeSection.id,
+                                            onAutoFocusConsumed = onClearNewSectionFocusFlag,
+                                            onSetActiveTarget = onSetActiveTarget,
+                                            onUpdateSectionCode = onUpdateSectionCode,
+                                            onUpdateSectionExplanation = onUpdateSectionExplanation,
+                                            onUpdateSectionTitle = onUpdateSectionTitle,
+                                            onUpdateSectionConceptTag = onUpdateSectionConceptTag,
+                                            onActiveCodeLineChanged = { ln, col ->
+                                                cursorLine = ln
+                                                cursorColumn = col
+                                            },
+                                            onFormatSectionCode = onFormatSectionCode,
+                                            onUndo = onUndo,
+                                            onDeactivateLeftRailTool = {},
+                                            onRequestAiNaming = onRequestAiNaming,
+                                            onRequestAiExplain = onRequestAiExplain,
+                                            onRequestAiRefactor = onRequestAiRefactor,
+                                            onRequestAiKDoc = onRequestAiKDoc,
+                                            onToggleSectionDivider = onToggleSectionDivider,
+                                            onDeleteSection = onDeleteSection,
+                                            onSelectLanguage = { lang -> onUpdateSectionLanguage(activeSection.id, lang) },
+                                            onSelectThemeOverride = { theme -> onUpdateSectionThemeOverride(activeSection.id, theme) },
+                                            onOpenFileSettings = { showFileSettingsDialog = true },
+                                            onRunCode = onRunActiveSectionInTerminal,
+                                            onExportOrCopyFile = { openShare ->
+                                                exportOrCopyCodePayload(
+                                                    context = context,
+                                                    clipboardManager = clipboardManager,
+                                                    fileName = activeSection.nativeFileName,
+                                                    content = activeSection.codeContent,
+                                                    launchShareSheet = openShare,
+                                                    onStatusBanner = onShowStatusToast
                                                 )
-                                            }
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Box(
-                                                modifier = Modifier
-                                                    .width(4.dp)
-                                                    .height(44.dp)
-                                                    .clip(RoundedCornerShape(4.dp))
-                                                    .background(MaterialTheme.colorScheme.primary)
-                                            )
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Surface(
-                                                color = if (uiState.splitScreenRatio >= 0.65f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                                                shape = RoundedCornerShape(3.dp),
-                                                modifier = Modifier.clickable { onUpdateSplitRatio(0.70f) }
-                                            ) {
-                                                Text(
-                                                    text = "70",
-                                                    fontSize = 7.5.sp,
-                                                    fontFamily = JetBrainsMonoFontFamily,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (uiState.splitScreenRatio >= 0.65f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)
-                                                )
-                                            }
-                                        }
-
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(1f - uiState.splitScreenRatio)
-                                                .fillMaxHeight()
-                                        ) {
-                                            DockedSplitWindowContainer(
-                                                windowType = effectiveSplitWindow,
-                                                orientation = uiState.splitScreenOrientation,
-                                                splitRatio = uiState.splitScreenRatio,
-                                                activeFolder = document,
-                                                allFolders = allFolders,
-                                                activeSection = activeSection,
-                                                uiState = uiState,
-                                                onToggleOrientation = onToggleSplitScreenOrientation,
-                                                onUndockToFloating = onUndockSplitWindowToFloating,
-                                                onCloseSplit = onCloseSplitScreenWindow,
-                                                onFolderTitleChange = onTitleChange,
-                                                onSelectFolder = onSelectFolder,
-                                                onCreateNewFolder = onCreateNewFolder,
-                                                onCloseDocument = onCloseDocument,
-                                                onJumpToSectionConcept = onJumpToSectionConcept,
-                                                onInsertCodeBlock = onInsertCodeBlock,
-                                                onDeleteSection = onDeleteSection,
-                                                onUpdateSectionExplanation = onUpdateSectionExplanation,
-                                                onUpdateSectionConceptTag = onUpdateSectionConceptTag,
-                                                onFontChoiceChange = onFontChoiceChange,
-                                                onToggleBold = onToggleBold,
-                                                onToggleItalic = onToggleItalic,
-                                                onToggleUnderline = onToggleUnderline,
-                                                onRequestAiExplain = onRequestAiExplain,
-                                                onRequestAiRefactor = onRequestAiRefactor,
-                                                onRequestAiNaming = onRequestAiNaming,
-                                                onRequestAiKDoc = onRequestAiKDoc,
-                                                onRunActiveSectionInTerminal = onRunActiveSectionInTerminal,
-                                                onInsertLanguageCodeBlock = onInsertLanguageCodeBlock
-                                            )
-                                        }
+                                            },
+                                            activeBreakpoints = uiState.breakpointsBySectionId[activeSection.id] ?: emptySet(),
+                                            onToggleBreakpoint = { line -> onToggleLineBreakpoint(activeSection.id, line) },
+                                            onOptimizeImports = { onOptimizeSectionImports(activeSection.id) },
+                                            projectSymbols = allProjectSymbols,
+                                            onNavigateToSymbolDefinition = { sym ->
+                                                onJumpToSectionConcept(sym.sectionId)
+                                                onJumpToCodeLine(sym.line)
+                                            },
+                                            requestedJumpLine = uiState.requestedJumpLine,
+                                            jumpLineTrigger = uiState.jumpLineTrigger,
+                                            localSnapshots = uiState.localSnapshotsBySectionId[activeSection.id].orEmpty(),
+                                            onCreateSnapshot = { onCreateLocalSnapshot(activeSection.id) },
+                                            onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) },
+                                            isGuidedBeginnerMode = uiState.isGuidedBeginnerMode
+                                        )
                                     }
-                                } else {
+
                                     Column(
                                         modifier = Modifier
-                                            .fillMaxSize()
-                                            .testTag("two_window_split_screen_container")
+                                            .fillMaxHeight()
+                                            .width(18.dp)
+                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                            .pointerInput(totalWidthPx) {
+                                                detectDragGestures { change, dragAmount ->
+                                                    change.consume()
+                                                    val deltaRatio = dragAmount.x / totalWidthPx
+                                                    onUpdateSplitRatio((uiState.splitScreenRatio + deltaRatio).coerceIn(0.25f, 0.75f))
+                                                }
+                                            }
+                                            .testTag("split_screen_resize_handle"),
+                                        verticalArrangement = Arrangement.Center,
+                                        horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
                                         Box(
                                             modifier = Modifier
-                                                .weight(uiState.splitScreenRatio)
-                                                .fillMaxWidth()
-                                        ) {
-                                            FullScreenAppleCmdSectionEditor(
-                                                section = activeSection,
-                                                isCodeActive = isCodeActive,
-                                                isExplanationActive = isExplanationActive,
-                                                activeLeftRailTool = activeLeftRailTool,
-                                                canUndo = uiState.canUndo,
-                                                requestAutoFocus = uiState.newlyInsertedSectionId == activeSection.id,
-                                                onAutoFocusConsumed = onClearNewSectionFocusFlag,
-                                                onSetActiveTarget = onSetActiveTarget,
-                                                onUpdateSectionCode = onUpdateSectionCode,
-                                                onUpdateSectionExplanation = onUpdateSectionExplanation,
-                                                onUpdateSectionTitle = onUpdateSectionTitle,
-                                                onUpdateSectionConceptTag = onUpdateSectionConceptTag,
-                                                onActiveCodeLineChanged = { _, _ -> },
-                                                onFormatSectionCode = onFormatSectionCode,
-                                                onUndo = onUndo,
-                                                onDeactivateLeftRailTool = {
-                                                    activeLeftRailTool = LeftRailIdeTool.NONE
-                                                },
-                                                onRequestAiNaming = onRequestAiNaming,
-                                                onRequestAiExplain = onRequestAiExplain,
-                                                onRequestAiRefactor = onRequestAiRefactor,
-                                                onRequestAiKDoc = onRequestAiKDoc,
-                                                onToggleSectionDivider = onToggleSectionDivider,
-                                                onDeleteSection = onDeleteSection,
-                                                onSelectLanguage = { lang -> onUpdateSectionLanguage(activeSection.id, lang) },
-                                                onSelectThemeOverride = { theme -> onUpdateSectionThemeOverride(activeSection.id, theme) },
-                                                onOpenFileSettings = { showFileSettingsDialog = true },
-                                                onRunCode = onRunActiveSectionInTerminal,
-                                                onExportOrCopyFile = { openShare ->
-                                                    exportOrCopyCodePayload(
-                                                        context = context,
-                                                        clipboardManager = clipboardManager,
-                                                        fileName = activeSection.nativeFileName,
-                                                        content = activeSection.codeContent,
-                                                        launchShareSheet = openShare,
-                                                        onStatusBanner = onShowStatusToast
-                                                    )
-                                                },
-                                                activeBreakpoints = uiState.breakpointsBySectionId[activeSection.id] ?: emptySet(),
-                                                onToggleBreakpoint = { line -> onToggleLineBreakpoint(activeSection.id, line) },
-                                                onOptimizeImports = { onOptimizeSectionImports(activeSection.id) },
-                                                projectSymbols = allProjectSymbols,
-                                                onNavigateToSymbolDefinition = { sym ->
-                                                    onJumpToSectionConcept(sym.sectionId)
-                                                    onJumpToCodeLine(sym.line)
-                                                },
-                                                requestedJumpLine = uiState.requestedJumpLine,
-                                                jumpLineTrigger = uiState.jumpLineTrigger,
-                                                localSnapshots = uiState.localSnapshotsBySectionId[activeSection.id].orEmpty(),
-                                                onCreateSnapshot = { onCreateLocalSnapshot(activeSection.id) },
-                                                onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) },
-                                                isGuidedBeginnerMode = uiState.isGuidedBeginnerMode
-                                            )
-                                        }
+                                                .width(4.dp)
+                                                .height(44.dp)
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(MaterialTheme.colorScheme.primary)
+                                        )
+                                    }
 
-                                        // Horizontal Draggable Split Handle
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(28.dp)
-                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                                .pointerInput(totalHeightPx) {
-                                                    detectDragGestures { change, dragAmount ->
-                                                        change.consume()
-                                                        val deltaRatio = dragAmount.y / totalHeightPx
-                                                        onUpdateSplitRatio((uiState.splitScreenRatio + deltaRatio).coerceIn(0.25f, 0.75f))
-                                                    }
-                                                }
-                                                .testTag("split_screen_resize_handle"),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.Center
-                                        ) {
-                                            Surface(
-                                                color = MaterialTheme.colorScheme.surface,
-                                                shape = RoundedCornerShape(8.dp),
-                                                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
-                                            ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.DragHandle,
-                                                        contentDescription = "Drag to resize split windows",
-                                                        tint = MaterialTheme.colorScheme.primary,
-                                                        modifier = Modifier.size(14.dp)
-                                                    )
-                                                    Text(
-                                                        text = "${(uiState.splitScreenRatio * 100).toInt()}% / ${((1f - uiState.splitScreenRatio) * 100).toInt()}%",
-                                                        fontFamily = JetBrainsMonoFontFamily,
-                                                        fontSize = 9.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onSurface
-                                                    )
-                                                    listOf(0.30f to "30%", 0.50f to "50%", 0.70f to "70%").forEach { (ratio, label) ->
-                                                        val isSelected = kotlin.math.abs(uiState.splitScreenRatio - ratio) < 0.08f
-                                                        Surface(
-                                                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                                                            shape = RoundedCornerShape(4.dp),
-                                                            modifier = Modifier.clickable { onUpdateSplitRatio(ratio) }
-                                                        ) {
-                                                            Text(
-                                                                text = label,
-                                                                fontSize = 8.5.sp,
-                                                                fontFamily = JetBrainsMonoFontFamily,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(1f - uiState.splitScreenRatio)
-                                                .fillMaxWidth()
-                                        ) {
-                                            DockedSplitWindowContainer(
-                                                windowType = effectiveSplitWindow,
-                                                orientation = uiState.splitScreenOrientation,
-                                                splitRatio = uiState.splitScreenRatio,
-                                                activeFolder = document,
-                                                allFolders = allFolders,
-                                                activeSection = activeSection,
-                                                uiState = uiState,
-                                                onToggleOrientation = onToggleSplitScreenOrientation,
-                                                onUndockToFloating = onUndockSplitWindowToFloating,
-                                                onCloseSplit = onCloseSplitScreenWindow,
-                                                onFolderTitleChange = onTitleChange,
-                                                onSelectFolder = onSelectFolder,
-                                                onCreateNewFolder = onCreateNewFolder,
-                                                onCloseDocument = onCloseDocument,
-                                                onJumpToSectionConcept = onJumpToSectionConcept,
-                                                onInsertCodeBlock = onInsertCodeBlock,
-                                                onDeleteSection = onDeleteSection,
-                                                onUpdateSectionExplanation = onUpdateSectionExplanation,
-                                                onUpdateSectionConceptTag = onUpdateSectionConceptTag,
-                                                onFontChoiceChange = onFontChoiceChange,
-                                                onToggleBold = onToggleBold,
-                                                onToggleItalic = onToggleItalic,
-                                                onToggleUnderline = onToggleUnderline,
-                                                onRequestAiExplain = onRequestAiExplain,
-                                                onRequestAiRefactor = onRequestAiRefactor,
-                                                onRequestAiNaming = onRequestAiNaming,
-                                                onRequestAiKDoc = onRequestAiKDoc,
-                                                onRunActiveSectionInTerminal = onRunActiveSectionInTerminal,
-                                                onInsertLanguageCodeBlock = onInsertLanguageCodeBlock
-                                            )
-                                        }
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f - uiState.splitScreenRatio)
+                                            .fillMaxHeight()
+                                    ) {
+                                        DockedSplitWindowContainer(
+                                            windowType = effectiveSplitWindow,
+                                            orientation = uiState.splitScreenOrientation,
+                                            splitRatio = uiState.splitScreenRatio,
+                                            activeFolder = document,
+                                            allFolders = allFolders,
+                                            activeSection = activeSection,
+                                            uiState = uiState,
+                                            onToggleOrientation = onToggleSplitScreenOrientation,
+                                            onUndockToFloating = onUndockSplitWindowToFloating,
+                                            onCloseSplit = onCloseSplitScreenWindow,
+                                            onFolderTitleChange = onTitleChange,
+                                            onSelectFolder = onSelectFolder,
+                                            onCreateNewFolder = onCreateNewFolder,
+                                            onCloseDocument = onCloseDocument,
+                                            onJumpToSectionConcept = onJumpToSectionConcept,
+                                            onInsertCodeBlock = onInsertCodeBlock,
+                                            onDeleteSection = onDeleteSection,
+                                            onUpdateSectionExplanation = onUpdateSectionExplanation,
+                                            onUpdateSectionConceptTag = onUpdateSectionConceptTag,
+                                            onFontChoiceChange = onFontChoiceChange,
+                                            onToggleBold = onToggleBold,
+                                            onToggleItalic = onToggleItalic,
+                                            onToggleUnderline = onToggleUnderline,
+                                            onRequestAiExplain = onRequestAiExplain,
+                                            onRequestAiRefactor = onRequestAiRefactor,
+                                            onRequestAiNaming = onRequestAiNaming,
+                                            onRequestAiKDoc = onRequestAiKDoc,
+                                            onRunActiveSectionInTerminal = onRunActiveSectionInTerminal,
+                                            onInsertLanguageCodeBlock = onInsertLanguageCodeBlock
+                                        )
                                     }
                                 }
                             } else {
-                                // =========================================================================
-                                // FULL-SCREEN CODEASSIST + DARCULA CODE BLOCK
-                                // =========================================================================
-                                Box(
+                                Column(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .testTag("single_section_focused_scroll_container")
+                                        .testTag("two_window_split_screen_container")
                                 ) {
-                                    FullScreenAppleCmdSectionEditor(
-                                        section = activeSection,
-                                        isCodeActive = isCodeActive,
-                                        isExplanationActive = isExplanationActive,
-                                        activeLeftRailTool = activeLeftRailTool,
-                                        canUndo = uiState.canUndo,
-                                        requestAutoFocus = uiState.newlyInsertedSectionId == activeSection.id,
-                                        onAutoFocusConsumed = onClearNewSectionFocusFlag,
-                                        onSetActiveTarget = onSetActiveTarget,
-                                        onUpdateSectionCode = onUpdateSectionCode,
-                                        onUpdateSectionExplanation = onUpdateSectionExplanation,
-                                        onUpdateSectionTitle = onUpdateSectionTitle,
-                                        onUpdateSectionConceptTag = onUpdateSectionConceptTag,
-                                        onActiveCodeLineChanged = { _, _ -> },
-                                        onFormatSectionCode = onFormatSectionCode,
-                                        onUndo = onUndo,
-                                        onDeactivateLeftRailTool = {
-                                            activeLeftRailTool = LeftRailIdeTool.NONE
-                                        },
-                                        onRequestAiNaming = onRequestAiNaming,
-                                        onRequestAiExplain = onRequestAiExplain,
-                                        onRequestAiRefactor = onRequestAiRefactor,
-                                        onRequestAiKDoc = onRequestAiKDoc,
-                                        onToggleSectionDivider = onToggleSectionDivider,
-                                        onDeleteSection = onDeleteSection,
-                                        onSelectLanguage = { lang -> onUpdateSectionLanguage(activeSection.id, lang) },
-                                        onSelectThemeOverride = { theme -> onUpdateSectionThemeOverride(activeSection.id, theme) },
-                                        onOpenFileSettings = { showFileSettingsDialog = true },
-                                        onRunCode = onRunActiveSectionInTerminal,
-                                        onExportOrCopyFile = { openShare ->
-                                            exportOrCopyCodePayload(
-                                                context = context,
-                                                clipboardManager = clipboardManager,
-                                                fileName = activeSection.nativeFileName,
-                                                content = activeSection.codeContent,
-                                                launchShareSheet = openShare,
-                                                onStatusBanner = onShowStatusToast
-                                            )
-                                        },
-                                        activeBreakpoints = uiState.breakpointsBySectionId[activeSection.id] ?: emptySet(),
-                                        onToggleBreakpoint = { line -> onToggleLineBreakpoint(activeSection.id, line) },
-                                        onOptimizeImports = { onOptimizeSectionImports(activeSection.id) },
-                                        projectSymbols = allProjectSymbols,
-                                        onNavigateToSymbolDefinition = { sym ->
-                                            onJumpToSectionConcept(sym.sectionId)
-                                            onJumpToCodeLine(sym.line)
-                                        },
-                                        requestedJumpLine = uiState.requestedJumpLine,
-                                        jumpLineTrigger = uiState.jumpLineTrigger,
-                                        localSnapshots = uiState.localSnapshotsBySectionId[activeSection.id].orEmpty(),
-                                        onCreateSnapshot = { onCreateLocalSnapshot(activeSection.id) },
-                                        onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) },
-                                        isGuidedBeginnerMode = uiState.isGuidedBeginnerMode
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(uiState.splitScreenRatio)
+                                            .fillMaxWidth()
+                                    ) {
+                                        FullScreenAppleCmdSectionEditor(
+                                            section = activeSection,
+                                            isCodeActive = isCodeActive,
+                                            isExplanationActive = isExplanationActive,
+                                            activeLeftRailTool = LeftRailIdeTool.NONE,
+                                            canUndo = uiState.canUndo,
+                                            requestAutoFocus = uiState.newlyInsertedSectionId == activeSection.id,
+                                            onAutoFocusConsumed = onClearNewSectionFocusFlag,
+                                            onSetActiveTarget = onSetActiveTarget,
+                                            onUpdateSectionCode = onUpdateSectionCode,
+                                            onUpdateSectionExplanation = onUpdateSectionExplanation,
+                                            onUpdateSectionTitle = onUpdateSectionTitle,
+                                            onUpdateSectionConceptTag = onUpdateSectionConceptTag,
+                                            onActiveCodeLineChanged = { ln, col ->
+                                                cursorLine = ln
+                                                cursorColumn = col
+                                            },
+                                            onFormatSectionCode = onFormatSectionCode,
+                                            onUndo = onUndo,
+                                            onDeactivateLeftRailTool = {},
+                                            onRequestAiNaming = onRequestAiNaming,
+                                            onRequestAiExplain = onRequestAiExplain,
+                                            onRequestAiRefactor = onRequestAiRefactor,
+                                            onRequestAiKDoc = onRequestAiKDoc,
+                                            onToggleSectionDivider = onToggleSectionDivider,
+                                            onDeleteSection = onDeleteSection,
+                                            onSelectLanguage = { lang -> onUpdateSectionLanguage(activeSection.id, lang) },
+                                            onSelectThemeOverride = { theme -> onUpdateSectionThemeOverride(activeSection.id, theme) },
+                                            onOpenFileSettings = { showFileSettingsDialog = true },
+                                            onRunCode = onRunActiveSectionInTerminal,
+                                            onExportOrCopyFile = { openShare ->
+                                                exportOrCopyCodePayload(
+                                                    context = context,
+                                                    clipboardManager = clipboardManager,
+                                                    fileName = activeSection.nativeFileName,
+                                                    content = activeSection.codeContent,
+                                                    launchShareSheet = openShare,
+                                                    onStatusBanner = onShowStatusToast
+                                                )
+                                            },
+                                            activeBreakpoints = uiState.breakpointsBySectionId[activeSection.id] ?: emptySet(),
+                                            onToggleBreakpoint = { line -> onToggleLineBreakpoint(activeSection.id, line) },
+                                            onOptimizeImports = { onOptimizeSectionImports(activeSection.id) },
+                                            projectSymbols = allProjectSymbols,
+                                            onNavigateToSymbolDefinition = { sym ->
+                                                onJumpToSectionConcept(sym.sectionId)
+                                                onJumpToCodeLine(sym.line)
+                                            },
+                                            requestedJumpLine = uiState.requestedJumpLine,
+                                            jumpLineTrigger = uiState.jumpLineTrigger,
+                                            localSnapshots = uiState.localSnapshotsBySectionId[activeSection.id].orEmpty(),
+                                            onCreateSnapshot = { onCreateLocalSnapshot(activeSection.id) },
+                                            onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) },
+                                            isGuidedBeginnerMode = uiState.isGuidedBeginnerMode
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(22.dp)
+                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                            .pointerInput(totalHeightPx) {
+                                                detectDragGestures { change, dragAmount ->
+                                                    change.consume()
+                                                    val deltaRatio = dragAmount.y / totalHeightPx
+                                                    onUpdateSplitRatio((uiState.splitScreenRatio + deltaRatio).coerceIn(0.25f, 0.75f))
+                                                }
+                                            }
+                                            .testTag("split_screen_resize_handle"),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.DragHandle,
+                                            contentDescription = "Drag to resize split",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f - uiState.splitScreenRatio)
+                                            .fillMaxWidth()
+                                    ) {
+                                        DockedSplitWindowContainer(
+                                            windowType = effectiveSplitWindow,
+                                            orientation = uiState.splitScreenOrientation,
+                                            splitRatio = uiState.splitScreenRatio,
+                                            activeFolder = document,
+                                            allFolders = allFolders,
+                                            activeSection = activeSection,
+                                            uiState = uiState,
+                                            onToggleOrientation = onToggleSplitScreenOrientation,
+                                            onUndockToFloating = onUndockSplitWindowToFloating,
+                                            onCloseSplit = onCloseSplitScreenWindow,
+                                            onFolderTitleChange = onTitleChange,
+                                            onSelectFolder = onSelectFolder,
+                                            onCreateNewFolder = onCreateNewFolder,
+                                            onCloseDocument = onCloseDocument,
+                                            onJumpToSectionConcept = onJumpToSectionConcept,
+                                            onInsertCodeBlock = onInsertCodeBlock,
+                                            onDeleteSection = onDeleteSection,
+                                            onUpdateSectionExplanation = onUpdateSectionExplanation,
+                                            onUpdateSectionConceptTag = onUpdateSectionConceptTag,
+                                            onFontChoiceChange = onFontChoiceChange,
+                                            onToggleBold = onToggleBold,
+                                            onToggleItalic = onToggleItalic,
+                                            onToggleUnderline = onToggleUnderline,
+                                            onRequestAiExplain = onRequestAiExplain,
+                                            onRequestAiRefactor = onRequestAiRefactor,
+                                            onRequestAiNaming = onRequestAiNaming,
+                                            onRequestAiKDoc = onRequestAiKDoc,
+                                            onRunActiveSectionInTerminal = onRunActiveSectionInTerminal,
+                                            onInsertLanguageCodeBlock = onInsertLanguageCodeBlock
+                                        )
+                                    }
                                 }
                             }
+                        } else {
+                            // Full-width, distraction-free CodeAssist code canvas
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .testTag("single_section_focused_scroll_container")
+                            ) {
+                                FullScreenAppleCmdSectionEditor(
+                                    section = activeSection,
+                                    isCodeActive = isCodeActive,
+                                    isExplanationActive = isExplanationActive,
+                                    activeLeftRailTool = LeftRailIdeTool.NONE,
+                                    canUndo = uiState.canUndo,
+                                    requestAutoFocus = uiState.newlyInsertedSectionId == activeSection.id,
+                                    onAutoFocusConsumed = onClearNewSectionFocusFlag,
+                                    onSetActiveTarget = onSetActiveTarget,
+                                    onUpdateSectionCode = onUpdateSectionCode,
+                                    onUpdateSectionExplanation = onUpdateSectionExplanation,
+                                    onUpdateSectionTitle = onUpdateSectionTitle,
+                                    onUpdateSectionConceptTag = onUpdateSectionConceptTag,
+                                    onActiveCodeLineChanged = { ln, col ->
+                                        cursorLine = ln
+                                        cursorColumn = col
+                                    },
+                                    onFormatSectionCode = onFormatSectionCode,
+                                    onUndo = onUndo,
+                                    onDeactivateLeftRailTool = {},
+                                    onRequestAiNaming = onRequestAiNaming,
+                                    onRequestAiExplain = onRequestAiExplain,
+                                    onRequestAiRefactor = onRequestAiRefactor,
+                                    onRequestAiKDoc = onRequestAiKDoc,
+                                    onToggleSectionDivider = onToggleSectionDivider,
+                                    onDeleteSection = onDeleteSection,
+                                    onSelectLanguage = { lang -> onUpdateSectionLanguage(activeSection.id, lang) },
+                                    onSelectThemeOverride = { theme -> onUpdateSectionThemeOverride(activeSection.id, theme) },
+                                    onOpenFileSettings = { showFileSettingsDialog = true },
+                                    onRunCode = onRunActiveSectionInTerminal,
+                                    onExportOrCopyFile = { openShare ->
+                                        exportOrCopyCodePayload(
+                                            context = context,
+                                            clipboardManager = clipboardManager,
+                                            fileName = activeSection.nativeFileName,
+                                            content = activeSection.codeContent,
+                                            launchShareSheet = openShare,
+                                            onStatusBanner = onShowStatusToast
+                                        )
+                                    },
+                                    activeBreakpoints = uiState.breakpointsBySectionId[activeSection.id] ?: emptySet(),
+                                    onToggleBreakpoint = { line -> onToggleLineBreakpoint(activeSection.id, line) },
+                                    onOptimizeImports = { onOptimizeSectionImports(activeSection.id) },
+                                    projectSymbols = allProjectSymbols,
+                                    onNavigateToSymbolDefinition = { sym ->
+                                        onJumpToSectionConcept(sym.sectionId)
+                                        onJumpToCodeLine(sym.line)
+                                    },
+                                    requestedJumpLine = uiState.requestedJumpLine,
+                                    jumpLineTrigger = uiState.jumpLineTrigger,
+                                    localSnapshots = uiState.localSnapshotsBySectionId[activeSection.id].orEmpty(),
+                                    onCreateSnapshot = { onCreateLocalSnapshot(activeSection.id) },
+                                    onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) },
+                                    isGuidedBeginnerMode = uiState.isGuidedBeginnerMode
+                                )
+                            }
+                        }
 
-                            // =========================================================================
-                            // DUAL FLOATING WINDOWS LAYER (Max 2 Open simultaneously)
-                            // =========================================================================
+                        // Optional Floating Windows when explicitly requested from menu/command palette
+                        if (uiState.openFloatingWindows.isNotEmpty()) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.TopEnd
@@ -1053,18 +1130,8 @@ fun DocumentEditorScreen(
                                         shakeTriggerCount = uiState.windowLimitShakeCount,
                                         workspaceWidthPx = totalWidthPx,
                                         workspaceHeightPx = totalHeightPx,
-                                        initialWidthDp = when (winType) {
-                                            FloatingWindowType.EXPLANATION -> 375f
-                                            FloatingWindowType.FOLDERS -> 390f
-                                            FloatingWindowType.AI_STUDIO -> 360f
-                                            FloatingWindowType.RUN_OUTPUT -> 380f
-                                        },
-                                        initialHeightDp = when (winType) {
-                                            FloatingWindowType.EXPLANATION -> 305f
-                                            FloatingWindowType.FOLDERS -> 340f
-                                            FloatingWindowType.AI_STUDIO -> 280f
-                                            FloatingWindowType.RUN_OUTPUT -> 260f
-                                        },
+                                        initialWidthDp = 360f,
+                                        initialHeightDp = 290f,
                                         onFocusWindow = { onFocusFloatingWindow(winType) },
                                         onDockToSplitScreen = { onDockWindowToSplitScreen(winType) },
                                         onCancelWindow = { onCloseFloatingWindow(winType) },
@@ -1099,9 +1166,7 @@ fun DocumentEditorScreen(
                                                     }
                                                 }
                                             }
-                                        } else {
-                                            null
-                                        }
+                                        } else null
                                     ) {
                                         FloatingOrSplitWindowContentBody(
                                             windowType = winType,
@@ -1137,221 +1202,169 @@ fun DocumentEditorScreen(
                             }
                         }
                     }
-                }
-            }
 
-            // =========================================================================
-            // BOTTOM-DOCKED COMMAND BLOCK OVERLAY (`⌘P` Command Block)
-            // =========================================================================
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                AnimatedVisibility(
-                    visible = uiState.activeIslandDropdown == IslandDropdownMenu.COMMAND_PALETTE,
-                    enter = slideInVertically(
-                        initialOffsetY = { it },
-                        animationSpec = spring(
-                            dampingRatio = 0.82f,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    ) + fadeIn(),
-                    exit = slideOutVertically(
-                        targetOffsetY = { it },
-                        animationSpec = spring(
-                            dampingRatio = 0.85f,
-                            stiffness = Spring.StiffnessMedium
-                        )
-                    ) + fadeOut()
-                ) {
-                    ResizableIslandDropdownWindow(
-                        title = "⌘P Command Block (Bottom IDE Panel)",
-                        subtitle = "Run an IDE command, switch folders, or jump to a .ktscribe file",
-                        initialWidthDp = 640f,
-                        initialHeightDp = 310f,
-                        onClose = onCloseIslandDropdown
-                    ) {
-                        CommandPaletteDropdownContent(
-                            activeFolder = document,
-                            allFolders = allFolders,
-                            activeSection = activeSection,
-                            onExecuteCommand = { cmd ->
-                                when (cmd) {
-                                    "ai_explain" -> activeSection?.let { onRequestAiExplain(it.id) }
-                                    "ai_refactor" -> activeSection?.let { onRequestAiRefactor(it.id) }
-                                    "format_code" -> activeSection?.let { onFormatSectionCode(it.id) }
-                                    "optimize_imports" -> activeSection?.let { onOptimizeSectionImports(it.id) }
-                                    "toggle_split" -> onDockWindowToSplitScreen(FloatingWindowType.EXPLANATION)
-                                    "float_explain" -> onToggleFloatingWindow(FloatingWindowType.EXPLANATION)
-                                    "run_code" -> onRunActiveSectionInTerminal()
-                                    "debug_vm" -> onDebugResume()
-                                    "open_repl" -> {
-                                        onSetBottomDrawerTab(BottomDrawerTab.REPL)
-                                        if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.REPL)
-                                    }
-                                    "inspect_bytecode" -> onCompileActiveSection(true)
-                                    "open_git_diff" -> {
-                                        onSetBottomDrawerTab(BottomDrawerTab.GIT_DIFF)
-                                        if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.GIT_DIFF)
-                                    }
-                                    "memory_stack" -> {
-                                        onCompileActiveSection(false)
-                                        onSetBottomDrawerTab(BottomDrawerTab.MEMORY_STACK)
-                                        if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.MEMORY_STACK)
-                                    }
-                                    "ui_preview" -> {
-                                        onSetBottomDrawerTab(BottomDrawerTab.UI_PREVIEW)
-                                        if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.UI_PREVIEW)
-                                    }
-                                    "open_quiz" -> onOpenQuiz(null)
-                                    "recent_files" -> onToggleRecentFilesDialog(true)
-                                    "android_inspector" -> {
-                                        onSetBottomDrawerTab(BottomDrawerTab.ANDROID_STUDIO)
-                                        if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.ANDROID_STUDIO)
-                                    }
-                                    "toggle_guided_mode" -> onToggleGuidedBeginnerMode()
-                                    "display_profile" -> onShowStatusToast(
-                                        "Screen: ${adaptive.profile.widthDp}x${adaptive.profile.heightDp}dp (${adaptive.profile.aspectRatioLabel}) -> ${adaptive.themeFileLabel}"
-                                    )
-                                    "new_section" -> onInsertCodeBlock()
-                                    "open_vault" -> onOpenVaultModal()
-                                }
-                            },
-                            onSelectFolder = onSelectFolder,
-                            onJumpToSection = onJumpToSectionConcept,
-                            onClose = onCloseIslandDropdown
-                        )
-                    }
-                }
-            }
-
-            // =========================================================================
-            // COMPACT PORTRAIT MODAL BOTTOM SHEET EXPLORER
-            // =========================================================================
-            if (!adaptive.useNavigationRail && uiState.activeLeftActivityTab != LeftActivityTab.NONE) {
-                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-                ModalBottomSheet(
-                    onDismissRequest = { onToggleLeftActivityTab(uiState.activeLeftActivityTab) },
-                    sheetState = sheetState,
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ) {
+                    // Bottom Command Palette Overlay (`⌘P`)
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(460.dp)
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.BottomCenter
                     ) {
-                        CodeAssistSidePanel(
-                            activeTab = uiState.activeLeftActivityTab,
-                            document = document,
-                            allFolders = allFolders,
-                            activeSection = activeSection,
-                            uiState = uiState,
-                            allProjectSymbols = allProjectSymbols,
-                            panelWidthDp = null,
-                            onSelectFileSection = { secId ->
-                                onJumpToSectionConcept(secId)
-                                onToggleLeftActivityTab(uiState.activeLeftActivityTab)
-                            },
-                            onInsertNewFile = onInsertCodeBlock,
-                            onInsertLanguageFile = onInsertLanguageCodeBlock,
-                            onSelectFolder = onSelectFolder,
-                            onCreateNewFolder = onCreateNewFolder,
-                            onOpenFileSettings = { showFileSettingsDialog = true },
-                            onExportFile = { sec ->
-                                exportOrCopyCodePayload(
-                                    context = context,
-                                    clipboardManager = clipboardManager,
-                                    fileName = sec.nativeFileName,
-                                    content = sec.codeContent,
-                                    launchShareSheet = true,
-                                    onStatusBanner = onShowStatusToast
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = uiState.activeIslandDropdown == IslandDropdownMenu.COMMAND_PALETTE,
+                            enter = slideInVertically(
+                                initialOffsetY = { it },
+                                animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)
+                            ) + fadeIn(),
+                            exit = slideOutVertically(
+                                targetOffsetY = { it },
+                                animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMedium)
+                            ) + fadeOut()
+                        ) {
+                            ResizableIslandDropdownWindow(
+                                title = "⌘P Command Palette",
+                                subtitle = "Run an IDE command, switch projects, or jump to a file",
+                                initialWidthDp = 640f,
+                                initialHeightDp = 310f,
+                                onClose = onCloseIslandDropdown
+                            ) {
+                                CommandPaletteDropdownContent(
+                                    activeFolder = document,
+                                    allFolders = allFolders,
+                                    activeSection = activeSection,
+                                    onExecuteCommand = { cmd ->
+                                        when (cmd) {
+                                            "ai_explain" -> activeSection?.let { onRequestAiExplain(it.id) }
+                                            "ai_refactor" -> activeSection?.let { onRequestAiRefactor(it.id) }
+                                            "format_code" -> activeSection?.let { onFormatSectionCode(it.id) }
+                                            "optimize_imports" -> activeSection?.let { onOptimizeSectionImports(it.id) }
+                                            "toggle_split" -> onDockWindowToSplitScreen(FloatingWindowType.EXPLANATION)
+                                            "float_explain" -> onToggleFloatingWindow(FloatingWindowType.EXPLANATION)
+                                            "run_code" -> onRunActiveSectionInTerminal()
+                                            "debug_vm" -> onDebugResume()
+                                            "open_repl" -> {
+                                                onSetBottomDrawerTab(BottomDrawerTab.REPL)
+                                                if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.REPL)
+                                            }
+                                            "inspect_bytecode" -> onCompileActiveSection(true)
+                                            "open_git_diff" -> {
+                                                onSetBottomDrawerTab(BottomDrawerTab.GIT_DIFF)
+                                                if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.GIT_DIFF)
+                                            }
+                                            "memory_stack" -> {
+                                                onCompileActiveSection(false)
+                                                onSetBottomDrawerTab(BottomDrawerTab.MEMORY_STACK)
+                                                if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.MEMORY_STACK)
+                                            }
+                                            "ui_preview" -> {
+                                                onSetBottomDrawerTab(BottomDrawerTab.UI_PREVIEW)
+                                                if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.UI_PREVIEW)
+                                            }
+                                            "open_quiz" -> onOpenQuiz(null)
+                                            "recent_files" -> onToggleRecentFilesDialog(true)
+                                            "android_inspector" -> {
+                                                onSetBottomDrawerTab(BottomDrawerTab.ANDROID_STUDIO)
+                                                if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.ANDROID_STUDIO)
+                                            }
+                                            "toggle_guided_mode" -> onToggleGuidedBeginnerMode()
+                                            "display_profile" -> onShowStatusToast(
+                                                "Screen: ${adaptive.profile.widthDp}x${adaptive.profile.heightDp}dp (${adaptive.profile.aspectRatioLabel})"
+                                            )
+                                            "new_section" -> onInsertCodeBlock()
+                                            "open_vault" -> onOpenVaultModal()
+                                        }
+                                    },
+                                    onSelectFolder = onSelectFolder,
+                                    onJumpToSection = onJumpToSectionConcept,
+                                    onClose = onCloseIslandDropdown
                                 )
-                            },
-                            onUpdateSectionExplanation = onUpdateSectionExplanation,
-                            onUpdateSectionConceptTag = onUpdateSectionConceptTag,
-                            onFontChoiceChange = onFontChoiceChange,
-                            onToggleBold = onToggleBold,
-                            onToggleItalic = onToggleItalic,
-                            onToggleUnderline = onToggleUnderline,
-                            onRequestAiExplain = onRequestAiExplain,
-                            onInstallOrTogglePlugin = onInstallOrTogglePlugin,
-                            onInstallAllSdks = onInstallAllSdks,
-                            onOptimizeActiveImports = { activeSection?.let { onOptimizeSectionImports(it.id) } },
-                            onFormatActiveCode = { activeSection?.let { onFormatSectionCode(it.id) } },
-                            onToggleBreakpoint = { line -> activeSection?.let { onToggleLineBreakpoint(it.id, line) } },
-                            onJumpToCodeLine = { line ->
-                                onJumpToCodeLine(line)
-                                onToggleLeftActivityTab(uiState.activeLeftActivityTab)
-                            },
-                            onCreateStarterFile = onCreateStarterFile,
-                            onCollapsePanel = { onToggleLeftActivityTab(uiState.activeLeftActivityTab) }
-                        )
+                            }
+                        }
                     }
                 }
-            }
 
-            // =========================================================================
-            // BOTTOM-ANCHORED IDE DRAWER (Terminal / REPL / Debugger / Bytecode / Git Diff / Problems / Logcat)
-            // =========================================================================
-            IdeBottomDrawer(
-                isOpen = uiState.isBottomDrawerOpen,
-                activeTab = uiState.activeBottomDrawerTab,
-                activeSection = activeSection,
-                executionOutput = uiState.terminalExecutionOutput,
-                heightFraction = uiState.bottomDrawerHeightFraction,
-                toolchainPlugins = uiState.toolchainPlugins,
-                activeBreakpoints = uiState.breakpointsBySectionId[activeSection?.id ?: -1L] ?: emptySet(),
-                watchExpressions = uiState.watchExpressions,
-                stdinInput = uiState.terminalStdinInput,
-                compilationArtifact = uiState.latestCompilation,
-                vmDebugState = uiState.vmDebugState,
-                vmTrace = uiState.vmTrace,
-                vmTraceIndex = uiState.vmTraceIndex,
-                replHistory = uiState.replHistory,
-                localSnapshots = uiState.localSnapshotsBySectionId[activeSection?.id ?: -1L].orEmpty(),
-                onUpdateStdinInput = onUpdateTerminalStdin,
-                onTabSelected = onSetBottomDrawerTab,
-                onHeightFractionChange = onSetBottomDrawerHeightFraction,
-                onRunCode = onRunActiveSectionInTerminal,
-                onClearTerminal = onClearTerminal,
-                onCloseDrawer = onCloseBottomDrawer,
-                onJumpToLine = onJumpToCodeLine,
-                onInstallPlugin = onInstallOrTogglePlugin,
-                onOpenPluginManager = { onToggleLeftActivityTab(LeftActivityTab.PLUGINS) },
-                onToggleBreakpoint = { line -> activeSection?.let { onToggleLineBreakpoint(it.id, line) } },
-                onAddWatchExpression = onAddWatchExpression,
-                onRemoveWatchExpression = onRemoveWatchExpression,
-                onApplyQuickFixCode = { fixedCode ->
-                    activeSection?.let { onUpdateSectionCode(it.id, fixedCode) }
-                },
-                onCompileAstBytecode = { onCompileActiveSection(true) },
-                onDebugResumeVm = onDebugResume,
-                onDebugStepOverVm = onDebugStepOver,
-                onDebugResetVm = onDebugReset,
-                onEvaluateRepl = onEvaluateRepl,
-                onClearRepl = onClearRepl,
-                onCreateSnapshot = { activeSection?.let { onCreateLocalSnapshot(it.id) } },
-                onRestoreSnapshot = { snapId -> activeSection?.let { onRestoreLocalSnapshot(it.id, snapId) } },
-                onInsertUiSample = { snippet ->
-                    activeSection?.let { sec ->
-                        onUpdateSectionCode(sec.id, sec.codeContent + snippet)
-                    }
-                },
-                allSections = document.sections,
-                isGuidedBeginnerMode = uiState.isGuidedBeginnerMode,
-                activeGitBranch = uiState.activeGitBranch,
-                localGitCommits = uiState.localGitCommits,
-                buildTasks = uiState.latestBuildTasks,
-                onExecuteShellCommand = onExecuteShellCommand,
-                onRunBuildPipeline = onRunAndroidBuildPipeline,
-                onCreateGitCommit = onCreateGitCommit,
-                onSwitchGitBranch = onSwitchGitBranch,
-                onAddManifestPermission = onAddManifestPermission,
-                onCreateStarterFile = onCreateStarterFile,
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
+                // =========================================================================
+                // 1:1 CODEASSIST COLLAPSED PEEK BAR OR EXPANDED BOTTOM SHEET
+                // =========================================================================
+                if (!uiState.isBottomDrawerOpen) {
+                    CodeAssistBottomSheetPeekBar(
+                        errorCount = syntaxErrors.size,
+                        warningCount = warningCount,
+                        cursorLine = cursorLine,
+                        cursorColumn = cursorColumn,
+                        onOpenTab = { tab ->
+                            onSetBottomDrawerTab(tab)
+                            onToggleBottomDrawer(tab)
+                        }
+                    )
+                } else {
+                    IdeBottomDrawer(
+                        isOpen = true,
+                        activeTab = uiState.activeBottomDrawerTab,
+                        activeSection = activeSection,
+                        executionOutput = uiState.terminalExecutionOutput,
+                        heightFraction = uiState.bottomDrawerHeightFraction,
+                        toolchainPlugins = uiState.toolchainPlugins,
+                        activeBreakpoints = uiState.breakpointsBySectionId[activeSection?.id ?: -1L] ?: emptySet(),
+                        watchExpressions = uiState.watchExpressions,
+                        stdinInput = uiState.terminalStdinInput,
+                        compilationArtifact = uiState.latestCompilation,
+                        vmDebugState = uiState.vmDebugState,
+                        vmTrace = uiState.vmTrace,
+                        vmTraceIndex = uiState.vmTraceIndex,
+                        replHistory = uiState.replHistory,
+                        localSnapshots = uiState.localSnapshotsBySectionId[activeSection?.id ?: -1L].orEmpty(),
+                        onUpdateStdinInput = onUpdateTerminalStdin,
+                        onTabSelected = onSetBottomDrawerTab,
+                        onHeightFractionChange = onSetBottomDrawerHeightFraction,
+                        onRunCode = onRunActiveSectionInTerminal,
+                        onClearTerminal = onClearTerminal,
+                        onCloseDrawer = onCloseBottomDrawer,
+                        onJumpToLine = onJumpToCodeLine,
+                        onInstallPlugin = onInstallOrTogglePlugin,
+                        onOpenPluginManager = { onOpenSettings() },
+                        onToggleBreakpoint = { line -> activeSection?.let { onToggleLineBreakpoint(it.id, line) } },
+                        onAddWatchExpression = onAddWatchExpression,
+                        onRemoveWatchExpression = onRemoveWatchExpression,
+                        onApplyQuickFixCode = { fixedCode ->
+                            activeSection?.let { onUpdateSectionCode(it.id, fixedCode) }
+                        },
+                        onCompileAstBytecode = { onCompileActiveSection(true) },
+                        onDebugResumeVm = onDebugResume,
+                        onDebugStepOverVm = onDebugStepOver,
+                        onDebugResetVm = onDebugReset,
+                        onEvaluateRepl = onEvaluateRepl,
+                        onClearRepl = onClearRepl,
+                        onCreateSnapshot = { activeSection?.let { onCreateLocalSnapshot(it.id) } },
+                        onRestoreSnapshot = { snapId -> activeSection?.let { onRestoreLocalSnapshot(it.id, snapId) } },
+                        onInsertUiSample = { snippet ->
+                            activeSection?.let { sec ->
+                                onUpdateSectionCode(sec.id, sec.codeContent + snippet)
+                            }
+                        },
+                        allSections = document.sections,
+                        isGuidedBeginnerMode = uiState.isGuidedBeginnerMode,
+                        activeGitBranch = uiState.activeGitBranch,
+                        localGitCommits = uiState.localGitCommits,
+                        buildTasks = uiState.latestBuildTasks,
+                        onExecuteShellCommand = onExecuteShellCommand,
+                        onRunBuildPipeline = onRunAndroidBuildPipeline,
+                        onCreateGitCommit = onCreateGitCommit,
+                        onSwitchGitBranch = onSwitchGitBranch,
+                        onAddManifestPermission = onAddManifestPermission,
+                        onCreateStarterFile = onCreateStarterFile
+                    )
+                }
+            }
         }
+    }
+
+    if (showThemeQuickPicker) {
+        CodeAssistThemeQuickPickerDialog(
+            currentAppTheme = uiState.codeAssistAppTheme,
+            currentEditorScheme = uiState.activeAppTheme,
+            onSelectAppTheme = onSelectCodeAssistAppTheme,
+            onSelectEditorScheme = onSelectEditorScheme,
+            onDismiss = { showThemeQuickPicker = false }
+        )
     }
 
     if (uiState.showRecentFilesDialog) {
@@ -1413,7 +1426,6 @@ fun DocumentEditorScreen(
         )
     }
 
-    // Extension Rename Warning Dialog (prevents altering language extension)
     uiState.extensionRenameWarningDialog?.let { warningMsg ->
         AlertDialog(
             onDismissRequest = onDismissExtensionRenameWarning,
@@ -1422,14 +1434,13 @@ fun DocumentEditorScreen(
                     Icon(
                         imageVector = Icons.Default.Warning,
                         contentDescription = null,
-                        tint = Color(0xFFFFB86C),
+                        tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Language Extension Locked",
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFFF1FA8C),
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 15.sp
                     )
@@ -1438,1806 +1449,83 @@ fun DocumentEditorScreen(
             text = {
                 Text(
                     text = warningMsg,
-                    color = Color(0xFFE6E1DC),
                     fontFamily = JetBrainsMonoFontFamily,
                     fontSize = 12.5.sp,
                     lineHeight = 18.sp
                 )
             },
             confirmButton = {
-                Button(
-                    onClick = onDismissExtensionRenameWarning,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5555))
-                ) {
-                    Text("Acknowledge", color = Color.White, fontWeight = FontWeight.Bold)
+                Button(onClick = onDismissExtensionRenameWarning) {
+                    Text("Acknowledge", fontWeight = FontWeight.Bold)
                 }
-            },
-            containerColor = Color(0xFF1E1E1E),
-            tonalElevation = 8.dp
+            }
         )
     }
 }
 
-// =========================================================================
-// CODEASSIST + iOS GLASS TOP WORKSPACE BAR
-// =========================================================================
-@Composable
-private fun CodeAssistTopWorkspaceBar(
-    activeFolder: DocumentDetailUiModel,
-    activeSection: CodeSectionUiModel?,
-    activeLeftActivityTab: LeftActivityTab,
-    openFloatingWindows: List<FloatingWindowType>,
-    activeDropdown: IslandDropdownMenu,
-    isBottomDrawerOpen: Boolean,
-    syntaxErrorCount: Int,
-    hasUnsavedChanges: Boolean,
-    secondsUntilAutoSave: Int,
-    canUndo: Boolean,
-    canRedo: Boolean,
-    onBackToFolders: () -> Unit,
-    onToggleFilesSidebar: () -> Unit,
-    onSaveNow: () -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
-    onRunCode: () -> Unit,
-    onToggleFloatingWindow: (FloatingWindowType) -> Unit,
-    onToggleTerminalDrawer: () -> Unit,
-    onOpenDrawerTab: (BottomDrawerTab) -> Unit = {},
-    onCompileAstBytecode: () -> Unit = {},
-    onToggleCommandPalette: () -> Unit,
-    onOpenVaultModal: () -> Unit,
-    onOpenFileSettings: () -> Unit,
-    onOpenStudioSettings: () -> Unit,
-    isGuidedBeginnerMode: Boolean = true,
-    onToggleGuidedBeginnerMode: () -> Unit = {},
-    onOpenRecentFiles: () -> Unit = {}
-) {
-    val adaptive = LocalAdaptiveThemeSpec.current
-    val isExplainActive = FloatingWindowType.EXPLANATION in openFloatingWindows
-    val isFilesFloatingActive = FloatingWindowType.FOLDERS in openFloatingWindows
-    val isAiActive = FloatingWindowType.AI_STUDIO in openFloatingWindows
-    val isRunActive = FloatingWindowType.RUN_OUTPUT in openFloatingWindows
-    val isCmdActive = activeDropdown == IslandDropdownMenu.COMMAND_PALETTE
-    var showOverflowMenu by remember { mutableStateOf(false) }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = if (adaptive.useCompactTopActions) 8.dp else 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        // Left Cluster: Back Arrow, Files Toggle, Project Badge, Folder Name (ellipsized), Single-line Indexed Badge
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(if (adaptive.useCompactTopActions) 5.dp else 7.dp),
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 6.dp)
-        ) {
-            IconButton(
-                onClick = onBackToFolders,
-                modifier = Modifier
-                    .size(30.dp)
-                    .testTag("back_to_documents_button")
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back to Folders",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-
-            Surface(
-                color = if (activeLeftActivityTab == LeftActivityTab.FILES) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerHigh
-                },
-                shape = RoundedCornerShape(7.dp),
-                border = BorderStroke(
-                    0.75.dp,
-                    if (activeLeftActivityTab == LeftActivityTab.FILES) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-                ),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(7.dp))
-                    .clickable(onClick = onToggleFilesSidebar)
-                    .testTag("toggle_files_sidebar_button")
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FolderOpen,
-                        contentDescription = "Toggle Project Files Tree",
-                        tint = if (activeLeftActivityTab == LeftActivityTab.FILES) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-            }
-
-            if (!adaptive.useCompactTopActions) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                    shape = RoundedCornerShape(6.dp),
-                    border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.primary)
-                ) {
-                    Text(
-                        text = activeFolder.title.firstOrNull()?.uppercase() ?: "M",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        softWrap = false,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            }
-
-            Text(
-                text = activeFolder.title.ifBlank { "My App" },
-                fontFamily = JetBrainsMonoFontFamily,
-                fontSize = if (adaptive.useCompactTopActions) 12.sp else 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-
-            // Vault / Sync Status Pill (Always single-line — never wraps vertically!)
-            Surface(
-                color = Color(0xFF232C23),
-                shape = RoundedCornerShape(999.dp),
-                border = BorderStroke(0.5.dp, Color(0xFF4E6E4E)),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .clickable(onClick = onOpenVaultModal)
-                    .testTag("open_vault_modal_button")
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .padding(horizontal = if (adaptive.useCompactTopActions) 6.dp else 8.dp, vertical = 3.dp)
-                        .testTag("autosave_status_pill")
-                ) {
-                    Text(
-                        text = when {
-                            adaptive.useCompactTopActions && hasUnsavedChanges -> "${secondsUntilAutoSave}s"
-                            adaptive.useCompactTopActions -> "✓"
-                            hasUnsavedChanges -> "● Sync ${secondsUntilAutoSave}s"
-                            else -> "✓ Indexed"
-                        },
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (hasUnsavedChanges) Color(0xFFFFC66D) else Color(0xFF81C784),
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-            }
-        }
-
-        // Right Cluster: Compact single-row essentials on Portrait Phone, full pill strip on Landscape / Foldable / Tablet
-        if (adaptive.useCompactTopActions) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onSaveNow)
-                        .testTag("save_now_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Save,
-                        contentDescription = "Save Now",
-                        tint = Color(0xFFFFC66D),
-                        modifier = Modifier
-                            .padding(horizontal = 6.dp, vertical = 5.dp)
-                            .size(14.dp)
-                    )
-                }
-
-                // Primary ▶ Run Pill
-                Surface(
-                    color = if (isRunActive || isBottomDrawerOpen) Color(0xFF28422B) else MaterialTheme.colorScheme.primaryContainer,
-                    shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = if (isRunActive || isBottomDrawerOpen) Color(0xFF6A8759) else MaterialTheme.colorScheme.primary
-                    ),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .clickable(onClick = onRunCode)
-                        .testTag("island_run_code_button")
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Run Code",
-                            tint = Color(0xFF81C784),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = "Run",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-
-                // Compact `>_` Drawer Toggle
-                CodeAssistTopPill(
-                    label = if (syntaxErrorCount > 0) ">_ $syntaxErrorCount" else ">_",
-                    isActive = isBottomDrawerOpen,
-                    testTag = "island_terminal_drawer_button",
-                    onClick = onToggleTerminalDrawer
-                )
-
-                // `⌘P` Command Palette
-                CodeAssistTopPill(
-                    label = "⌘P",
-                    isActive = isCmdActive,
-                    testTag = "island_command_palette_button",
-                    onClick = onToggleCommandPalette
-                )
-
-                // Overflow `⋮` Menu for Undo, Redo, Floating Windows, New Tools & Settings (zero clipping!)
-                Box {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(999.dp),
-                        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .clickable { showOverflowMenu = true }
-                            .testTag("editor_topbar_overflow_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Workspace Tools & Settings",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
-                                .size(15.dp)
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showOverflowMenu,
-                        onDismissRequest = { showOverflowMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Undo", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
-                            enabled = canUndo,
-                            onClick = { showOverflowMenu = false; onUndo() },
-                            modifier = Modifier.testTag("undo_top_button")
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Redo", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
-                            enabled = canRedo,
-                            onClick = { showOverflowMenu = false; onRedo() },
-                            modifier = Modifier.testTag("redo_top_button")
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text(if (isExplainActive) "Close Explain Window" else "Explain Window", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
-                            onClick = { showOverflowMenu = false; onToggleFloatingWindow(FloatingWindowType.EXPLANATION) },
-                            modifier = Modifier.testTag("island_explanation_window_toggle")
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Files Window (${activeFolder.sections.size})", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
-                            onClick = { showOverflowMenu = false; onToggleFloatingWindow(FloatingWindowType.FOLDERS) },
-                            modifier = Modifier.testTag("island_folder_dropdown_button")
-                        )
-                        DropdownMenuItem(
-                            text = { Text("AI Guide Window", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
-                            onClick = { showOverflowMenu = false; onToggleFloatingWindow(FloatingWindowType.AI_STUDIO) },
-                            modifier = Modifier.testTag("island_ai_studio_button")
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("λ Kotlin REPL Console", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
-                            onClick = { showOverflowMenu = false; onOpenDrawerTab(BottomDrawerTab.REPL) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("⛁ AST & Bytecode Inspector", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
-                            onClick = { showOverflowMenu = false; onCompileAstBytecode() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("± Git Diff & History", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
-                            onClick = { showOverflowMenu = false; onOpenDrawerTab(BottomDrawerTab.GIT_DIFF) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("❖ Android Manifest & Resources", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
-                            onClick = { showOverflowMenu = false; onOpenDrawerTab(BottomDrawerTab.ANDROID_STUDIO) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("⏱ Recent Files (Ctrl+E)", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
-                            onClick = { showOverflowMenu = false; onOpenRecentFiles() }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = if (isGuidedBeginnerMode) "💡 Guided Mode: ON (Tap for Pro)" else "💡 Guided Mode: OFF (Tap for Beginner)",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 12.sp
-                                )
-                            },
-                            onClick = { showOverflowMenu = false; onToggleGuidedBeginnerMode() }
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("File & Studio Settings", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
-                            onClick = { showOverflowMenu = false; onOpenFileSettings() },
-                            modifier = Modifier.testTag("editor_shortcut_settings_button")
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Adaptive Theme & Preferences", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
-                            onClick = { showOverflowMenu = false; onOpenStudioSettings() }
-                        )
-                    }
-                }
-            }
-        } else {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                modifier = Modifier
-                    .weight(1.3f, fill = false)
-                    .horizontalScroll(rememberScrollState())
-            ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onSaveNow)
-                        .testTag("save_now_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Save,
-                        contentDescription = "Save Now",
-                        tint = Color(0xFFFFC66D),
-                        modifier = Modifier
-                            .padding(horizontal = 7.dp, vertical = 5.dp)
-                            .size(14.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = onUndo,
-                    enabled = canUndo,
-                    modifier = Modifier.size(28.dp).testTag("undo_top_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Undo,
-                        contentDescription = "Undo",
-                        tint = if (canUndo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(15.dp)
-                    )
-                }
-                IconButton(
-                    onClick = onRedo,
-                    enabled = canRedo,
-                    modifier = Modifier.size(28.dp).testTag("redo_top_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Redo,
-                        contentDescription = "Redo",
-                        tint = if (canRedo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(15.dp)
-                    )
-                }
-
-                Surface(
-                    color = if (isRunActive || isBottomDrawerOpen) Color(0xFF28422B) else MaterialTheme.colorScheme.primaryContainer,
-                    shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = if (isRunActive || isBottomDrawerOpen) Color(0xFF6A8759) else MaterialTheme.colorScheme.primary
-                    ),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .clickable(onClick = onRunCode)
-                        .testTag("island_run_code_button")
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Run Code",
-                            tint = Color(0xFF81C784),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = "Run",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-
-                CodeAssistTopPill(
-                    label = if (syntaxErrorCount > 0) ">_ Terminal ($syntaxErrorCount)" else ">_ Terminal",
-                    isActive = isBottomDrawerOpen,
-                    testTag = "island_terminal_drawer_button",
-                    onClick = onToggleTerminalDrawer
-                )
-
-                CodeAssistTopPill(
-                    label = "Explain",
-                    isActive = isExplainActive,
-                    testTag = "island_explanation_window_toggle",
-                    onClick = { onToggleFloatingWindow(FloatingWindowType.EXPLANATION) }
-                )
-
-                CodeAssistTopPill(
-                    label = "Files ${activeFolder.sections.size}",
-                    isActive = isFilesFloatingActive,
-                    testTag = "island_folder_dropdown_button",
-                    onClick = { onToggleFloatingWindow(FloatingWindowType.FOLDERS) }
-                )
-
-                CodeAssistTopPill(
-                    label = "AI Guide",
-                    isActive = isAiActive,
-                    testTag = "island_ai_studio_button",
-                    onClick = { onToggleFloatingWindow(FloatingWindowType.AI_STUDIO) }
-                )
-
-                CodeAssistTopPill(
-                    label = "⌘P",
-                    isActive = isCmdActive,
-                    testTag = "island_command_palette_button",
-                    onClick = onToggleCommandPalette
-                )
-
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .clickable(onClick = onOpenFileSettings)
-                        .testTag("editor_shortcut_settings_button")
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "File & Studio Settings",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Text(
-                            text = "Settings",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CodeAssistTopPill(
-    label: String,
-    isActive: Boolean,
-    testTag: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        color = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(
-            width = if (isActive) 1.dp else 0.75.dp,
-            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-        ),
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .clickable(onClick = onClick)
-            .testTag(testTag)
-    ) {
-        Text(
-            text = label,
-            fontFamily = JetBrainsMonoFontFamily,
-            fontSize = 10.sp,
-            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-            color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            softWrap = false,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-        )
-    }
-}
-
-// =========================================================================
-// CODEASSIST SLIM LEFT ACTIVITY BAR
-// =========================================================================
-@Composable
-private fun CodeAssistSlimLeftActivityBar(
-    activeActivityTab: LeftActivityTab,
-    activeLeftRailTool: LeftRailIdeTool,
-    syntaxErrorCount: Int,
-    isBottomDrawerOpen: Boolean,
-    onToggleActivityTab: (LeftActivityTab) -> Unit,
-    onToggleBottomDrawer: () -> Unit,
-    onInsertNewFile: () -> Unit,
-    onFormatCode: () -> Unit,
-    onToggleDiagnosticsTool: () -> Unit,
-    onExportOrCopyFile: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxHeight()
-            .width(40.dp)
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
-            .verticalScroll(rememberScrollState())
-            .padding(vertical = 8.dp)
-            .testTag("left_circular_ide_rail"),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // 1. Project Files Tree (`FILES`)
-            ActivityRailIconButton(
-                icon = Icons.Default.Description,
-                tooltip = "Project Files",
-                isActive = activeActivityTab == LeftActivityTab.FILES,
-                testTag = "activity_rail_files",
-                onClick = { onToggleActivityTab(LeftActivityTab.FILES) }
-            )
-
-            // 2. Search in Files (`SEARCH`)
-            ActivityRailIconButton(
-                icon = Icons.Default.Search,
-                tooltip = "Find in Files",
-                isActive = activeActivityTab == LeftActivityTab.SEARCH,
-                testTag = "activity_rail_search",
-                onClick = { onToggleActivityTab(LeftActivityTab.SEARCH) }
-            )
-
-            // 3. Code Structure / Format (`<>`)
-            ActivityRailIconButton(
-                icon = Icons.Default.Code,
-                tooltip = "Format & Structure",
-                isActive = activeActivityTab == LeftActivityTab.STRUCTURE,
-                testTag = "rail_tool_format",
-                onClick = {
-                    onFormatCode()
-                    onToggleActivityTab(LeftActivityTab.STRUCTURE)
-                }
-            )
-
-            // 4. Explanation & Concept Notes (`EXPLAIN`)
-            ActivityRailIconButton(
-                icon = Icons.Default.AutoAwesome,
-                tooltip = "Explanation & Notes",
-                isActive = activeActivityTab == LeftActivityTab.EXPLAIN,
-                testTag = "activity_rail_explain",
-                onClick = { onToggleActivityTab(LeftActivityTab.EXPLAIN) }
-            )
-
-            // 5. SDK & Plugin Toolchain Manager (`PLUGINS`)
-            ActivityRailIconButton(
-                icon = Icons.Default.Extension,
-                tooltip = "SDK & Plugin Manager",
-                isActive = activeActivityTab == LeftActivityTab.PLUGINS,
-                testTag = "activity_rail_plugins",
-                onClick = { onToggleActivityTab(LeftActivityTab.PLUGINS) }
-            )
-
-            // 6. Terminal & Build Drawer (`>_`)
-            ActivityRailIconButton(
-                icon = Icons.Default.Terminal,
-                tooltip = "Terminal & Build Drawer",
-                isActive = isBottomDrawerOpen,
-                testTag = "activity_rail_terminal",
-                onClick = onToggleBottomDrawer
-            )
-        }
-
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Quick Fix / Diagnostics badge
-            ActivityRailIconButton(
-                icon = Icons.Default.Warning,
-                tooltip = "Diagnostics ($syntaxErrorCount)",
-                isActive = activeLeftRailTool == LeftRailIdeTool.DIAGNOSTICS || syntaxErrorCount > 0,
-                badgeColor = if (syntaxErrorCount > 0) Color(0xFFFF6B68) else null,
-                testTag = "rail_tool_diagnostics",
-                onClick = onToggleDiagnosticsTool
-            )
-
-            // New File `+`
-            ActivityRailIconButton(
-                icon = Icons.Default.Add,
-                tooltip = "New File",
-                isActive = false,
-                testTag = "rail_tool_add_section",
-                onClick = onInsertNewFile
-            )
-
-            // Export / Share
-            ActivityRailIconButton(
-                icon = Icons.AutoMirrored.Filled.OpenInNew,
-                tooltip = "Export / Share File",
-                isActive = false,
-                testTag = "rail_tool_share",
-                onClick = onExportOrCopyFile
-            )
-        }
-    }
-}
-
-@Composable
-private fun ActivityRailIconButton(
-    icon: ImageVector,
-    tooltip: String,
-    isActive: Boolean,
-    badgeColor: Color? = null,
-    testTag: String,
-    onClick: () -> Unit
-) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .size(30.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isActive) Color(0xFF3E3127) else Color.Transparent)
-            .border(
-                width = if (isActive) 1.dp else 0.dp,
-                color = if (isActive) Color(0xFFD4883A) else Color.Transparent,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .clickable(onClick = onClick)
-            .testTag(testTag)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = tooltip,
-            tint = badgeColor ?: if (isActive) Color(0xFFFFC66D) else Color(0xFFA39C93),
-            modifier = Modifier.size(16.dp)
-        )
-    }
-}
-
-// =========================================================================
-// CODEASSIST COLLAPSIBLE SIDE PANEL (FILES TREE / SEARCH / EXPLAIN / PLUGINS)
-// =========================================================================
-@Composable
-private fun CodeAssistSidePanel(
-    activeTab: LeftActivityTab,
-    document: DocumentDetailUiModel,
-    allFolders: List<DocumentSummaryUiModel>,
-    activeSection: CodeSectionUiModel?,
-    uiState: EditorUiState,
-    allProjectSymbols: List<CodeLanguageEngine.CodeSymbolDefinition> = emptyList(),
-    panelWidthDp: Int? = 235,
-    onSelectFileSection: (Long) -> Unit,
-    onInsertNewFile: () -> Unit,
-    onInsertLanguageFile: (LanguageType) -> Unit,
-    onSelectFolder: (Long) -> Unit,
-    onCreateNewFolder: (String) -> Unit,
-    onOpenFileSettings: () -> Unit,
-    onExportFile: (CodeSectionUiModel) -> Unit,
-    onUpdateSectionExplanation: (Long, String) -> Unit,
-    onUpdateSectionConceptTag: (Long, String) -> Unit,
-    onFontChoiceChange: (EditorFontChoice) -> Unit,
-    onToggleBold: () -> Unit,
-    onToggleItalic: () -> Unit,
-    onToggleUnderline: () -> Unit,
-    onRequestAiExplain: (Long) -> Unit,
-    onInstallOrTogglePlugin: (String) -> Unit,
-    onInstallAllSdks: () -> Unit,
-    onOptimizeActiveImports: () -> Unit = {},
-    onFormatActiveCode: () -> Unit = {},
-    onToggleBreakpoint: (Int) -> Unit = {},
-    onJumpToCodeLine: (Int) -> Unit = {},
-    onCreateStarterFile: (String, String) -> Unit = { _, _ -> },
-    onCollapsePanel: () -> Unit
-) {
-    var expandedAppRoot by remember { mutableStateOf(true) }
-    var searchFilter by remember { mutableStateOf("") }
-
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier
-            .fillMaxHeight()
-            .then(if (panelWidthDp != null) Modifier.width(panelWidthDp.dp) else Modifier.fillMaxWidth())
-            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
-            .testTag("codeassist_side_panel")
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Side Panel Header (`Files ... + -`)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = activeTab.label,
-                    fontFamily = JetBrainsMonoFontFamily,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFE6E1DC)
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    if (activeTab == LeftActivityTab.FILES) {
-                        IconButton(
-                            onClick = onInsertNewFile,
-                            modifier = Modifier.size(22.dp).testTag("tree_new_file_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "New File",
-                                tint = Color(0xFFD4883A),
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                    }
-                    IconButton(
-                        onClick = onCollapsePanel,
-                        modifier = Modifier.size(22.dp).testTag("collapse_side_panel_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Remove,
-                            contentDescription = "Collapse Panel",
-                            tint = Color(0xFFA39C93),
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
-            }
-
-            HorizontalDivider(thickness = 0.5.dp, color = Color(0xFF332D29))
-
-            when (activeTab) {
-                LeftActivityTab.FILES -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(vertical = 6.dp)
-                            .testTag("codeassist_files_tree_panel")
-                    ) {
-                        // Root `▾ 📁 app`
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { expandedAppRoot = !expandedAppRoot }
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (expandedAppRoot) {
-                                    Icons.Default.KeyboardArrowDown
-                                } else {
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight
-                                },
-                                contentDescription = null,
-                                tint = Color(0xFFA39C93),
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Icon(
-                                imageVector = Icons.Default.Folder,
-                                contentDescription = null,
-                                tint = Color(0xFF7CB7FF),
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                text = "app (${document.title})",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFE6E1DC),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        if (expandedAppRoot) {
-                            // Group files by language directory (`app/src/main/kotlin`, etc.)
-                            val groupedByLang = document.sections.groupBy { it.language }
-                            groupedByLang.forEach { (lang, sectionsInLang) ->
-                                // Source directory node (`▾ 📁 app/src/main/kotlin`)
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = 20.dp, end = 8.dp, top = 3.dp, bottom = 3.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.KeyboardArrowDown,
-                                        contentDescription = null,
-                                        tint = Color(0xFFA39C93),
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.FolderOpen,
-                                        contentDescription = null,
-                                        tint = lang.badgeColor,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Text(
-                                        text = "app/${lang.directoryPath.trimEnd('/')}",
-                                        fontFamily = JetBrainsMonoFontFamily,
-                                        fontSize = 10.5.sp,
-                                        color = Color(0xFFD5CEC6),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                // Package node (`▾ ⊞ com.example.myapp`)
-                                val pkgSlug = document.title.lowercase().replace(Regex("[^a-z0-9]"), "").ifBlank { "myapp" }
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = 34.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.AccountTree,
-                                        contentDescription = null,
-                                        tint = Color(0xFFA39C93),
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Text(
-                                        text = "com.example.$pkgSlug",
-                                        fontFamily = JetBrainsMonoFontFamily,
-                                        fontSize = 10.sp,
-                                        color = Color(0xFFA39C93),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                // Individual source files (`K Main.kt`)
-                                sectionsInLang.forEach { sec ->
-                                    val isSelected = activeSection?.id == sec.id
-                                    Surface(
-                                        color = if (isSelected) Color(0xFF4A382B) else Color.Transparent,
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 8.dp, vertical = 1.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .clickable { onSelectFileSection(sec.id) }
-                                            .testTag("tree_file_item_${sec.orderIndex}")
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(start = 36.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                // Circular language badge (`K`)
-                                                Box(
-                                                    contentAlignment = Alignment.Center,
-                                                    modifier = Modifier
-                                                        .size(16.dp)
-                                                        .clip(CircleShape)
-                                                        .background(sec.language.badgeColor.copy(alpha = 0.25f))
-                                                        .border(0.5.dp, sec.language.badgeColor, CircleShape)
-                                                ) {
-                                                    Text(
-                                                        text = sec.language.badgeLabel.take(2),
-                                                        fontFamily = JetBrainsMonoFontFamily,
-                                                        fontSize = 7.5.sp,
-                                                        fontWeight = FontWeight.ExtraBold,
-                                                        color = sec.language.badgeColor
-                                                    )
-                                                }
-                                                Text(
-                                                    text = sec.nativeFileName.substringBeforeLast("."),
-                                                    fontFamily = JetBrainsMonoFontFamily,
-                                                    fontSize = 11.sp,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                    color = if (isSelected) Color(0xFFFFE5CC) else Color(0xFFE6E1DC),
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                                contentDescription = "Export ${sec.nativeFileName}",
-                                                tint = Color(0xFFA39C93),
-                                                modifier = Modifier
-                                                    .size(12.dp)
-                                                    .clickable { onExportFile(sec) }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Virtual `T module.toml` (opens File Inspector / Project Config)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable(onClick = onOpenFileSettings)
-                                    .padding(start = 24.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFFD4883A).copy(alpha = 0.22f))
-                                ) {
-                                    Text(
-                                        text = "T",
-                                        fontFamily = JetBrainsMonoFontFamily,
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFD4883A)
-                                    )
-                                }
-                                Text(
-                                    text = "module.toml",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 10.5.sp,
-                                    color = Color(0xFFC5BEB6)
-                                )
-                            }
-
-                            HorizontalDivider(
-                                thickness = 0.5.dp,
-                                color = Color(0xFF332D29),
-                                modifier = Modifier.padding(vertical = 6.dp)
-                            )
-
-                            // Quick Add Language File Strip inside Project Explorer
-                            Text(
-                                text = "New File by Language",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFA39C93),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState())
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                LanguageType.entries.forEach { lang ->
-                                    Surface(
-                                        color = Color(0xFF282320),
-                                        shape = RoundedCornerShape(6.dp),
-                                        border = BorderStroke(0.5.dp, lang.badgeColor.copy(alpha = 0.6f)),
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .clickable { onInsertLanguageFile(lang) }
-                                    ) {
-                                        Text(
-                                            text = "+${lang.nativeExtension}",
-                                            fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = lang.badgeColor,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            Text(
-                                text = "Android Project Files",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFA39C93),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState())
-                                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                listOf(
-                                    "AndroidManifest.xml" to AndroidProjectToolkit.defaultManifestXml(document.title.ifBlank { "StudentStudyApp" }),
-                                    "activity_main.xml" to AndroidProjectToolkit.defaultActivityMainXml(),
-                                    "strings.xml" to AndroidProjectToolkit.defaultStringsXml(document.title.ifBlank { "Student Study App" }),
-                                    "colors.xml" to AndroidProjectToolkit.defaultColorsXml()
-                                ).forEach { (starterName, starterBody) ->
-                                    Surface(
-                                        color = Color(0xFF1F2724),
-                                        shape = RoundedCornerShape(6.dp),
-                                        border = BorderStroke(0.5.dp, Color(0xFF10B981).copy(alpha = 0.5f)),
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .clickable { onCreateStarterFile(starterName, starterBody) }
-                                    ) {
-                                        Text(
-                                            text = "+$starterName",
-                                            fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 8.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1,
-                                            softWrap = false,
-                                            color = Color(0xFF81C784),
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                LeftActivityTab.SEARCH -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = searchFilter,
-                            onValueChange = { searchFilter = it },
-                            placeholder = { Text("Find in project files...", fontSize = 10.5.sp) },
-                            singleLine = true,
-                            shape = RoundedCornerShape(8.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = Color(0xFF141210),
-                                unfocusedContainerColor = Color(0xFF141210),
-                                focusedBorderColor = Color(0xFFD4883A)
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        val matches = remember(document.sections, searchFilter) {
-                            if (searchFilter.isBlank()) document.sections
-                            else document.sections.filter {
-                                it.nativeFileName.contains(searchFilter, ignoreCase = true) ||
-                                    it.codeContent.contains(searchFilter, ignoreCase = true) ||
-                                    it.explanationText.contains(searchFilter, ignoreCase = true)
-                            }
-                        }
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            matches.forEach { sec ->
-                                val matchLineIdx = remember(sec.codeContent, searchFilter) {
-                                    if (searchFilter.isBlank()) -1
-                                    else sec.codeContent.lines().indexOfFirst {
-                                        it.contains(searchFilter, ignoreCase = true)
-                                    }
-                                }
-                                Surface(
-                                    color = Color(0xFF26211E),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            onSelectFileSection(sec.id)
-                                            if (matchLineIdx >= 0) {
-                                                onJumpToCodeLine(matchLineIdx + 1)
-                                            }
-                                        }
-                                ) {
-                                    Column(modifier = Modifier.padding(8.dp)) {
-                                        Text(
-                                            text = if (matchLineIdx >= 0) "${sec.nativeFileName}:${matchLineIdx + 1}" else sec.nativeFileName,
-                                            fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 10.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = sec.language.badgeColor
-                                        )
-                                        Text(
-                                            text = if (matchLineIdx >= 0) {
-                                                sec.codeContent.lines().getOrNull(matchLineIdx)?.trim() ?: ""
-                                            } else {
-                                                sec.codeContent.lines().firstOrNull { it.isNotBlank() } ?: "// empty"
-                                            },
-                                            fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 9.5.sp,
-                                            color = Color(0xFFA39C93),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                LeftActivityTab.STRUCTURE -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(8.dp)
-                            .testTag("codeassist_structure_side_panel"),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Quick Actions: Optimize Imports + Format Code
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Surface(
-                                color = Color(0xFF283226),
-                                shape = RoundedCornerShape(999.dp),
-                                border = BorderStroke(0.8.dp, Color(0xFF6A8759)),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .clickable(onClick = onOptimizeActiveImports)
-                                    .testTag("side_panel_optimize_imports_btn")
-                            ) {
-                                Text(
-                                    text = "Optimize Imports",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF81C784),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                                )
-                            }
-                            Surface(
-                                color = Color(0xFF332922),
-                                shape = RoundedCornerShape(999.dp),
-                                border = BorderStroke(0.8.dp, Color(0xFFD4883A)),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .clickable(onClick = onFormatActiveCode)
-                            ) {
-                                Text(
-                                    text = "Format",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFFC66D),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                                )
-                            }
-                        }
-
-                        // 1. Go-to-Definition Project Symbol Index
-                        Text(
-                            text = "Go to Definition (${allProjectSymbols.size} symbols)",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF7CB7FF)
-                        )
-                        if (allProjectSymbols.isEmpty()) {
-                            Text(
-                                text = "No functions, classes, or properties indexed yet.",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 9.5.sp,
-                                color = Color(0xFFA39C93)
-                            )
-                        } else {
-                            allProjectSymbols.forEach { sym ->
-                                val isCurrentFile = sym.sectionId == activeSection?.id
-                                Surface(
-                                    color = if (isCurrentFile) Color(0xFF2D2622) else Color(0xFF231F1C),
-                                    shape = RoundedCornerShape(10.dp),
-                                    border = BorderStroke(
-                                        0.6.dp,
-                                        if (isCurrentFile) Color(0xFFD4883A).copy(alpha = 0.6f) else Color(0xFF352F2B)
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .clickable {
-                                            onSelectFileSection(sym.sectionId)
-                                            onJumpToCodeLine(sym.line)
-                                        }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Surface(
-                                                color = Color(0xFF3E3127),
-                                                shape = CircleShape
-                                            ) {
-                                                Text(
-                                                    text = sym.kindBadge.toString(),
-                                                    fontFamily = JetBrainsMonoFontFamily,
-                                                    fontSize = 8.5.sp,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = Color(0xFFFFC66D),
-                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                                                )
-                                            }
-                                            Column {
-                                                Text(
-                                                    text = sym.name,
-                                                    fontFamily = JetBrainsMonoFontFamily,
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFFE6E1DC),
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                Text(
-                                                    text = "${sym.fileName}:${sym.line}",
-                                                    fontFamily = JetBrainsMonoFontFamily,
-                                                    fontSize = 8.5.sp,
-                                                    color = Color(0xFFA39C93)
-                                                )
-                                            }
-                                        }
-                                        Text(
-                                            text = "Jump →",
-                                            fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 8.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF7CB7FF)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        HorizontalDivider(thickness = 0.5.dp, color = Color(0xFF332D29))
-
-                        // 2. Foldable Regions & AST Debugger Snapshot
-                        Text(
-                            text = "AST & Foldable Regions",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFD4883A)
-                        )
-                        if (activeSection == null) {
-                            Text("No active file selected.", fontSize = 10.5.sp, color = Color(0xFFA39C93))
-                        } else {
-                            val regions = remember(activeSection.codeContent, activeSection.language) {
-                                CodeLanguageEngine.detectFoldableRegions(activeSection.codeContent, activeSection.language)
-                            }
-                            regions.forEach { reg ->
-                                Surface(
-                                    color = Color(0xFF26211E),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { onJumpToCodeLine(reg.startLine) }
-                                ) {
-                                    Text(
-                                        text = "▾ Ln ${reg.startLine}..${reg.endLine}: ${reg.summaryLabel}",
-                                        fontFamily = JetBrainsMonoFontFamily,
-                                        fontSize = 9.5.sp,
-                                        color = Color(0xFFD5CEC6),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-
-                            val debugInfo = remember(activeSection.codeContent, activeSection.language) {
-                                CodeLanguageEngine.executeAndDebug(activeSection.codeContent, activeSection.language)
-                            }
-                            Text(
-                                text = "Entry: ${debugInfo.callStack.firstOrNull() ?: "main()"}",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 10.sp,
-                                color = Color(0xFF81C784)
-                            )
-                            debugInfo.variables.forEach { (varName, varVal) ->
-                                Surface(
-                                    color = Color(0xFF26211E),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(
-                                            text = varName,
-                                            fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 10.sp,
-                                            color = Color(0xFFE6E1DC)
-                                        )
-                                        Text(
-                                            text = varVal,
-                                            fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 9.5.sp,
-                                            color = Color(0xFFA39C93)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                LeftActivityTab.EXPLAIN -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(8.dp)
-                            .testTag("codeassist_explain_side_panel")
-                    ) {
-                        if (activeSection != null) {
-                            ExplanationWindowBodyContent(
-                                section = activeSection,
-                                formattingStyle = uiState.activeFormattingStyle,
-                                onExplanationChange = { onUpdateSectionExplanation(activeSection.id, it) },
-                                onConceptTagChange = { onUpdateSectionConceptTag(activeSection.id, it) },
-                                onFontChoiceChange = onFontChoiceChange,
-                                onToggleBold = onToggleBold,
-                                onToggleItalic = onToggleItalic,
-                                onToggleUnderline = onToggleUnderline
-                            )
-                        } else {
-                            Text("Open a file to edit its explanation.", fontSize = 11.sp, color = Color(0xFFA39C93))
-                        }
-                    }
-                }
-
-                LeftActivityTab.PLUGINS -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(8.dp)
-                            .testTag("codeassist_plugins_side_panel"),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "On-Device Engines",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFD4883A)
-                            )
-                            Surface(
-                                color = Color(0xFFD4883A).copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(6.dp),
-                                border = BorderStroke(0.5.dp, Color(0xFFD4883A)),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .clickable(onClick = onInstallAllSdks)
-                            ) {
-                                Text(
-                                    text = "Enable All",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 8.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFFC66D),
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                        uiState.toolchainPlugins.forEach { plugin ->
-                            ToolchainPluginRowItem(
-                                plugin = plugin,
-                                onActionClick = { onInstallOrTogglePlugin(plugin.id) }
-                            )
-                        }
-                    }
-                }
-
-                LeftActivityTab.NONE -> Unit
-            }
-        }
-    }
-}
-
-// =========================================================================
-// CODEASSIST EDITOR FILE TAB BAR (`K Main.kt • ×`)
-// =========================================================================
-@Composable
-private fun CodeAssistEditorTabBar(
-    allSections: List<CodeSectionUiModel>,
-    openSections: List<CodeSectionUiModel>,
-    activeSection: CodeSectionUiModel?,
-    hasUnsavedChanges: Boolean,
-    onSelectSection: (Long) -> Unit,
-    onCloseSectionTab: (Long) -> Unit,
-    onReorderTab: (Long, Int) -> Unit = { _, _ -> },
-    onNavigateFocusedSection: (Int) -> Unit,
-    onInsertNewFile: () -> Unit,
-    onInsertLanguageFile: (LanguageType) -> Unit = {},
-    onOpenFileSettings: () -> Unit,
-    onExportActiveFile: () -> Unit
-) {
-    var showNewLangMenu by remember { mutableStateOf(false) }
-
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 10.dp, vertical = 4.dp)
-                .testTag("learned_concepts_navigator_bar"),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            val sectionsToShow = if (openSections.isNotEmpty()) openSections else allSections
-            sectionsToShow.forEachIndexed { idx, sec ->
-                val isCurrent = activeSection?.id == sec.id
-                val langColor = sec.language.badgeColor
-                Surface(
-                    color = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(
-                        width = if (isCurrent) 1.dp else 0.5.dp,
-                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-                    ),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .clickable { onSelectSection(sec.id) }
-                        .testTag("jump_concept_chip_${sec.orderIndex}")
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(15.dp)
-                                .clip(CircleShape)
-                                .background(langColor.copy(alpha = 0.25f))
-                                .border(0.5.dp, langColor, CircleShape)
-                        ) {
-                            Text(
-                                text = sec.language.badgeLabel.take(2),
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 7.5.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = langColor,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-
-                        Text(
-                            text = sec.nativeFileName,
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 11.sp,
-                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-
-                        if (isCurrent) {
-                            Box(
-                                modifier = Modifier
-                                    .size(5.dp)
-                                    .clip(CircleShape)
-                                    .background(if (hasUnsavedChanges) Color(0xFFFFC66D) else Color(0xFF81C784))
-                            )
-                            if (sectionsToShow.size > 1) {
-                                if (idx > 0) {
-                                    Text(
-                                        text = "◀",
-                                        fontSize = 8.5.sp,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier
-                                            .clickable { onReorderTab(sec.id, -1) }
-                                            .testTag("reorder_tab_left_${sec.orderIndex}")
-                                    )
-                                }
-                                if (idx < sectionsToShow.lastIndex) {
-                                    Text(
-                                        text = "▶",
-                                        fontSize = 8.5.sp,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier
-                                            .clickable { onReorderTab(sec.id, 1) }
-                                            .testTag("reorder_tab_right_${sec.orderIndex}")
-                                    )
-                                }
-                            }
-                        }
-
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close ${sec.nativeFileName} Tab",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .size(12.dp)
-                                .clip(CircleShape)
-                                .clickable { onCloseSectionTab(sec.id) }
-                                .testTag("close_tab_${sec.orderIndex}")
-                        )
-                    }
-                }
-            }
-
-            // `+` New File Tab Pill + Language Quick Picker Dropdown
-            Box {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(999.dp),
-                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .clickable(onClick = onInsertNewFile)
-                            .testTag("tab_bar_new_file_button")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "New File",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(12.dp)
-                            )
-                        }
-                    }
-
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(999.dp),
-                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .clickable { showNewLangMenu = true }
-                            .testTag("tab_bar_language_menu_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = "New File by Language",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .padding(horizontal = 5.dp, vertical = 4.dp)
-                                .size(12.dp)
-                        )
-                    }
-                }
-
-                DropdownMenu(
-                    expanded = showNewLangMenu,
-                    onDismissRequest = { showNewLangMenu = false }
-                ) {
-                    LanguageType.entries.forEach { lang ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = "+ New ${lang.displayName} (${lang.nativeExtension})",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 11.5.sp,
-                                    color = lang.badgeColor
-                                )
-                            },
-                            onClick = {
-                                showNewLangMenu = false
-                                onInsertLanguageFile(lang)
-                            }
-                        )
-                    }
-                }
-            }
-
-            if (allSections.size > 1 && activeSection != null) {
-                val curNum = activeSection.orderIndex + 1
-                IconButton(
-                    onClick = { onNavigateFocusedSection(-1) },
-                    enabled = curNum > 1,
-                    modifier = Modifier.size(22.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "Previous File",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(15.dp)
-                    )
-                }
-                IconButton(
-                    onClick = { onNavigateFocusedSection(1) },
-                    enabled = curNum < allSections.size,
-                    modifier = Modifier.size(22.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Next File",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(15.dp)
-                    )
-                }
-            }
-
-            // Export / Copy Active File Bundle
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                shape = RoundedCornerShape(999.dp),
-                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .clickable(onClick = onExportActiveFile)
-                    .testTag("export_markdown_button")
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                        contentDescription = "Export or Share File",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(11.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Export / Copy",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-            }
-        }
-    }
-}
-
-// =========================================================================
-// CODEASSIST "NO FILE OPEN" ZERO-STATE SCREEN (Screenshot 4)
-// =========================================================================
 @Composable
 private fun CodeAssistNoFileOpenZeroState(
-    document: DocumentDetailUiModel,
     onSearchEverywhere: () -> Unit,
     onGoToFile: () -> Unit,
     onRecentFiles: () -> Unit,
-    onFindInFiles: () -> Unit,
     onNewFile: () -> Unit,
     onProjectFiles: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1615))
+            .background(MaterialTheme.colorScheme.background)
             .testTag("no_file_open_zero_state"),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.width(340.dp)
+            modifier = Modifier
+                .width(340.dp)
+                .padding(horizontal = 16.dp)
         ) {
             Text(
                 text = "No file open",
-                fontFamily = JetBrainsMonoFontFamily,
-                fontSize = 18.sp,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF7D746D)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(4.dp))
 
             val shortcuts = listOf(
-                Triple("Search everywhere", "Double Shift", onSearchEverywhere),
-                Triple("Go to file", "Ctrl + Shift + N", onGoToFile),
+                Triple("Open Project Files", "Drawer", onProjectFiles),
                 Triple("Recent files", "Ctrl + E", onRecentFiles),
-                Triple("Find in files", "Ctrl + Shift + F", onFindInFiles),
-                Triple("New file", "Ctrl + N", onNewFile),
-                Triple("Project files", "Alt + 1", onProjectFiles)
+                Triple("Search everywhere", "⌘P", onSearchEverywhere),
+                Triple("Go to file", "Ctrl + Shift + N", onGoToFile),
+                Triple("New file", "Ctrl + N", onNewFile)
             )
 
             shortcuts.forEach { (label, keycap, action) ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(10.dp))
                         .clickable(onClick = action)
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = label,
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 12.sp,
-                        color = Color(0xFF8C827A)
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Surface(
-                        color = Color(0xFF282320),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         shape = RoundedCornerShape(6.dp),
-                        border = BorderStroke(0.5.dp, Color(0xFF3E3630))
+                        border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
                         Text(
                             text = keycap,
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFA39C93),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
@@ -3282,143 +1570,62 @@ private fun DockedSplitWindowContainer(
     Card(
         modifier = Modifier
             .fillMaxSize()
-            .shadow(14.dp, RoundedCornerShape(18.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp))
+            .shadow(8.dp, RoundedCornerShape(14.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
             .testTag("docked_split_window_${windowType.name.lowercase()}"),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                Text(
+                    text = "${windowType.windowTitle} (${((1f - splitRatio) * 100).toInt()}%)",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(11.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFF5F57))
-                            .clickable(onClick = onCloseSplit)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(11.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFEBC2E))
-                            .clickable(onClick = onUndockToFloating)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(11.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF28C840))
-                            .clickable(onClick = onToggleOrientation)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "${windowType.windowTitle} (${((1f - splitRatio) * 100).toInt()}%)",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFEAEFF5),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                )
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Surface(
-                        color = Color(0xFF28323C),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .border(1.dp, Color(0xFF4F5D6B), RoundedCornerShape(6.dp))
-                            .clickable(onClick = onToggleOrientation)
-                            .testTag("split_orientation_toggle_button")
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    IconButton(
+                        onClick = onToggleOrientation,
+                        modifier = Modifier.size(28.dp).testTag("split_orientation_toggle_button")
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.VerticalSplit,
-                                contentDescription = "Switch Split Orientation",
-                                tint = Color(0xFF8CA6B8),
-                                modifier = Modifier.size(10.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = if (orientation == SplitScreenOrientation.SIDE_BY_SIDE) "Bottom Split" else "Side Split",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF8CA6B8)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.VerticalSplit,
+                            contentDescription = "Switch Split Orientation",
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
-
-                    Surface(
-                        color = Color(0xFF28323C),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .border(1.dp, Color(0xFF4F5D6B), RoundedCornerShape(6.dp))
-                            .clickable(onClick = onUndockToFloating)
-                            .testTag("split_undock_to_floating_button")
+                    IconButton(
+                        onClick = onUndockToFloating,
+                        modifier = Modifier.size(28.dp).testTag("split_undock_to_floating_button")
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                contentDescription = "Undock to Floating Window",
-                                tint = Color(0xFFD4883A),
-                                modifier = Modifier.size(10.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = "Float",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFE6E1DC)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = "Undock to Floating",
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
-
-                    Surface(
-                        color = Color(0xFF3A2323),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .border(1.dp, Color(0xFF6B3E3E), RoundedCornerShape(6.dp))
-                            .clickable(onClick = onCloseSplit)
-                            .testTag("split_close_button")
+                    IconButton(
+                        onClick = onCloseSplit,
+                        modifier = Modifier.size(28.dp).testTag("split_close_button")
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close Split Window",
-                                tint = Color(0xFFF2B8B5),
-                                modifier = Modifier.size(10.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close Split",
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
             }
@@ -3534,13 +1741,13 @@ private fun FloatingOrSplitWindowContentBody(
                     fontFamily = JetBrainsMonoFontFamily,
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFE6E1DC)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "Concept Tag: [${activeSection.effectiveLearnedConceptTag}] • Quota: ${uiState.remainingAiRpmQuota}/10 RPM",
                     fontFamily = JetBrainsMonoFontFamily,
                     fontSize = 10.5.sp,
-                    color = Color(0xFF8AA87B)
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -3548,41 +1755,19 @@ private fun FloatingOrSplitWindowContentBody(
                 ) {
                     Button(
                         onClick = { onRequestAiExplain(activeSection.id) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Tier2CompletionSelectedBg),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = Color(0xFFE6E1DC),
-                            modifier = Modifier.size(14.dp)
-                        )
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            "Thorough Explain",
-                            color = Color(0xFFE6E1DC),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.5.sp
-                        )
+                        Text("Explain", fontSize = 11.sp)
                     }
                     Button(
                         onClick = { onRequestAiRefactor(activeSection.id) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF36454F)),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(
-                            Icons.Default.AutoFixHigh,
-                            contentDescription = null,
-                            tint = Color(0xFFE6E1DC),
-                            modifier = Modifier.size(14.dp)
-                        )
+                        Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            "Fix & Refactor",
-                            color = Color(0xFFE6E1DC),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.5.sp
-                        )
+                        Text("Refactor", fontSize = 11.sp)
                     }
                 }
                 Row(
@@ -3593,13 +1778,13 @@ private fun FloatingOrSplitWindowContentBody(
                         onClick = { onRequestAiNaming(activeSection.id) },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Name & Tag Concept", fontSize = 10.5.sp, color = Color(0xFFE6E1DC))
+                        Text("Name & Tag", fontSize = 10.5.sp)
                     }
                     OutlinedButton(
                         onClick = { onRequestAiKDoc(activeSection.id) },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Add KDoc Comments", fontSize = 10.5.sp, color = Color(0xFFE6E1DC))
+                        Text("Add KDoc", fontSize = 10.5.sp)
                     }
                 }
             }
@@ -3616,27 +1801,14 @@ private fun FloatingOrSplitWindowContentBody(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "zsh • ${activeSection.language.displayName} ${activeSection.nativeFileName}",
+                        text = "${activeSection.language.displayName} • ${activeSection.nativeFileName}",
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 10.5.sp,
-                        color = Color(0xFFD4883A),
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
                     )
-                    Surface(
-                        color = Tier2CompletionSelectedBg,
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable(onClick = onRunActiveSectionInTerminal)
-                    ) {
-                        Text(
-                            text = "Re-Run ▶",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFE6E1DC),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
+                    Button(onClick = onRunActiveSectionInTerminal) {
+                        Text("Re-Run", fontSize = 10.5.sp)
                     }
                 }
                 Surface(
@@ -3690,7 +1862,7 @@ private fun FullScreenAppleCmdSectionEditor(
     onToggleSectionDivider: (Long) -> Unit,
     onDeleteSection: (Long) -> Unit,
     onSelectLanguage: (LanguageType) -> Unit = {},
-    onSelectThemeOverride: (com.example.ui.theme.AppThemeId?) -> Unit = {},
+    onSelectThemeOverride: (AppThemeId?) -> Unit = {},
     onOpenFileSettings: () -> Unit = {},
     onRunCode: () -> Unit = {},
     onExportOrCopyFile: (Boolean) -> Unit = {},

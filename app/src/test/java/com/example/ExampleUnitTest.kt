@@ -422,15 +422,23 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun `6 curated IDE themes provide rich color palette swatches and exact hex codes`() {
+    fun `11 CodeAssist IDE editor schemes provide dark and light palettes with valid hex swatches`() {
         val allThemes = com.example.ui.theme.AppThemeId.entries
-        assertEquals(6, allThemes.size)
+        assertEquals(11, allThemes.size)
         assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.DARCULA_ESPRESSO))
-        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.MACOS_MIDNIGHT))
-        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.MONOKAI_PRO))
+        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.QUIET_LIGHT))
+        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.DRACULA))
         assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.GITHUB_DARK))
+        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.GITHUB_LIGHT))
+        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.MONOKAI_PRO))
         assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.SOLARIZED_DARK))
+        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.SOLARIZED_LIGHT))
+        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.ABYSS))
         assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.NORD_FROST))
+        assertTrue(allThemes.contains(com.example.ui.theme.AppThemeId.MACOS_MIDNIGHT))
+
+        assertTrue(allThemes.any { !it.isDark })
+        assertTrue(allThemes.any { it.isDark })
 
         allThemes.forEach { theme ->
             val swatches = theme.paletteSwatches
@@ -439,6 +447,8 @@ class ExampleUnitTest {
                 assertTrue(swatch.hexCode.startsWith("#"))
                 assertTrue(swatch.name.isNotBlank())
             }
+            val syntax = theme.toSyntaxColors()
+            assertNotNull(syntax)
         }
     }
 
@@ -893,6 +903,30 @@ class ExampleUnitTest {
             assertTrue("Lesson ${lesson.id} should include word dictionary entries", lesson.wordDictionary.isNotEmpty())
             assertTrue("Lesson ${lesson.id} should include line walkthroughs", lesson.lineWalkthrough.isNotEmpty())
         }
+    }
+
+    @Test
+    fun `CodeAssistAppTheme HomeScreenTab and ProjectTemplate definitions cover all required 1-to-1 presets`() {
+        val appThemes = com.example.ui.theme.CodeAssistAppTheme.entries
+        assertEquals(4, appThemes.size)
+        assertTrue(appThemes.contains(com.example.ui.theme.CodeAssistAppTheme.MATERIAL_YOU))
+        assertTrue(appThemes.contains(com.example.ui.theme.CodeAssistAppTheme.CODEASSIST_DARK))
+        assertTrue(appThemes.contains(com.example.ui.theme.CodeAssistAppTheme.CODEASSIST_LIGHT))
+        assertTrue(appThemes.contains(com.example.ui.theme.CodeAssistAppTheme.CODEASSIST_AMOLED))
+        assertEquals(true, com.example.ui.theme.CodeAssistAppTheme.CODEASSIST_DARK.forcesDark)
+        assertEquals(false, com.example.ui.theme.CodeAssistAppTheme.CODEASSIST_LIGHT.forcesDark)
+        assertEquals(true, com.example.ui.theme.CodeAssistAppTheme.CODEASSIST_AMOLED.forcesDark)
+        assertNull(com.example.ui.theme.CodeAssistAppTheme.MATERIAL_YOU.forcesDark)
+
+        val homeTabs = com.example.model.HomeScreenTab.entries
+        assertEquals(2, homeTabs.size)
+        assertEquals("Projects", com.example.model.HomeScreenTab.PROJECTS.label)
+        assertEquals("Learn Mode", com.example.model.HomeScreenTab.LEARN_MODE.label)
+
+        val templates = com.example.model.CodeAssistProjectTemplate.entries
+        assertTrue(templates.size >= 6)
+        assertTrue(templates.any { it == com.example.model.CodeAssistProjectTemplate.EMPTY_COMPOSE })
+        assertTrue(templates.any { it == com.example.model.CodeAssistProjectTemplate.EMPTY_XML_VIEWS })
     }
 }
 

@@ -114,7 +114,9 @@ data class EditorUiState(
     val showRecentFilesDialog: Boolean = false,
     val activeGitBranch: String = "main",
     val localGitCommits: List<com.example.codeassist.LocalGitCommit> = emptyList(),
-    val latestBuildTasks: List<com.example.codeassist.BuildPipelineTask> = emptyList()
+    val latestBuildTasks: List<com.example.codeassist.BuildPipelineTask> = emptyList(),
+    val codeAssistAppTheme: com.example.ui.theme.CodeAssistAppTheme = com.example.ui.theme.CodeAssistAppTheme.CODEASSIST_DARK,
+    val homeScreenTab: com.example.model.HomeScreenTab = com.example.model.HomeScreenTab.PROJECTS
 ) {
     fun isLanguageSdkInstalled(language: com.example.model.LanguageType): Boolean {
         val sdkId = com.example.model.ToolchainPluginItem.sdkIdForLanguage(language)
@@ -228,6 +230,7 @@ class EditorViewModel(
             shortcutLetter = repository.getShortcutLetter(),
             themeMode = repository.getThemeMode(),
             activeAppTheme = repository.getActiveAppTheme(),
+            codeAssistAppTheme = repository.getCodeAssistAppTheme(),
             toolchainPlugins = com.example.model.ToolchainPluginItem.defaultCatalog(
                 repository.getInstalledPluginIds()
             ),
@@ -1406,6 +1409,152 @@ class EditorViewModel(
         }
     }
 
+    fun createProjectFromWizard(
+        appName: String,
+        packageName: String,
+        minSdk: Int,
+        template: com.example.model.CodeAssistProjectTemplate
+    ) {
+        viewModelScope.launch {
+            if (_uiState.value.activeDocument != null && _uiState.value.hasUnsavedChanges) {
+                persistActiveDocumentInternal("Auto-saved before creating new project")
+            }
+            val cleanName = appName.trim().ifBlank { template.title }
+            val cleanPkg = packageName.trim().ifBlank { "com.example.studentapp" }
+            val safeMinSdk = minSdk.coerceIn(21, 35)
+            val newDocId = repository.createNewDocument(
+                title = cleanName,
+                withStarterSection = true
+            )
+            val detail = repository.loadDocumentDetail(newDocId)
+            if (detail != null) {
+                val baseTemplate = com.example.model.TextFormattingStyle(
+                    fontChoice = com.example.model.EditorFontChoice.JETBRAINS_MONO,
+                    fontSizeSp = 15
+                )
+                val primaryCode = when (template) {
+                    com.example.model.CodeAssistProjectTemplate.EMPTY_COMPOSE -> """
+                        package $cleanPkg
+
+                        @Composable
+                        fun MainScreen() {
+                            Card {
+                                Column {
+                                    Text("$cleanName")
+                                    Text("Package: $cleanPkg")
+                                    Button(onClick = {}) {
+                                        Text("Run App")
+                                    }
+                                }
+                            }
+                        }
+
+                        fun main() {
+                            println("Launched $cleanName (minSdk $safeMinSdk)")
+                        }
+                    """.trimIndent()
+                    com.example.model.CodeAssistProjectTemplate.EMPTY_XML_VIEWS -> """
+                        <LinearLayout
+                            xmlns:android="http://schemas.android.com/apk/res/android"
+                            android:orientation="vertical">
+                            <TextView
+                                android:text="@string/welcome_title"
+                                android:textStyle="bold"
+                                android:textColor="@color/brand_primary" />
+                            <Button
+                                android:text="Get Started" />
+                        </LinearLayout>
+                    """.trimIndent()
+                    com.example.model.CodeAssistProjectTemplate.FLUTTER_WIDGET -> """
+                        Widget buildApp() {
+                          return Scaffold(
+                            appBar: AppBar(title: Text('$cleanName')),
+                            body: Column(
+                              children: [
+                                Text('Package: $cleanPkg'),
+                                ElevatedButton(child: Text('Continue')),
+                              ],
+                            ),
+                          );
+                        }
+
+                        void main() {
+                          print('Flutter ready: $cleanName');
+                        }
+                    """.trimIndent()
+                    else -> template.primaryLanguage.starterCode
+                }
+
+                val primaryFileName = when (template) {
+                    com.example.model.CodeAssistProjectTemplate.EMPTY_COMPOSE -> "MainActivity.kt"
+                    com.example.model.CodeAssistProjectTemplate.EMPTY_XML_VIEWS -> "activity_main.xml"
+                    else -> template.primaryLanguage.defaultFileName
+                }
+
+                val starterSections = buildList {
+                    add(
+                        com.example.model.CodeSectionUiModel(
+                            id = detail.sections.firstOrNull()?.id ?: 0L,
+                            documentId = newDocId,
+                            orderIndex = 0,
+                            sectionTitle = primaryFileName,
+                            codeContent = primaryCode,
+                            explanationText = "Created with ${template.title} ($cleanPkg, minSdk $safeMinSdk)",
+                            explanationStyle = baseTemplate.copy(learnedConceptTag = template.badge),
+                            language = template.primaryLanguage
+                        )
+                    )
+                    if (template == com.example.model.CodeAssistProjectTemplate.EMPTY_COMPOSE ||
+                        template == com.example.model.CodeAssistProjectTemplate.EMPTY_XML_VIEWS ||
+                        template == com.example.model.CodeAssistProjectTemplate.JAVA_CONSOLE
+                    ) {
+                        val manifestXml = com.example.codeassist.AndroidProjectToolkit.defaultManifestXml(cleanName)
+                            .replace("com.aistudio.student.app", cleanPkg)
+                            .replace("android:minSdkVersion=\"26\"", "android:minSdkVersion=\"$safeMinSdk\"")
+                        add(
+                            com.example.model.CodeSectionUiModel(
+                                documentId = newDocId,
+                                orderIndex = 1,
+                                sectionTitle = "AndroidManifest.xml",
+                                codeContent = manifestXml,
+                                explanationStyle = baseTemplate.copy(learnedConceptTag = "Android Manifest"),
+                                language = com.example.model.LanguageType.XML
+                            )
+                        )
+                        add(
+                            com.example.model.CodeSectionUiModel(
+                                documentId = newDocId,
+                                orderIndex = 2,
+                                sectionTitle = "strings.xml",
+                                codeContent = com.example.codeassist.AndroidProjectToolkit.defaultStringsXml(cleanName),
+                                explanationStyle = baseTemplate.copy(learnedConceptTag = "String Resources"),
+                                language = com.example.model.LanguageType.XML
+                            )
+                        )
+                        add(
+                            com.example.model.CodeSectionUiModel(
+                                documentId = newDocId,
+                                orderIndex = 3,
+                                sectionTitle = "colors.xml",
+                                codeContent = com.example.codeassist.AndroidProjectToolkit.defaultColorsXml(),
+                                explanationStyle = baseTemplate.copy(learnedConceptTag = "Color Tokens"),
+                                language = com.example.model.LanguageType.XML
+                            )
+                        )
+                    }
+                }
+                repository.saveDocumentDetail(
+                    detail.copy(
+                        title = cleanName,
+                        introText = "Package: $cleanPkg • Min SDK $safeMinSdk • ${template.title}",
+                        sections = starterSections
+                    )
+                )
+            }
+            openDocument(newDocId)
+        }
+    }
+
     fun deleteDocument(documentId: Long) {
         viewModelScope.launch {
             if (_uiState.value.activeDocument?.id == documentId) {
@@ -1680,6 +1829,27 @@ class EditorViewModel(
     fun setActiveAppTheme(theme: com.example.ui.theme.AppThemeId) {
         repository.setActiveAppTheme(theme)
         _uiState.update { it.copy(activeAppTheme = theme) }
+    }
+
+    fun setCodeAssistAppTheme(theme: com.example.ui.theme.CodeAssistAppTheme) {
+        repository.setCodeAssistAppTheme(theme)
+        val syncedMode = when (theme.forcesDark) {
+            true -> ThemeMode.DARK
+            false -> ThemeMode.LIGHT
+            null -> _uiState.value.themeMode
+        }
+        repository.setThemeMode(syncedMode)
+        _uiState.update {
+            it.copy(
+                codeAssistAppTheme = theme,
+                themeMode = syncedMode,
+                aiStatusMessage = "Applied ${theme.displayName} theme"
+            )
+        }
+    }
+
+    fun setHomeScreenTab(tab: com.example.model.HomeScreenTab) {
+        _uiState.update { it.copy(homeScreenTab = tab) }
     }
 
     fun setDefaultLanguageForNewFiles(lang: com.example.model.LanguageType) {

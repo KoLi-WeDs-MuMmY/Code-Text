@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -23,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -37,45 +35,41 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.FolderSpecial
-import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SettingsBrightness
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -97,21 +91,32 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.learning.CodingLesson
+import com.example.learning.ConceptMasteryState
+import com.example.learning.ErrorPlainEnglishTranslator
+import com.example.learning.LearningTrack
+import com.example.learning.LessonProgressState
+import com.example.learning.StudentCurriculumCatalog
+import com.example.model.CodeAssistProjectTemplate
 import com.example.model.DocumentSummaryUiModel
+import com.example.model.HomeScreenTab
 import com.example.model.LanguageType
 import com.example.model.PluginCategory
 import com.example.model.ToolchainPluginItem
+import com.example.ui.components.CodeAssistCreateProjectWizardDialog
+import com.example.ui.components.CodeAssistHomeModeToggleBar
+import com.example.ui.components.CodeAssistProjectCard
+import com.example.ui.components.CodeAssistThemeQuickPickerDialog
 import com.example.ui.components.ModernFloatingMeshBackground
 import com.example.ui.components.TrichromeBrandHeader
 import com.example.ui.components.TrichromeStudioLogo
 import com.example.ui.theme.AdaptiveThemeSpec
+import com.example.ui.theme.AppThemeId
+import com.example.ui.theme.CodeAssistAppTheme
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.LocalAdaptiveThemeSpec
 import com.example.ui.theme.ScreenRatioTier
 import com.example.ui.theme.ThemeMode
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -121,14 +126,23 @@ fun DocumentListScreen(
     shortcutLetter: Char,
     themeMode: ThemeMode,
     toolchainPlugins: List<ToolchainPluginItem> = emptyList(),
-    conceptMastery: List<com.example.learning.ConceptMasteryState> = emptyList(),
-    lessonProgressById: Map<String, com.example.learning.LessonProgressState> = emptyMap(),
+    conceptMastery: List<ConceptMasteryState> = emptyList(),
+    lessonProgressById: Map<String, LessonProgressState> = emptyMap(),
+    homeScreenTab: HomeScreenTab = HomeScreenTab.PROJECTS,
+    isGuidedBeginnerMode: Boolean = true,
+    currentCodeAssistAppTheme: CodeAssistAppTheme = CodeAssistAppTheme.CODEASSIST_DARK,
+    currentEditorScheme: AppThemeId = AppThemeId.DARCULA_ESPRESSO,
+    onSelectHomeTab: (HomeScreenTab) -> Unit = {},
+    onToggleGuidedBeginnerMode: () -> Unit = {},
+    onCreateProjectFromWizard: (String, String, Int, CodeAssistProjectTemplate) -> Unit = { _, _, _, _ -> },
+    onSelectCodeAssistAppTheme: (CodeAssistAppTheme) -> Unit = {},
+    onSelectEditorScheme: (AppThemeId) -> Unit = {},
     onSearchQueryChange: (String) -> Unit,
     onOpenDocument: (Long) -> Unit,
     onCreateDocument: () -> Unit,
     onCreateDocumentWithTemplate: (String, LanguageType) -> Unit = { _, _ -> onCreateDocument() },
-    onStartLesson: (com.example.learning.CodingLesson) -> Unit = {},
-    onOpenQuiz: (com.example.learning.LearningTrack?) -> Unit = {},
+    onStartLesson: (CodingLesson) -> Unit = {},
+    onOpenQuiz: (LearningTrack?) -> Unit = {},
     onDeleteDocument: (Long) -> Unit,
     onRenameDocument: (Long, String) -> Unit = { _, _ -> },
     onCycleThemeMode: () -> Unit,
@@ -142,12 +156,13 @@ fun DocumentListScreen(
     val adaptive = LocalAdaptiveThemeSpec.current
 
     var selectedLanguageFilter by remember { mutableStateOf<LanguageType?>(null) }
-    var showNewTemplateDialog by remember { mutableStateOf(false) }
-    var newProjectTitle by remember { mutableStateOf("") }
-    var newProjectLanguage by remember { mutableStateOf(LanguageType.KOTLIN) }
+    var showCreateWizardDialog by remember { mutableStateOf(false) }
+    var showThemeQuickPicker by remember { mutableStateOf(false) }
 
-    val filteredList = documents.filter { doc ->
-        selectedLanguageFilter == null || doc.primaryLanguage == selectedLanguageFilter
+    val filteredList = remember(documents, selectedLanguageFilter) {
+        documents.filter { doc ->
+            selectedLanguageFilter == null || doc.primaryLanguage == selectedLanguageFilter
+        }
     }
 
     val compilerPlugins = remember(toolchainPlugins) {
@@ -162,193 +177,102 @@ fun DocumentListScreen(
         contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    TrichromeBrandHeader(
-                        appName = stringResource(R.string.app_name),
-                        showSubtitle = adaptive.showBrandSubtitle,
-                        compact = adaptive.useCompactTopActions
-                    )
-                },
-                actions = {
-                    if (adaptive.useCompactTopActions) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                TopAppBar(
+                    title = {
+                        TrichromeBrandHeader(
+                            appName = stringResource(R.string.app_name),
+                            showSubtitle = adaptive.showBrandSubtitle,
+                            compact = adaptive.useCompactTopActions
+                        )
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = { showThemeQuickPicker = true },
+                            modifier = Modifier.testTag("home_theme_picker_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = "CodeAssist Themes & Schemes",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
                         IconButton(
                             onClick = onOpenVaultModal,
                             modifier = Modifier.testTag("home_vault_recovery_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Lock,
-                                contentDescription = "Hidden Vault Recovery",
+                                contentDescription = "Hidden Vault 'xyz'",
                                 tint = MaterialTheme.colorScheme.tertiary
                             )
                         }
-                    } else {
-                        // Hidden Vault ("xyz") Recovery & Status Pill
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.65f),
-                            shape = RoundedCornerShape(999.dp),
-                            tonalElevation = 2.dp,
-                            border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f)),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .clickable(onClick = onOpenVaultModal)
-                                .testTag("home_vault_recovery_button")
+
+                        IconButton(
+                            onClick = onCycleThemeMode,
+                            modifier = Modifier.testTag("home_theme_toggle_button")
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = "Hidden Vault Recovery",
-                                    tint = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Vault 'xyz'",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 10.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
-                            }
+                            Icon(
+                                imageVector = when (themeMode) {
+                                    ThemeMode.LIGHT -> Icons.Default.LightMode
+                                    ThemeMode.DARK -> Icons.Default.DarkMode
+                                    ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
+                                },
+                                contentDescription = "Switch Brightness (${themeMode.label})",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
                         }
 
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        // Shortcut Key & Adaptive Screen Tier Pill
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            shape = RoundedCornerShape(999.dp),
-                            tonalElevation = 2.dp,
-                            border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .clickable(onClick = onOpenSettings)
-                                .testTag("home_shortcut_settings_button")
+                        IconButton(
+                            onClick = onOpenSettings,
+                            modifier = Modifier.testTag("home_main_settings_button")
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Keyboard,
-                                    contentDescription = "Configure Ctrl Shortcut",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Ctrl+$shortcutLetter • ${adaptive.tier.shortBadge}",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 10.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Studio Settings",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                    }
-
-                    IconButton(
-                        onClick = onCycleThemeMode,
-                        modifier = Modifier.testTag("home_theme_toggle_button")
-                    ) {
-                        Icon(
-                            imageVector = when (themeMode) {
-                                ThemeMode.LIGHT -> Icons.Default.LightMode
-                                ThemeMode.DARK -> Icons.Default.DarkMode
-                                ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
-                            },
-                            contentDescription = "Switch Theme (${themeMode.label})",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onOpenSettings,
-                        modifier = Modifier.testTag("home_main_settings_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Studio Settings (Theme, SDKs, Language)",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f)
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    )
                 )
-            )
+
+                // Top segmented toggle bar: Projects | Learn Mode + Guided ON/Pro Mode pill
+                CodeAssistHomeModeToggleBar(
+                    activeTab = homeScreenTab,
+                    isGuidedBeginnerMode = isGuidedBeginnerMode,
+                    onSelectTab = onSelectHomeTab,
+                    onToggleGuidedMode = onToggleGuidedBeginnerMode
+                )
+            }
         },
         floatingActionButton = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.navigationBarsPadding()
-            ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(999.dp),
-                    tonalElevation = 4.dp,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)),
-                    shadowElevation = adaptive.overlayElevation,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .clickable {
-                            newProjectTitle = ""
-                            showNewTemplateDialog = true
-                        }
-                        .testTag("open_template_wizard_button")
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Code,
-                            contentDescription = "New Project Template",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = "Template",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            softWrap = false,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-
+            if (homeScreenTab == HomeScreenTab.PROJECTS) {
                 ExtendedFloatingActionButton(
-                    onClick = onCreateDocument,
-                    shape = RoundedCornerShape(999.dp),
+                    onClick = { showCreateWizardDialog = true },
+                    shape = RoundedCornerShape(16.dp),
                     icon = {
                         Icon(
-                            imageVector = Icons.Default.CreateNewFolder,
-                            contentDescription = stringResource(R.string.new_document)
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "New Project"
                         )
                     },
                     text = {
                         Text(
-                            text = stringResource(R.string.new_document),
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontWeight = FontWeight.Bold,
+                            text = "New Project",
+                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             softWrap = false
                         )
                     },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.testTag("create_document_fab")
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .testTag("create_document_fab")
                 )
             }
         },
@@ -368,28 +292,22 @@ fun DocumentListScreen(
                 ) {
                     Spacer(modifier = Modifier.height(8.dp))
                     NavigationRailItem(
-                        selected = selectedLanguageFilter == null,
-                        onClick = { selectedLanguageFilter = null },
-                        icon = { Icon(Icons.Default.FolderSpecial, contentDescription = "All Projects") },
-                        label = { Text("All", fontSize = 10.sp, maxLines = 1) }
+                        selected = homeScreenTab == HomeScreenTab.PROJECTS,
+                        onClick = { onSelectHomeTab(HomeScreenTab.PROJECTS) },
+                        icon = { Icon(Icons.Default.FolderSpecial, contentDescription = "Projects") },
+                        label = { Text("Projects", fontSize = 10.sp, maxLines = 1) }
                     )
                     NavigationRailItem(
-                        selected = selectedLanguageFilter == LanguageType.KOTLIN,
-                        onClick = { selectedLanguageFilter = LanguageType.KOTLIN },
-                        icon = { Icon(Icons.Default.Code, contentDescription = "Kotlin Projects") },
-                        label = { Text("KT", fontSize = 10.sp, maxLines = 1) }
+                        selected = homeScreenTab == HomeScreenTab.LEARN_MODE,
+                        onClick = { onSelectHomeTab(HomeScreenTab.LEARN_MODE) },
+                        icon = { Icon(Icons.Default.School, contentDescription = "Learn Mode") },
+                        label = { Text("Learn", fontSize = 10.sp, maxLines = 1) }
                     )
                     NavigationRailItem(
-                        selected = selectedLanguageFilter == LanguageType.PYTHON,
-                        onClick = { selectedLanguageFilter = LanguageType.PYTHON },
-                        icon = { Icon(Icons.Default.Terminal, contentDescription = "Python Projects") },
-                        label = { Text("PY", fontSize = 10.sp, maxLines = 1) }
-                    )
-                    NavigationRailItem(
-                        selected = selectedLanguageFilter == LanguageType.JAVA,
-                        onClick = { selectedLanguageFilter = LanguageType.JAVA },
-                        icon = { Icon(Icons.Default.Extension, contentDescription = "Java Projects") },
-                        label = { Text("JV", fontSize = 10.sp, maxLines = 1) }
+                        selected = false,
+                        onClick = { showThemeQuickPicker = true },
+                        icon = { Icon(Icons.Default.Palette, contentDescription = "Themes") },
+                        label = { Text("Themes", fontSize = 10.sp, maxLines = 1) }
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     NavigationRailItem(
@@ -407,9 +325,7 @@ fun DocumentListScreen(
                     .fillMaxHeight(),
                 contentAlignment = Alignment.TopCenter
             ) {
-                ModernFloatingMeshBackground(
-                    modifier = Modifier.fillMaxSize()
-                )
+                ModernFloatingMeshBackground(modifier = Modifier.fillMaxSize())
 
                 LazyColumn(
                     modifier = Modifier
@@ -424,474 +340,475 @@ fun DocumentListScreen(
                     contentPadding = PaddingValues(
                         start = adaptive.screenPadding,
                         end = adaptive.screenPadding,
-                        top = 10.dp,
-                        bottom = 128.dp
+                        top = 12.dp,
+                        bottom = 112.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(adaptive.sectionSpacing)
                 ) {
-                    // 1. M3 Studio Welcome Hero Banner + Display Profile Pill
-                    item {
-                        HeroWorkspaceBanner(
-                            adaptive = adaptive,
-                            shortcutLetter = shortcutLetter,
-                            folderCount = documents.size,
-                            totalSections = totalSections,
-                            learnedConceptsCount = allLearnedConcepts.size,
-                            installedSdkCount = installedSdkCount,
-                            totalSdkCount = totalSdkCount,
-                            onOpenSdkManager = onOpenSettings,
-                            onInstallAllSdks = onInstallAllSdks
-                        )
-                    }
+                    if (homeScreenTab == HomeScreenTab.PROJECTS) {
+                        // Compact CodeAssist Workspace Header Banner
+                        item {
+                            CompactCodeAssistProjectsSummaryCard(
+                                folderCount = documents.size,
+                                totalSections = totalSections,
+                                installedSdkCount = installedSdkCount,
+                                totalSdkCount = totalSdkCount,
+                                activeAppTheme = currentCodeAssistAppTheme,
+                                activeEditorScheme = currentEditorScheme,
+                                shortcutLetter = shortcutLetter,
+                                onOpenThemePicker = { showThemeQuickPicker = true },
+                                onOpenNewProjectWizard = { showCreateWizardDialog = true },
+                                onInstallAllSdks = onInstallAllSdks
+                            )
+                        }
 
-                    // 1.5 Student Learn Hub, Interactive Tracks & Mastery XP
-                    item {
-                        StudentLearnHubCard(
-                            adaptive = adaptive,
-                            conceptMastery = conceptMastery,
-                            lessonProgressById = lessonProgressById,
-                            onStartLesson = onStartLesson,
-                            onOpenQuiz = onOpenQuiz
-                        )
-                    }
-
-                    // 2. Quick Create Project by Language Template Bar
-                    item {
-                        ElevatedCard(
-                            shape = RoundedCornerShape(adaptive.cardCornerRadius),
-                            colors = CardDefaults.elevatedCardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f)
-                            ),
-                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = adaptive.cardElevation),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(
-                                    0.8.dp,
-                                    MaterialTheme.colorScheme.outlineVariant,
-                                    RoundedCornerShape(adaptive.cardCornerRadius)
-                                )
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = adaptive.cardPadding, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Extension,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Text(
-                                            text = "Quick Start Template",
-                                            fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
+                        // Material 3 Project Search Bar
+                        item {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = onSearchQueryChange,
+                                placeholder = {
                                     Text(
-                                        text = "1-Tap Workspace",
-                                        fontFamily = JetBrainsMonoFontFamily,
-                                        fontSize = 9.5.sp,
-                                        maxLines = 1,
-                                        softWrap = false,
+                                        text = stringResource(R.string.search_documents_hint),
+                                        style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                }
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = "Search Projects",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { onSearchQueryChange("") }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Clear,
+                                                contentDescription = "Clear Search",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(14.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("search_documents_input")
+                            )
+                        }
 
+                        // Compact Language Filter Strip
+                        item {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+                                FilterChip(
+                                    selected = selectedLanguageFilter == null,
+                                    onClick = { selectedLanguageFilter = null },
+                                    label = { Text("All (${documents.size})", maxLines = 1, softWrap = false) }
+                                )
+
                                 LanguageType.entries.forEach { lang ->
-                                    Surface(
-                                        color = Color(0xFF2C2521),
-                                        shape = RoundedCornerShape(999.dp),
-                                        border = BorderStroke(0.8.dp, lang.badgeColor.copy(alpha = 0.65f)),
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(999.dp))
-                                            .clickable {
-                                                onCreateDocumentWithTemplate(
-                                                    "${lang.displayName} App",
-                                                    lang
-                                                )
-                                            }
-                                            .testTag("quick_template_${lang.name.lowercase()}")
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
-                                        ) {
+                                    val count = documents.count { it.primaryLanguage == lang }
+                                    val isSelected = selectedLanguageFilter == lang
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            selectedLanguageFilter = if (isSelected) null else lang
+                                        },
+                                        leadingIcon = {
                                             Box(
-                                                contentAlignment = Alignment.Center,
                                                 modifier = Modifier
-                                                    .size(16.dp)
+                                                    .size(8.dp)
                                                     .clip(CircleShape)
-                                                    .background(lang.badgeColor.copy(alpha = 0.25f))
-                                            ) {
-                                                Text(
-                                                    text = lang.badgeLabel.take(2),
-                                                    fontFamily = JetBrainsMonoFontFamily,
-                                                    fontSize = 7.5.sp,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = lang.badgeColor
-                                                )
-                                            }
+                                                    .background(lang.badgeColor)
+                                            )
+                                        },
+                                        label = {
                                             Text(
-                                                text = "+ ${lang.displayName}",
-                                                fontFamily = JetBrainsMonoFontFamily,
-                                                fontSize = 10.5.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFFE6E1DC)
+                                                text = if (count > 0) "${lang.displayName} ($count)" else lang.displayName,
+                                                maxLines = 1,
+                                                softWrap = false
                                             )
                                         }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 3. Pill-Rounded Search Bar
-                item {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = onSearchQueryChange,
-                        placeholder = {
-                            Text(
-                                text = stringResource(R.string.search_documents_hint),
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 12.sp,
-                                color = Color(0xFFA39C93)
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Search Folders",
-                                tint = Color(0xFFD4883A)
-                            )
-                        },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { onSearchQueryChange("") }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Clear,
-                                        contentDescription = "Clear Search",
-                                        tint = Color(0xFFA39C93)
                                     )
                                 }
                             }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(999.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color(0xFF231E1B),
-                            unfocusedContainerColor = Color(0xFF211C19),
-                            focusedBorderColor = Color(0xFFD4883A),
-                            unfocusedBorderColor = Color(0xFF3A322C),
-                            focusedTextColor = Color(0xFFE6E1DC),
-                            unfocusedTextColor = Color(0xFFE6E1DC)
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("search_documents_input")
-                    )
-                }
+                        }
 
-                // 4. Pill-Rounded Multi-Language Filter Strip
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            color = Color(0xFF28221F),
-                            shape = RoundedCornerShape(999.dp),
-                            border = BorderStroke(0.8.dp, Color(0xFF3E352F))
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.FilterList,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(13.dp),
-                                    tint = Color(0xFFD4883A)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "PROJECTS",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFE6E1DC)
+                        // Responsive CodeAssist Project Cards (1-3 columns)
+                        if (filteredList.isEmpty()) {
+                            item {
+                                EmptyDocumentsCard(
+                                    onCreateWizard = { showCreateWizardDialog = true },
+                                    onSwitchToLearn = { onSelectHomeTab(HomeScreenTab.LEARN_MODE) }
                                 )
                             }
-                        }
-
-                        // "All" pill chip
-                        val isAllSelected = selectedLanguageFilter == null
-                        Surface(
-                            color = if (isAllSelected) Color(0xFF473628) else Color(0xFF231E1B),
-                            shape = RoundedCornerShape(999.dp),
-                            border = BorderStroke(
-                                width = if (isAllSelected) 1.dp else 0.75.dp,
-                                color = if (isAllSelected) Color(0xFFD4883A) else Color(0xFF38302A)
-                            ),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .clickable { selectedLanguageFilter = null }
-                        ) {
-                            Text(
-                                text = "All (${documents.size})",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 11.sp,
-                                fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isAllSelected) Color(0xFFFFC66D) else Color(0xFFD5CEC6),
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
-
-                        // Language pill chips
-                        LanguageType.entries.forEach { lang ->
-                            val count = documents.count { it.primaryLanguage == lang }
-                            val isSelected = selectedLanguageFilter == lang
-                            Surface(
-                                color = if (isSelected) lang.badgeColor.copy(alpha = 0.24f) else Color(0xFF231E1B),
-                                shape = RoundedCornerShape(999.dp),
-                                border = BorderStroke(
-                                    width = if (isSelected) 1.dp else 0.75.dp,
-                                    color = if (isSelected) lang.badgeColor else Color(0xFF38302A)
-                                ),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .clickable {
-                                        selectedLanguageFilter = if (isSelected) null else lang
-                                    }
-                            ) {
+                        } else {
+                            val gridRows = filteredList.chunked(adaptive.gridColumns.coerceAtLeast(1))
+                            items(
+                                items = gridRows,
+                                key = { row -> row.joinToString("_") { it.id.toString() } }
+                            ) { rowItems ->
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(adaptive.sectionSpacing)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(lang.badgeColor)
-                                    )
-                                    Text(
-                                        text = "${lang.displayName} ($count)",
-                                        fontFamily = JetBrainsMonoFontFamily,
-                                        fontSize = 11.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isSelected) lang.badgeColor else Color(0xFFD5CEC6)
-                                    )
+                                    rowItems.forEach { folder ->
+                                        CodeAssistProjectCard(
+                                            project = folder,
+                                            onOpen = { onOpenDocument(folder.id) },
+                                            onRename = { newTitle -> onRenameDocument(folder.id, newTitle) },
+                                            onDelete = { onDeleteDocument(folder.id) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                    repeat(adaptive.gridColumns - rowItems.size) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
                                 }
                             }
                         }
-                    }
-                }
+                    } else {
+                        // LEARN MODE TAB
+                        item {
+                            HeroWorkspaceBanner(
+                                adaptive = adaptive,
+                                shortcutLetter = shortcutLetter,
+                                folderCount = documents.size,
+                                totalSections = totalSections,
+                                learnedConceptsCount = allLearnedConcepts.size,
+                                installedSdkCount = installedSdkCount,
+                                totalSdkCount = totalSdkCount,
+                                onOpenSdkManager = onOpenSettings,
+                                onInstallAllSdks = onInstallAllSdks
+                            )
+                        }
 
-                // 5. Responsive M3 Elevated Project Cards (1-3 columns by Screen Ratio)
-                if (filteredList.isEmpty()) {
-                    item {
-                        EmptyDocumentsCard(onCreateDocument = onCreateDocument)
-                    }
-                } else {
-                    val gridRows = filteredList.chunked(adaptive.gridColumns.coerceAtLeast(1))
-                    items(
-                        items = gridRows,
-                        key = { row -> row.joinToString("_") { it.id.toString() } }
-                    ) { rowItems ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(adaptive.sectionSpacing)
-                        ) {
-                            rowItems.forEach { folder ->
-                                FolderSummaryCard(
-                                    folder = folder,
-                                    adaptive = adaptive,
-                                    onClick = { onOpenDocument(folder.id) },
-                                    onDelete = { onDeleteDocument(folder.id) },
-                                    onRename = { newTitle -> onRenameDocument(folder.id, newTitle) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            repeat(adaptive.gridColumns - rowItems.size) {
-                                Spacer(modifier = Modifier.weight(1f))
-                            }
+                        item {
+                            GuidedModeControlBanner(
+                                isGuidedBeginnerMode = isGuidedBeginnerMode,
+                                onToggleGuidedMode = onToggleGuidedBeginnerMode,
+                                onOpenQuiz = { onOpenQuiz(null) }
+                            )
+                        }
+
+                        item {
+                            StudentLearnHubCard(
+                                adaptive = adaptive,
+                                conceptMastery = conceptMastery,
+                                lessonProgressById = lessonProgressById,
+                                onStartLesson = onStartLesson,
+                                onOpenQuiz = onOpenQuiz
+                            )
+                        }
+
+                        item {
+                            StudentWordDictionaryPreviewCard()
                         }
                     }
                 }
             }
-        }
         }
     }
 
-    if (showNewTemplateDialog) {
-        AlertDialog(
-            onDismissRequest = { showNewTemplateDialog = false },
-            shape = RoundedCornerShape(24.dp),
-            containerColor = Color(0xFF221D1A),
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+    if (showCreateWizardDialog) {
+        CodeAssistCreateProjectWizardDialog(
+            onCreateProject = { appName, packageName, minSdk, template ->
+                onCreateProjectFromWizard(appName, packageName, minSdk, template)
+            },
+            onDismiss = { showCreateWizardDialog = false }
+        )
+    }
+
+    if (showThemeQuickPicker) {
+        CodeAssistThemeQuickPickerDialog(
+            currentAppTheme = currentCodeAssistAppTheme,
+            currentEditorScheme = currentEditorScheme,
+            onSelectAppTheme = onSelectCodeAssistAppTheme,
+            onSelectEditorScheme = onSelectEditorScheme,
+            onDismiss = { showThemeQuickPicker = false }
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CompactCodeAssistProjectsSummaryCard(
+    folderCount: Int,
+    totalSections: Int,
+    installedSdkCount: Int,
+    totalSdkCount: Int,
+    activeAppTheme: CodeAssistAppTheme,
+    activeEditorScheme: AppThemeId,
+    shortcutLetter: Char,
+    onOpenThemePicker: () -> Unit,
+    onOpenNewProjectWizard: () -> Unit,
+    onInstallAllSdks: () -> Unit
+) {
+    ElevatedCard(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(0.8.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Your CodeAssist Projects",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "$folderCount projects • $totalSections files • $installedSdkCount/$totalSdkCount SDKs • Ctrl+$shortcutLetter",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 10.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onOpenNewProjectWizard,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.testTag("open_template_wizard_button")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.CreateNewFolder,
+                        imageVector = Icons.Default.Add,
                         contentDescription = null,
-                        tint = Color(0xFFD4883A)
+                        modifier = Modifier.size(16.dp)
                     )
-                    Text(
-                        text = "New CodeAssist Project",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = Color(0xFFE6E1DC)
-                    )
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = newProjectTitle,
-                        onValueChange = { newProjectTitle = it },
-                        label = { Text("Project Name", fontFamily = JetBrainsMonoFontFamily, fontSize = 11.sp) },
-                        placeholder = { Text("${newProjectLanguage.displayName} Project", fontSize = 12.sp) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFFD4883A),
-                            unfocusedBorderColor = Color(0xFF3E352F),
-                            focusedTextColor = Color(0xFFE6E1DC),
-                            unfocusedTextColor = Color(0xFFE6E1DC)
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Text(
-                        text = "Select Starter Toolchain & Template:",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFA39C93)
-                    )
-
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        LanguageType.entries.chunked(2).forEach { pair ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                pair.forEach { lang ->
-                                    val isSelected = newProjectLanguage == lang
-                                    Surface(
-                                        color = if (isSelected) lang.badgeColor.copy(alpha = 0.22f) else Color(0xFF1A1615),
-                                        shape = RoundedCornerShape(14.dp),
-                                        border = BorderStroke(
-                                            width = if (isSelected) 1.2.dp else 0.75.dp,
-                                            color = if (isSelected) lang.badgeColor else Color(0xFF38302A)
-                                        ),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .clickable { newProjectLanguage = lang }
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-                                        ) {
-                                            Box(
-                                                contentAlignment = Alignment.Center,
-                                                modifier = Modifier
-                                                    .size(20.dp)
-                                                    .clip(CircleShape)
-                                                    .background(lang.badgeColor.copy(alpha = 0.25f))
-                                            ) {
-                                                Text(
-                                                    text = lang.badgeLabel.take(2),
-                                                    fontFamily = JetBrainsMonoFontFamily,
-                                                    fontSize = 8.5.sp,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = lang.badgeColor
-                                                )
-                                            }
-                                            Column {
-                                                Text(
-                                                    text = lang.displayName,
-                                                    fontFamily = JetBrainsMonoFontFamily,
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFFE6E1DC)
-                                                )
-                                                Text(
-                                                    text = "Main.${lang.nativeExtension}",
-                                                    fontFamily = JetBrainsMonoFontFamily,
-                                                    fontSize = 9.sp,
-                                                    color = Color(0xFFA39C93)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val finalTitle = newProjectTitle.trim().ifBlank { "${newProjectLanguage.displayName} App" }
-                        showNewTemplateDialog = false
-                        onCreateDocumentWithTemplate(finalTitle, newProjectLanguage)
-                    },
-                    shape = RoundedCornerShape(999.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFD4883A),
-                        contentColor = Color(0xFF1A1615)
-                    )
-                ) {
-                    Text(
-                        text = "Create Project",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewTemplateDialog = false }) {
-                    Text("Cancel", color = Color(0xFFA39C93), fontFamily = JetBrainsMonoFontFamily)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Wizard", fontSize = 12.sp, maxLines = 1, softWrap = false)
                 }
             }
-        )
+
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(999.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable(onClick = onOpenThemePicker)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Palette,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = "${activeAppTheme.displayName} • ${activeEditorScheme.displayName}",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
+
+                if (installedSdkCount < totalSdkCount) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(999.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable(onClick = onInstallAllSdks)
+                    ) {
+                        Text(
+                            text = "Enable All $totalSdkCount Compilers",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GuidedModeControlBanner(
+    isGuidedBeginnerMode: Boolean,
+    onToggleGuidedMode: () -> Unit,
+    onOpenQuiz: () -> Unit
+) {
+    ElevatedCard(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (isGuidedBeginnerMode) {
+                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            }
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                0.8.dp,
+                if (isGuidedBeginnerMode) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant,
+                RoundedCornerShape(18.dp)
+            )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.AutoStories,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.size(28.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (isGuidedBeginnerMode) {
+                        "Guided Beginner Mode: Active"
+                    } else {
+                        "Pro IDE Mode: Distraction-Free"
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Real-life stories, plain-English error helpers & coding word dictionary stay ready while your code canvas stays spacious.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Switch(
+                    checked = isGuidedBeginnerMode,
+                    onCheckedChange = { onToggleGuidedMode() }
+                )
+                OutlinedButton(
+                    onClick = onOpenQuiz,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                ) {
+                    Icon(Icons.Default.Quiz, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Quiz", fontSize = 11.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudentWordDictionaryPreviewCard() {
+    val entries = remember { ErrorPlainEnglishTranslator.globalGlossary.take(6) }
+    ElevatedCard(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(0.8.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Beginner Coding Word Dictionary",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "Everyday English meanings for tricky programming & Android keywords:",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            entries.forEach { term ->
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = term.term,
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "• ${term.simpleMeaning}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Text(
+                            text = "Real life: ${term.everydayExample}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -910,16 +827,12 @@ private fun HeroWorkspaceBanner(
 ) {
     ElevatedCard(
         shape = RoundedCornerShape(adaptive.cardCornerRadius),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = adaptive.cardElevation + 4.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = adaptive.cardElevation + 2.dp),
         modifier = Modifier
             .fillMaxWidth()
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(adaptive.cardCornerRadius))
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = if (adaptive.tier == ScreenRatioTier.COMPACT_LANDSCAPE) 128.dp else 166.dp)
-        ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
             Image(
                 painter = painterResource(id = R.drawable.img_editor_hero_1794022926039),
                 contentDescription = "KtScribe CodeAssist Studio",
@@ -934,7 +847,7 @@ private fun HeroWorkspaceBanner(
                             colors = listOf(
                                 MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.96f),
                                 MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.90f),
-                                MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.78f)
+                                MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.80f)
                             )
                         )
                     )
@@ -947,12 +860,11 @@ private fun HeroWorkspaceBanner(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        TrichromeStudioLogo(sizeDp = 26.dp)
+                        TrichromeStudioLogo(sizeDp = 24.dp)
 
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(999.dp),
-                            border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.primary)
+                            shape = RoundedCornerShape(999.dp)
                         ) {
                             Text(
                                 text = "● KT COMPILER + VM",
@@ -969,7 +881,6 @@ private fun HeroWorkspaceBanner(
                         Surface(
                             color = MaterialTheme.colorScheme.tertiaryContainer,
                             shape = RoundedCornerShape(999.dp),
-                            border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.tertiary),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
                                 .clickable(onClick = onOpenSdkManager)
@@ -996,27 +907,10 @@ private fun HeroWorkspaceBanner(
                                 )
                             }
                         }
-
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            shape = RoundedCornerShape(999.dp),
-                            border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant)
-                        ) {
-                            Text(
-                                text = "${adaptive.profile.aspectRatioLabel} • ${adaptive.themeFileLabel.removeSuffix("Theme.kt")}",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 9.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                softWrap = false,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
-                        }
                     }
 
                     Text(
-                        text = "Built-In Kotlin Compiler • Stack VM • Adaptive M3 IDE",
+                        text = "Interactive Lessons • Real-Life Stories • Compose & XML Preview",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Bold,
@@ -1043,7 +937,7 @@ private fun HeroWorkspaceBanner(
                             Text(
                                 text = "$folderCount Projects • $totalSections Files • $learnedConceptsCount Concepts • Ctrl+$shortcutLetter",
                                 fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 10.5.sp,
+                                fontSize = 10.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -1078,374 +972,52 @@ private fun HeroWorkspaceBanner(
 }
 
 @Composable
-private fun FolderSummaryCard(
-    folder: DocumentSummaryUiModel,
-    adaptive: AdaptiveThemeSpec,
-    onClick: () -> Unit,
-    onDelete: () -> Unit,
-    onRename: (String) -> Unit,
-    modifier: Modifier = Modifier
+private fun EmptyDocumentsCard(
+    onCreateWizard: () -> Unit,
+    onSwitchToLearn: () -> Unit
 ) {
-    val dateFormat = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
-    val formattedDate = dateFormat.format(Date(folder.updatedAt))
-    var showRenameDialog by remember { mutableStateOf(false) }
-    var renameText by remember(folder.title) { mutableStateOf(folder.title) }
-
-    val lang = folder.primaryLanguage
-
-    ElevatedCard(
-        shape = RoundedCornerShape(adaptive.cardCornerRadius),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.97f)
-        ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = adaptive.cardElevation),
-        modifier = modifier
-            .fillMaxWidth()
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant,
-                shape = RoundedCornerShape(adaptive.cardCornerRadius)
-            )
-            .clip(RoundedCornerShape(adaptive.cardCornerRadius))
-            .clickable(onClick = onClick)
-            .testTag("document_card_${folder.id}")
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    // CodeAssist Circular/Rounded Language Badge
-                    Surface(
-                        color = lang.badgeColor.copy(alpha = 0.18f),
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, lang.badgeColor.copy(alpha = 0.55f))
-                    ) {
-                        Text(
-                            text = lang.badgeLabel,
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 12.sp,
-                            color = lang.badgeColor,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-                        )
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Color(0xFFFF5F56)))
-                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Color(0xFFFFBD2E)))
-                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Color(0xFF27C93F)))
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = "app/${lang.directoryPath.trimEnd('/')} • .${lang.nativeExtension}",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 9.5.sp,
-                                color = lang.badgeColor,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Text(
-                            text = folder.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color(0xFFF5EFEA),
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Surface(
-                        color = Color(0xFF283A28),
-                        shape = RoundedCornerShape(999.dp),
-                        border = BorderStroke(0.8.dp, Color(0xFF6A8759)),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .clickable(onClick = onClick)
-                            .testTag("open_run_document_${folder.id}")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Open in Studio",
-                                tint = Color(0xFF81C784),
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = "Open",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFE6E1DC)
-                            )
-                        }
-                    }
-
-                    IconButton(
-                        onClick = {
-                            renameText = folder.title
-                            showRenameDialog = true
-                        },
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("rename_document_${folder.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Rename Folder",
-                            tint = Color(0xFFA39C93),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("delete_document_${folder.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "Delete Folder",
-                            tint = Color(0xFFF28B82),
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-                }
-            }
-
-            if (showRenameDialog) {
-                AlertDialog(
-                    onDismissRequest = { showRenameDialog = false },
-                    shape = RoundedCornerShape(22.dp),
-                    containerColor = Color(0xFF241F1C),
-                    title = {
-                        Text(
-                            text = "Rename Project Folder",
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = JetBrainsMonoFontFamily,
-                            color = Color(0xFFE6E1DC)
-                        )
-                    },
-                    text = {
-                        OutlinedTextField(
-                            value = renameText,
-                            onValueChange = { renameText = it },
-                            label = { Text("Folder Name") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                if (renameText.isNotBlank()) {
-                                    onRename(renameText.trim())
-                                }
-                                showRenameDialog = false
-                            }
-                        ) {
-                            Text("Rename", fontWeight = FontWeight.Bold, color = Color(0xFFD4883A))
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = { showRenameDialog = false }
-                        ) {
-                            Text("Cancel", color = Color(0xFFA39C93))
-                        }
-                    }
-                )
-            }
-
-            // Code preview box with rounded corners
-            Surface(
-                color = Color(0xFF191513),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(0.8.dp, Color(0xFF302924)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = folder.previewSnippet,
-                    fontFamily = JetBrainsMonoFontFamily,
-                    fontSize = 11.sp,
-                    lineHeight = 16.sp,
-                    color = Color(0xFFD5CEC6),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
-                )
-            }
-
-            if (folder.conceptTags.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    folder.conceptTags.forEach { tag ->
-                        Surface(
-                            color = Color(0xFF2E2620),
-                            shape = RoundedCornerShape(999.dp),
-                            border = BorderStroke(0.6.dp, Color(0xFF4A3D33))
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.School,
-                                    contentDescription = null,
-                                    tint = Color(0xFFFFC66D),
-                                    modifier = Modifier.size(11.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = tag,
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFFE6E1DC)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Surface(
-                    color = Color(0xFF2C241E),
-                    shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(0.6.dp, Color(0xFF4A3D33))
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Code,
-                            contentDescription = null,
-                            tint = Color(0xFFD4883A),
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "${folder.sectionCount} File${if (folder.sectionCount > 1) "s" else ""}",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFE6E1DC)
-                        )
-                    }
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Terminal,
-                        contentDescription = null,
-                        modifier = Modifier.size(12.dp),
-                        tint = Color(0xFFA39C93)
-                    )
-                    Text(
-                        text = "${folder.wordCount} words",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 10.sp,
-                        color = Color(0xFFA39C93)
-                    )
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Storage,
-                        contentDescription = null,
-                        modifier = Modifier.size(12.dp),
-                        tint = Color(0xFF81C784)
-                    )
-                    Text(
-                        text = "Synced $formattedDate",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 10.sp,
-                        color = Color(0xFFA39C93)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmptyDocumentsCard(onCreateDocument: () -> Unit) {
     Card(
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF231E1B).copy(alpha = 0.94f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),
-        border = BorderStroke(1.dp, Color(0xFF3A322C)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp)
+            .padding(vertical = 12.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(28.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.FolderSpecial,
                 contentDescription = null,
-                tint = Color(0xFFD4883A),
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(42.dp)
             )
             Text(
                 text = stringResource(R.string.empty_documents_title),
                 style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFFE6E1DC),
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold
             )
             Text(
                 text = stringResource(R.string.empty_documents_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFA39C93)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(onClick = onCreateWizard) {
+                    Text("Create Project")
+                }
+                OutlinedButton(onClick = onSwitchToLearn) {
+                    Text("Browse Lessons")
+                }
+            }
         }
     }
 }
@@ -1453,24 +1025,24 @@ private fun EmptyDocumentsCard(onCreateDocument: () -> Unit) {
 @Composable
 private fun StudentLearnHubCard(
     adaptive: AdaptiveThemeSpec,
-    conceptMastery: List<com.example.learning.ConceptMasteryState>,
-    lessonProgressById: Map<String, com.example.learning.LessonProgressState>,
-    onStartLesson: (com.example.learning.CodingLesson) -> Unit,
-    onOpenQuiz: (com.example.learning.LearningTrack?) -> Unit
+    conceptMastery: List<ConceptMasteryState>,
+    lessonProgressById: Map<String, LessonProgressState>,
+    onStartLesson: (CodingLesson) -> Unit,
+    onOpenQuiz: (LearningTrack?) -> Unit
 ) {
-    var selectedTrack by remember { mutableStateOf<com.example.learning.LearningTrack?>(null) }
+    var selectedTrack by remember { mutableStateOf<LearningTrack?>(null) }
     val lessons = remember(selectedTrack) {
-        if (selectedTrack == null) com.example.learning.StudentCurriculumCatalog.lessons
-        else com.example.learning.StudentCurriculumCatalog.lessons.filter { it.track == selectedTrack }
+        if (selectedTrack == null) StudentCurriculumCatalog.lessons
+        else StudentCurriculumCatalog.lessons.filter { it.track == selectedTrack }
     }
     val totalXp = remember(conceptMastery) { conceptMastery.sumOf { it.xp } }
     val completedCount = remember(lessonProgressById) { lessonProgressById.values.count { it.isCompleted } }
-    val totalLessonCount = com.example.learning.StudentCurriculumCatalog.lessons.size
+    val totalLessonCount = StudentCurriculumCatalog.lessons.size
 
     ElevatedCard(
         shape = RoundedCornerShape(adaptive.cardCornerRadius),
         colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = adaptive.cardElevation),
         modifier = Modifier
@@ -1491,24 +1063,22 @@ private fun StudentLearnHubCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Student Learn Hub & Guided Tracks",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 12.5.sp,
+                        text = "Student Learn Hub & Interactive Lessons",
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = "$completedCount/$totalLessonCount Lessons Completed • $totalXp XP Earned",
                         fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 10.sp,
+                        fontSize = 10.5.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
 
                 Surface(
-                    color = Color(0xFFC084FC).copy(alpha = 0.18f),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
                     shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(0.75.dp, Color(0xFFC084FC).copy(alpha = 0.6f)),
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
                         .clickable { onOpenQuiz(selectedTrack) }
@@ -1517,12 +1087,12 @@ private fun StudentLearnHubCard(
                     Text(
                         text = "Quiz Me",
                         fontFamily = JetBrainsMonoFontFamily,
-                        fontSize = 10.sp,
+                        fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFFE0BAFF),
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
                         maxLines = 1,
                         softWrap = false,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
             }
@@ -1554,7 +1124,7 @@ private fun StudentLearnHubCard(
                     )
                 }
 
-                com.example.learning.LearningTrack.entries.forEach { track ->
+                LearningTrack.entries.forEach { track ->
                     val active = selectedTrack == track
                     Surface(
                         color = if (active) track.accentColor.copy(alpha = 0.24f) else MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -1578,30 +1148,25 @@ private fun StudentLearnHubCard(
                 }
             }
 
-            // Horizontal carousel of lessons
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            // Lesson cards list
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 lessons.forEach { lesson ->
                     val done = lessonProgressById[lesson.id]?.isCompleted == true
                     Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        color = MaterialTheme.colorScheme.surfaceContainer,
                         shape = RoundedCornerShape(14.dp),
                         border = BorderStroke(
                             width = 0.85.dp,
-                            color = if (done) Color(0xFF10B981) else lesson.track.accentColor.copy(alpha = 0.45f)
+                            color = if (done) MaterialTheme.colorScheme.tertiary else lesson.track.accentColor.copy(alpha = 0.45f)
                         ),
                         modifier = Modifier
-                            .width(210.dp)
+                            .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
                             .clickable { onStartLesson(lesson) }
                             .testTag("start_lesson_${lesson.id}")
                     ) {
                         Column(
-                            modifier = Modifier.padding(10.dp),
+                            modifier = Modifier.padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Row(
@@ -1612,31 +1177,31 @@ private fun StudentLearnHubCard(
                                 Text(
                                     text = "${lesson.language.badgeLabel} • ${lesson.difficulty}",
                                     fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 9.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = lesson.track.accentColor
                                 )
                                 Text(
                                     text = if (done) "✓ Done" else "+${lesson.xpReward} XP",
                                     fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 9.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (done) Color(0xFF81C784) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (done) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Text(
                                 text = lesson.title,
                                 fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = if (lesson.supportsUiPreview) "${lesson.conceptTag} • Live UI" else lesson.conceptTag,
-                                fontSize = 9.5.sp,
+                                text = lesson.realLifeAnalogy.story,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -1645,4 +1210,3 @@ private fun StudentLearnHubCard(
         }
     }
 }
-

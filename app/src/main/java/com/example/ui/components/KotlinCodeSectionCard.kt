@@ -592,27 +592,33 @@ fun KotlinCodeSectionCard(
             }
         }
 
-        // 2. Material 3 Tonal CodeAssist Surface with Elevation
+        // 2. Material 3 Tonal CodeAssist Canvas
         Card(
-            shape = RoundedCornerShape(if (isSingleSectionFocusMode) 14.dp else adaptiveSpec.cardCornerRadius),
+            shape = RoundedCornerShape(if (isSingleSectionFocusMode) 0.dp else adaptiveSpec.cardCornerRadius),
             colors = CardDefaults.cardColors(
                 containerColor = DarculaCanvasBg
             ),
             elevation = CardDefaults.cardElevation(
-                defaultElevation = if (isSingleSectionFocusMode) adaptiveSpec.cardElevation else adaptiveSpec.cardElevation + 3.dp
+                defaultElevation = if (isSingleSectionFocusMode) 0.dp else adaptiveSpec.cardElevation + 3.dp
             ),
             modifier = Modifier
                 .then(
                     if (isSingleSectionFocusMode) Modifier.fillMaxSize() else Modifier.fillMaxWidth()
                 )
-                .border(
-                    width = 1.dp,
-                    color = if (diagnostics.any { it.severity == DiagnosticSeverity.ERROR }) {
-                        IdeInlineErrorPillBorder.copy(alpha = 0.75f)
+                .then(
+                    if (isSingleSectionFocusMode) {
+                        Modifier
                     } else {
-                        MaterialTheme.colorScheme.outlineVariant
-                    },
-                    shape = RoundedCornerShape(if (isSingleSectionFocusMode) 14.dp else adaptiveSpec.cardCornerRadius)
+                        Modifier.border(
+                            width = 1.dp,
+                            color = if (diagnostics.any { it.severity == DiagnosticSeverity.ERROR }) {
+                                IdeInlineErrorPillBorder.copy(alpha = 0.75f)
+                            } else {
+                                MaterialTheme.colorScheme.outlineVariant
+                            },
+                            shape = RoundedCornerShape(adaptiveSpec.cardCornerRadius)
+                        )
+                    }
                 )
         ) {
             Column(
@@ -948,7 +954,7 @@ fun KotlinCodeSectionCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1A1614))
+                        .background(DarculaChromeBg)
                         .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 10.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -2829,19 +2835,19 @@ fun KotlinCodeSectionCard(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(DarculaCanvasBg)
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Surface(
-                            color = Color(0xFF23201E),
-                            shape = RoundedCornerShape(18.dp),
-                            shadowElevation = 4.dp,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            shape = RoundedCornerShape(14.dp),
+                            tonalElevation = 2.dp,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .border(
-                                    width = 1.dp,
-                                    color = Color(0xFF3E3832),
-                                    shape = RoundedCornerShape(18.dp)
+                                    width = 0.8.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                    shape = RoundedCornerShape(14.dp)
                                 )
                                 .testTag("constant_val_shortcut_bar_${section.orderIndex}")
                         ) {
@@ -2849,21 +2855,20 @@ fun KotlinCodeSectionCard(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .horizontalScroll(rememberScrollState())
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceEvenly
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 KotlinCodeEngine.VAL_CONSTANT_SHORTCUT_KEYS.forEach { sym ->
                                     Surface(
-                                        color = Color(0xFF2D2926),
-                                        shape = RoundedCornerShape(9.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainer,
+                                        shape = RoundedCornerShape(8.dp),
                                         modifier = Modifier
-                                            .padding(horizontal = 3.dp)
-                                            .clip(RoundedCornerShape(9.dp))
+                                            .clip(RoundedCornerShape(8.dp))
                                             .border(
-                                                width = 1.dp,
-                                                color = Color(0xFF47403A),
-                                                shape = RoundedCornerShape(9.dp)
+                                                width = 0.75.dp,
+                                                color = MaterialTheme.colorScheme.outlineVariant,
+                                                shape = RoundedCornerShape(8.dp)
                                             )
                                             .clickable {
                                                 // If Tab is pressed while a completion suggestion is open, accept the top suggestion!

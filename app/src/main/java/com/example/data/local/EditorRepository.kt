@@ -143,6 +143,17 @@ class EditorRepository(
         prefs.edit().putString(KEY_APP_THEME_ID, theme.name).apply()
     }
 
+    fun getCodeAssistAppTheme(): com.example.ui.theme.CodeAssistAppTheme {
+        val raw = prefs.getString(KEY_CODEASSIST_APP_THEME, com.example.ui.theme.CodeAssistAppTheme.CODEASSIST_DARK.name)
+            ?: com.example.ui.theme.CodeAssistAppTheme.CODEASSIST_DARK.name
+        return com.example.ui.theme.CodeAssistAppTheme.entries.find { it.name == raw }
+            ?: com.example.ui.theme.CodeAssistAppTheme.CODEASSIST_DARK
+    }
+
+    fun setCodeAssistAppTheme(theme: com.example.ui.theme.CodeAssistAppTheme) {
+        prefs.edit().putString(KEY_CODEASSIST_APP_THEME, theme.name).apply()
+    }
+
     fun getGuidedBeginnerMode(): Boolean {
         return prefs.getBoolean(KEY_GUIDED_BEGINNER_MODE, true)
     }
@@ -483,6 +494,7 @@ class EditorRepository(
         private const val KEY_SHORTCUT_LETTER = "shortcut_letter"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_APP_THEME_ID = "app_theme_id"
+        private const val KEY_CODEASSIST_APP_THEME = "codeassist_app_theme"
         private const val KEY_INSTALLED_PLUGINS = "installed_toolchain_plugins"
         private const val KEY_GUIDED_BEGINNER_MODE = "guided_beginner_mode"
     }

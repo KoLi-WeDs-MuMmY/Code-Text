@@ -64,6 +64,7 @@ import com.example.model.LanguageType
 import com.example.model.PluginCategory
 import com.example.model.ToolchainPluginItem
 import com.example.ui.theme.AppThemeId
+import com.example.ui.theme.CodeAssistAppTheme
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.LocalAdaptiveThemeSpec
 import com.example.ui.theme.ThemeMode
@@ -84,6 +85,7 @@ fun ShortcutAndSettingsDialog(
     currentShortcutLetter: Char,
     currentThemeMode: ThemeMode,
     currentAppTheme: AppThemeId,
+    currentCodeAssistAppTheme: CodeAssistAppTheme = CodeAssistAppTheme.CODEASSIST_DARK,
     remainingAiQuota: Int,
     defaultLanguage: LanguageType = LanguageType.KOTLIN,
     toolchainPlugins: List<ToolchainPluginItem> = ToolchainPluginItem.defaultCatalog(),
@@ -94,6 +96,7 @@ fun ShortcutAndSettingsDialog(
     onSelectShortcutLetter: (Char) -> Unit,
     onSelectThemeMode: (ThemeMode) -> Unit,
     onSelectAppTheme: (AppThemeId) -> Unit,
+    onSelectCodeAssistAppTheme: (CodeAssistAppTheme) -> Unit = {},
     onInstallOrTogglePlugin: (String) -> Unit = {},
     onInstallAllSdks: () -> Unit = {},
     onDismiss: () -> Unit
@@ -316,12 +319,91 @@ fun ShortcutAndSettingsDialog(
                 // =========================================================================
                 if (activeCategory == StudioSettingsCategory.ALL || activeCategory == StudioSettingsCategory.APPEARANCE) {
                     IosSettingsGroupCard(
-                        headerTitle = "APPEARANCE & STUDIO THEMES",
-                        headerSubtitle = "Switch between Dark, Light, or System mode and 6 curated IDE color palettes"
+                        headerTitle = "CODEASSIST APP THEMES & EDITOR SCHEMES",
+                        headerSubtitle = "Pick your CodeAssist app chrome theme (Material You / Dark / Light / AMOLED) and code editor syntax scheme independently"
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(
-                                text = "Appearance Mode",
+                                text = "CodeAssist App Chrome Theme",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                CodeAssistAppTheme.entries.forEach { appTheme ->
+                                    val isAppSelected = currentCodeAssistAppTheme == appTheme
+                                    Card(
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isAppSelected) {
+                                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                                            } else {
+                                                Color(0xFF1A1715)
+                                            }
+                                        ),
+                                        border = BorderStroke(
+                                            width = if (isAppSelected) 1.5.dp else 0.5.dp,
+                                            color = if (isAppSelected) MaterialTheme.colorScheme.primary else Color(0xFF36312C)
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable { onSelectCodeAssistAppTheme(appTheme) }
+                                            .testTag("codeassist_app_theme_${appTheme.name.lowercase()}")
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(9.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = appTheme.displayName,
+                                                    fontFamily = JetBrainsMonoFontFamily,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.5.sp,
+                                                    color = Color(0xFFE6E1DC)
+                                                )
+                                                Text(
+                                                    text = appTheme.subtitle,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = Color(0xFFA39C93)
+                                                )
+                                            }
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(14.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color(android.graphics.Color.parseColor(appTheme.previewSurfaceHex)))
+                                                        .border(0.6.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(14.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color(android.graphics.Color.parseColor(appTheme.previewPrimaryHex)))
+                                                        .border(0.6.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            HorizontalDivider(thickness = 0.5.dp, color = Color(0xFF36312C))
+
+                            Text(
+                                text = "Appearance Brightness Mode",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
@@ -344,7 +426,7 @@ fun ShortcutAndSettingsDialog(
                             HorizontalDivider(thickness = 0.5.dp, color = Color(0xFF36312C))
 
                             Text(
-                                text = "Curated Studio Palettes (6 Themes)",
+                                text = "CodeAssist Editor Color Schemes (${AppThemeId.entries.size} Themes)",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,

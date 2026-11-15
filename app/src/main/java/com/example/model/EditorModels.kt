@@ -198,6 +198,67 @@ enum class LeftActivityTab(val label: String) {
 }
 
 /**
+ * Top segmented toggle bar on the Home screen: CodeAssist Projects vs. Student Learn Mode.
+ */
+enum class HomeScreenTab(val label: String) {
+    PROJECTS("Projects"),
+    LEARN_MODE("Learn Mode")
+}
+
+/**
+ * Templates shown in the CodeAssist-style New Project Wizard dialog.
+ */
+enum class CodeAssistProjectTemplate(
+    val title: String,
+    val subtitle: String,
+    val badge: String,
+    val primaryLanguage: LanguageType
+) {
+    EMPTY_COMPOSE(
+        title = "Empty Compose Activity",
+        subtitle = "Kotlin Jetpack Compose app with AndroidManifest, XML & resources",
+        badge = "Compose",
+        primaryLanguage = LanguageType.KOTLIN
+    ),
+    EMPTY_XML_VIEWS(
+        title = "Empty Views Activity",
+        subtitle = "Classic Java/Kotlin + activity_main.xml, strings.xml & colors.xml",
+        badge = "Android XML",
+        primaryLanguage = LanguageType.XML
+    ),
+    KOTLIN_CONSOLE(
+        title = "Kotlin App (KtVM)",
+        subtitle = "Lightweight Kotlin project running directly on KtVM Bytecode VM",
+        badge = "Kotlin",
+        primaryLanguage = LanguageType.KOTLIN
+    ),
+    FLUTTER_WIDGET(
+        title = "Flutter Widget App",
+        subtitle = "Dart Material Scaffold + live UI Preview tree",
+        badge = "Flutter",
+        primaryLanguage = LanguageType.DART
+    ),
+    PYTHON_SANDBOX(
+        title = "Python CLI Project",
+        subtitle = "Python 3 script with stdin input() & variable inspector",
+        badge = "Python",
+        primaryLanguage = LanguageType.PYTHON
+    ),
+    JAVA_CONSOLE(
+        title = "Java OOP Project",
+        subtitle = "Java 21 main entry point + Android manifest starter",
+        badge = "Java",
+        primaryLanguage = LanguageType.JAVA
+    ),
+    CPP_NATIVE(
+        title = "C++ Native Module",
+        subtitle = "C++ main() with std::cout/cin sandbox execution",
+        badge = "C++",
+        primaryLanguage = LanguageType.CPP
+    );
+}
+
+/**
  * Categories inside the SDK & Plugin Toolchain Manager.
  */
 enum class PluginCategory(val label: String, val subtitle: String) {

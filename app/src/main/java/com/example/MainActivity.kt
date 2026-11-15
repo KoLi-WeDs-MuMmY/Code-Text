@@ -91,7 +91,8 @@ fun KtScribeApp(
 
     KtScribeTheme(
         themeMode = uiState.themeMode,
-        activeTheme = effectiveTheme
+        activeTheme = effectiveTheme,
+        codeAssistAppTheme = uiState.codeAssistAppTheme
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -125,6 +126,15 @@ fun KtScribeApp(
                         toolchainPlugins = uiState.toolchainPlugins,
                         conceptMastery = uiState.conceptMastery,
                         lessonProgressById = uiState.lessonProgressById,
+                        homeScreenTab = uiState.homeScreenTab,
+                        isGuidedBeginnerMode = uiState.isGuidedBeginnerMode,
+                        currentCodeAssistAppTheme = uiState.codeAssistAppTheme,
+                        currentEditorScheme = uiState.activeAppTheme,
+                        onSelectHomeTab = editorViewModel::setHomeScreenTab,
+                        onToggleGuidedBeginnerMode = editorViewModel::toggleGuidedBeginnerMode,
+                        onCreateProjectFromWizard = editorViewModel::createProjectFromWizard,
+                        onSelectCodeAssistAppTheme = editorViewModel::setCodeAssistAppTheme,
+                        onSelectEditorScheme = editorViewModel::setActiveAppTheme,
                         onSearchQueryChange = editorViewModel::updateSearchQuery,
                         onOpenDocument = editorViewModel::openDocument,
                         onCreateDocument = { editorViewModel.createAndOpenNewDocument() },
@@ -236,7 +246,9 @@ fun KtScribeApp(
                         onCreateGitCommit = editorViewModel::createGitCommit,
                         onSwitchGitBranch = editorViewModel::switchGitBranch,
                         onAddManifestPermission = editorViewModel::addManifestPermission,
-                        onCreateStarterFile = editorViewModel::createAndroidStarterFile
+                        onCreateStarterFile = editorViewModel::createAndroidStarterFile,
+                        onSelectCodeAssistAppTheme = editorViewModel::setCodeAssistAppTheme,
+                        onSelectEditorScheme = editorViewModel::setActiveAppTheme
                     )
                 }
             }
@@ -257,6 +269,7 @@ fun KtScribeApp(
                     currentShortcutLetter = uiState.shortcutLetter,
                     currentThemeMode = uiState.themeMode,
                     currentAppTheme = uiState.activeAppTheme,
+                    currentCodeAssistAppTheme = uiState.codeAssistAppTheme,
                     remainingAiQuota = uiState.remainingAiRpmQuota,
                     defaultLanguage = uiState.defaultLanguageForNewFiles,
                     toolchainPlugins = uiState.toolchainPlugins,
@@ -266,6 +279,7 @@ fun KtScribeApp(
                     onSelectShortcutLetter = editorViewModel::setShortcutLetter,
                     onSelectThemeMode = editorViewModel::setThemeMode,
                     onSelectAppTheme = editorViewModel::setActiveAppTheme,
+                    onSelectCodeAssistAppTheme = editorViewModel::setCodeAssistAppTheme,
                     onInstallOrTogglePlugin = editorViewModel::installOrTogglePlugin,
                     onInstallAllSdks = editorViewModel::installAllLanguageSdks,
                     onDismiss = { showSettingsDialog = false }
