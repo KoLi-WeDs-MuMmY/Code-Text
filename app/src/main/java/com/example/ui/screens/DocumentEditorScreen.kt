@@ -128,6 +128,7 @@ import com.example.model.LocalCodeSnapshot
 import com.example.model.SplitScreenOrientation
 import com.example.model.TextAlignmentChoice
 import com.example.model.ToolchainPluginItem
+import com.example.codeassist.AndroidProjectToolkit
 import com.example.ui.components.CommandPaletteDropdownContent
 import com.example.ui.components.ExplanationWindowBodyContent
 import com.example.ui.components.FileSettingsDialog
@@ -136,6 +137,7 @@ import com.example.ui.components.IdeBottomDrawer
 import com.example.ui.components.KotlinCodeSectionCard
 import com.example.ui.components.LeftRailIdeTool
 import com.example.ui.components.MacDraggableFloatingWindow
+import com.example.ui.components.RecentFilesModalDialog
 import com.example.ui.components.ResizableIslandDropdownWindow
 import com.example.ui.components.ToolchainPluginRowItem
 import com.example.ui.components.exportOrCopyCodePayload
@@ -236,6 +238,14 @@ fun DocumentEditorScreen(
     onLoadLessonSolution: () -> Unit = {},
     onCloseLessonMode: () -> Unit = {},
     onOpenQuiz: (com.example.learning.LearningTrack?) -> Unit = {},
+    onToggleGuidedBeginnerMode: () -> Unit = {},
+    onToggleRecentFilesDialog: (Boolean?) -> Unit = {},
+    onExecuteShellCommand: (String) -> Unit = {},
+    onRunAndroidBuildPipeline: () -> Unit = {},
+    onCreateGitCommit: (String) -> Unit = {},
+    onSwitchGitBranch: (String) -> Unit = {},
+    onAddManifestPermission: (String) -> Unit = {},
+    onCreateStarterFile: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -293,7 +303,9 @@ fun DocumentEditorScreen(
         }
 
     BackHandler {
-        if (uiState.extensionRenameWarningDialog != null) {
+        if (uiState.showRecentFilesDialog) {
+            onToggleRecentFilesDialog(false)
+        } else if (uiState.extensionRenameWarningDialog != null) {
             onDismissExtensionRenameWarning()
         } else if (uiState.isBottomDrawerOpen) {
             onCloseBottomDrawer()
@@ -369,7 +381,10 @@ fun DocumentEditorScreen(
                                 onOpenSettings()
                             }
                         },
-                        onOpenStudioSettings = onOpenSettings
+                        onOpenStudioSettings = onOpenSettings,
+                        isGuidedBeginnerMode = uiState.isGuidedBeginnerMode,
+                        onToggleGuidedBeginnerMode = onToggleGuidedBeginnerMode,
+                        onOpenRecentFiles = { onToggleRecentFilesDialog(true) }
                     )
 
                     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
@@ -425,12 +440,18 @@ fun DocumentEditorScreen(
         modifier = modifier
             .fillMaxSize()
             .onPreviewKeyEvent { keyEvent ->
-                if (keyEvent.type == KeyEventType.KeyDown &&
-                    keyEvent.isCtrlPressed &&
-                    keyEvent.nativeKeyEvent.keyCode == expectedAndroidKeyCode
-                ) {
-                    onInsertCodeBlock()
-                    true
+                if (keyEvent.type == KeyEventType.KeyDown && keyEvent.isCtrlPressed) {
+                    when (keyEvent.nativeKeyEvent.keyCode) {
+                        expectedAndroidKeyCode -> {
+                            onInsertCodeBlock()
+                            true
+                        }
+                        AndroidKeyEvent.KEYCODE_E -> {
+                            onToggleRecentFilesDialog(null)
+                            true
+                        }
+                        else -> false
+                    }
                 } else {
                     false
                 }
@@ -536,6 +557,7 @@ fun DocumentEditorScreen(
                             onFormatActiveCode = { activeSection?.let { onFormatSectionCode(it.id) } },
                             onToggleBreakpoint = { line -> activeSection?.let { onToggleLineBreakpoint(it.id, line) } },
                             onJumpToCodeLine = onJumpToCodeLine,
+                            onCreateStarterFile = onCreateStarterFile,
                             onCollapsePanel = { onToggleLeftActivityTab(uiState.activeLeftActivityTab) }
                         )
                     }
@@ -582,6 +604,8 @@ fun DocumentEditorScreen(
                         com.example.ui.components.ActiveLessonBannerCard(
                             lesson = activeLesson,
                             gradeResult = uiState.lastAutoGradeResult,
+                            isGuidedBeginnerMode = uiState.isGuidedBeginnerMode,
+                            onToggleGuidedMode = onToggleGuidedBeginnerMode,
                             onRunAndGrade = onRunAndGradeLesson,
                             onOpenQuiz = { onOpenQuiz(activeLesson.track) },
                             onLoadSolution = onLoadLessonSolution,
@@ -602,10 +626,7 @@ fun DocumentEditorScreen(
                                 document = document,
                                 onSearchEverywhere = { onToggleIslandDropdown(IslandDropdownMenu.COMMAND_PALETTE) },
                                 onGoToFile = { onToggleLeftActivityTab(LeftActivityTab.FILES) },
-                                onRecentFiles = {
-                                    document.sections.firstOrNull()?.let { onJumpToSectionConcept(it.id) }
-                                        ?: onInsertCodeBlock()
-                                },
+                                onRecentFiles = { onToggleRecentFilesDialog(true) },
                                 onFindInFiles = { onToggleLeftActivityTab(LeftActivityTab.SEARCH) },
                                 onNewFile = onInsertCodeBlock,
                                 onProjectFiles = { onToggleLeftActivityTab(LeftActivityTab.FILES) }
@@ -680,7 +701,8 @@ fun DocumentEditorScreen(
                                                 jumpLineTrigger = uiState.jumpLineTrigger,
                                                 localSnapshots = uiState.localSnapshotsBySectionId[activeSection.id].orEmpty(),
                                                 onCreateSnapshot = { onCreateLocalSnapshot(activeSection.id) },
-                                                onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) }
+                                                onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) },
+                                                isGuidedBeginnerMode = uiState.isGuidedBeginnerMode
                                             )
                                         }
 
@@ -840,7 +862,8 @@ fun DocumentEditorScreen(
                                                 jumpLineTrigger = uiState.jumpLineTrigger,
                                                 localSnapshots = uiState.localSnapshotsBySectionId[activeSection.id].orEmpty(),
                                                 onCreateSnapshot = { onCreateLocalSnapshot(activeSection.id) },
-                                                onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) }
+                                                onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) },
+                                                isGuidedBeginnerMode = uiState.isGuidedBeginnerMode
                                             )
                                         }
 
@@ -1004,7 +1027,8 @@ fun DocumentEditorScreen(
                                         jumpLineTrigger = uiState.jumpLineTrigger,
                                         localSnapshots = uiState.localSnapshotsBySectionId[activeSection.id].orEmpty(),
                                         onCreateSnapshot = { onCreateLocalSnapshot(activeSection.id) },
-                                        onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) }
+                                        onRestoreSnapshot = { snapId -> onRestoreLocalSnapshot(activeSection.id, snapId) },
+                                        isGuidedBeginnerMode = uiState.isGuidedBeginnerMode
                                     )
                                 }
                             }
@@ -1180,6 +1204,12 @@ fun DocumentEditorScreen(
                                         if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.UI_PREVIEW)
                                     }
                                     "open_quiz" -> onOpenQuiz(null)
+                                    "recent_files" -> onToggleRecentFilesDialog(true)
+                                    "android_inspector" -> {
+                                        onSetBottomDrawerTab(BottomDrawerTab.ANDROID_STUDIO)
+                                        if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.ANDROID_STUDIO)
+                                    }
+                                    "toggle_guided_mode" -> onToggleGuidedBeginnerMode()
                                     "display_profile" -> onShowStatusToast(
                                         "Screen: ${adaptive.profile.widthDp}x${adaptive.profile.heightDp}dp (${adaptive.profile.aspectRatioLabel}) -> ${adaptive.themeFileLabel}"
                                     )
@@ -1254,6 +1284,7 @@ fun DocumentEditorScreen(
                                 onJumpToCodeLine(line)
                                 onToggleLeftActivityTab(uiState.activeLeftActivityTab)
                             },
+                            onCreateStarterFile = onCreateStarterFile,
                             onCollapsePanel = { onToggleLeftActivityTab(uiState.activeLeftActivityTab) }
                         )
                     }
@@ -1307,9 +1338,33 @@ fun DocumentEditorScreen(
                         onUpdateSectionCode(sec.id, sec.codeContent + snippet)
                     }
                 },
+                allSections = document.sections,
+                isGuidedBeginnerMode = uiState.isGuidedBeginnerMode,
+                activeGitBranch = uiState.activeGitBranch,
+                localGitCommits = uiState.localGitCommits,
+                buildTasks = uiState.latestBuildTasks,
+                onExecuteShellCommand = onExecuteShellCommand,
+                onRunBuildPipeline = onRunAndroidBuildPipeline,
+                onCreateGitCommit = onCreateGitCommit,
+                onSwitchGitBranch = onSwitchGitBranch,
+                onAddManifestPermission = onAddManifestPermission,
+                onCreateStarterFile = onCreateStarterFile,
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
+    }
+
+    if (uiState.showRecentFilesDialog) {
+        RecentFilesModalDialog(
+            sections = document.sections,
+            recentSectionIds = uiState.recentSectionIds,
+            focusedSectionId = activeSection?.id,
+            onSelectSection = { secId ->
+                onJumpToSectionConcept(secId)
+                onToggleRecentFilesDialog(false)
+            },
+            onDismiss = { onToggleRecentFilesDialog(false) }
+        )
     }
 
     if (showFileSettingsDialog && activeSection != null) {
@@ -1432,7 +1487,10 @@ private fun CodeAssistTopWorkspaceBar(
     onToggleCommandPalette: () -> Unit,
     onOpenVaultModal: () -> Unit,
     onOpenFileSettings: () -> Unit,
-    onOpenStudioSettings: () -> Unit
+    onOpenStudioSettings: () -> Unit,
+    isGuidedBeginnerMode: Boolean = true,
+    onToggleGuidedBeginnerMode: () -> Unit = {},
+    onOpenRecentFiles: () -> Unit = {}
 ) {
     val adaptive = LocalAdaptiveThemeSpec.current
     val isExplainActive = FloatingWindowType.EXPLANATION in openFloatingWindows
@@ -1708,6 +1766,24 @@ private fun CodeAssistTopWorkspaceBar(
                             text = { Text("± Git Diff & History", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
                             onClick = { showOverflowMenu = false; onOpenDrawerTab(BottomDrawerTab.GIT_DIFF) }
                         )
+                        DropdownMenuItem(
+                            text = { Text("❖ Android Manifest & Resources", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
+                            onClick = { showOverflowMenu = false; onOpenDrawerTab(BottomDrawerTab.ANDROID_STUDIO) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("⏱ Recent Files (Ctrl+E)", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
+                            onClick = { showOverflowMenu = false; onOpenRecentFiles() }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = if (isGuidedBeginnerMode) "💡 Guided Mode: ON (Tap for Pro)" else "💡 Guided Mode: OFF (Tap for Beginner)",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 12.sp
+                                )
+                            },
+                            onClick = { showOverflowMenu = false; onToggleGuidedBeginnerMode() }
+                        )
                         HorizontalDivider()
                         DropdownMenuItem(
                             text = { Text("File & Studio Settings", fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp) },
@@ -1725,7 +1801,9 @@ private fun CodeAssistTopWorkspaceBar(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
-                modifier = Modifier.horizontalScroll(rememberScrollState())
+                modifier = Modifier
+                    .weight(1.3f, fill = false)
+                    .horizontalScroll(rememberScrollState())
             ) {
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -2098,6 +2176,7 @@ private fun CodeAssistSidePanel(
     onFormatActiveCode: () -> Unit = {},
     onToggleBreakpoint: (Int) -> Unit = {},
     onJumpToCodeLine: (Int) -> Unit = {},
+    onCreateStarterFile: (String, String) -> Unit = { _, _ -> },
     onCollapsePanel: () -> Unit
 ) {
     var expandedAppRoot by remember { mutableStateOf(true) }
@@ -2401,6 +2480,49 @@ private fun CodeAssistSidePanel(
                                             fontSize = 9.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = lang.badgeColor,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Text(
+                                text = "Android Project Files",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFA39C93),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                listOf(
+                                    "AndroidManifest.xml" to AndroidProjectToolkit.defaultManifestXml(document.title.ifBlank { "StudentStudyApp" }),
+                                    "activity_main.xml" to AndroidProjectToolkit.defaultActivityMainXml(),
+                                    "strings.xml" to AndroidProjectToolkit.defaultStringsXml(document.title.ifBlank { "Student Study App" }),
+                                    "colors.xml" to AndroidProjectToolkit.defaultColorsXml()
+                                ).forEach { (starterName, starterBody) ->
+                                    Surface(
+                                        color = Color(0xFF1F2724),
+                                        shape = RoundedCornerShape(6.dp),
+                                        border = BorderStroke(0.5.dp, Color(0xFF10B981).copy(alpha = 0.5f)),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .clickable { onCreateStarterFile(starterName, starterBody) }
+                                    ) {
+                                        Text(
+                                            text = "+$starterName",
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            color = Color(0xFF81C784),
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                         )
                                     }
@@ -3581,7 +3703,8 @@ private fun FullScreenAppleCmdSectionEditor(
     jumpLineTrigger: Int = 0,
     localSnapshots: List<LocalCodeSnapshot> = emptyList(),
     onCreateSnapshot: () -> Unit = {},
-    onRestoreSnapshot: (Long) -> Unit = {}
+    onRestoreSnapshot: (Long) -> Unit = {},
+    isGuidedBeginnerMode: Boolean = true
 ) {
     KotlinCodeSectionCard(
         section = section,
@@ -3636,6 +3759,7 @@ private fun FullScreenAppleCmdSectionEditor(
         jumpLineTrigger = jumpLineTrigger,
         localSnapshots = localSnapshots,
         onCreateSnapshot = onCreateSnapshot,
-        onRestoreSnapshot = onRestoreSnapshot
+        onRestoreSnapshot = onRestoreSnapshot,
+        isGuidedBeginnerMode = isGuidedBeginnerMode
     )
 }

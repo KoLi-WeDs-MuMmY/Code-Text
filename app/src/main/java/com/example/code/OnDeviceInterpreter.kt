@@ -561,7 +561,7 @@ object OnDeviceInterpreter {
             LanguageType.RUST -> Regex("""^(?:pub\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\).*\{$""").find(clean)
             LanguageType.JAVA, LanguageType.CPP, LanguageType.DART ->
                 Regex("""^(?:public\s+|private\s+|static\s+|final\s+|Future<[^>]+>\s+)*(?:void|int|long|double|float|boolean|bool|String|std::string|auto|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\).*\{$""").find(clean)
-            LanguageType.PYTHON -> null
+            LanguageType.PYTHON, LanguageType.XML -> null
         } ?: return null
 
         val fnName = match.groupValues[1]

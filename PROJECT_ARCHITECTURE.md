@@ -214,6 +214,15 @@ app/src/main/java/com/example/
 
 ### 14.3 Memory/Call-Stack Diagram & Live UI Preview (`StudentLearningPanels.kt`)
 - `MemoryStackVisualizerPanel` (`BottomDrawerTab.MEMORY_STACK`): Visualizes active Call Stack frames, live stack variables, and tracked Heap objects from `DebugSession` / interpreter runs.
-- `DeclarativeUiPreviewParser` + `DeclarativeUiPreviewPanel` (`BottomDrawerTab.UI_PREVIEW`): Safely renders Jetpack Compose and Flutter/Dart UI widget trees (`Scaffold`, `AppBar`, `Card`, `Column`, `Row`, `Box`, `Text`, `Button`, `Switch`, `Divider`, `Spacer`) in-app as live Material 3 previews.
+- `DeclarativeUiPreviewParser` + `DeclarativeUiPreviewPanel` (`BottomDrawerTab.UI_PREVIEW`): Safely renders Jetpack Compose, Flutter/Dart, and Android Layout XML widget trees (`LinearLayout`, `ConstraintLayout`, `CardView`, `TextView`, `Button`, `EditText`, `Switch`, `ImageView`) with `@string/` & `@color/` resolution in-app as live Material 3 previews.
+
+---
+
+## 15. CodeAssist Android IDE Suite & Beginner-Friendly Guided Mode
+
+- `codeassist/AndroidProjectToolkit.kt`: Pure-Kotlin parsers & sandbox executors for `AndroidManifest.xml` (including Google Play permission safety checks), `strings.xml`/`colors.xml` resource bundles, Gradle dependency catalog, multi-stage Android build pipeline tasks, Virtual Sandbox Shell (`ls`, `pwd`, `cat`, `grep`, `wc`, `manifest`, `res`, `gradle assembleDebug`), and local Git working-tree status.
+- `ui/components/CodeAssistDrawerPanels.kt`: Houses `AndroidStudioDrawerTabContent` (`BottomDrawerTab.ANDROID_STUDIO`), `GitVcsExtendedHeader` (branch switching + local commits in `GIT_DIFF`), and `RecentFilesModalDialog` (`Ctrl+E` quick file switcher).
+- `learning/ErrorPlainEnglishTranslator.kt`: Maps compiler/diagnostic messages into beginner-friendly plain English, real-life tips, and fix steps powering the `💡 Explain` lightbulb toggle in `KotlinCodeSectionCard` & `IdeBottomDrawer` `Problems`, alongside `RealLifeAnalogy`, `WordMeaning`, and `LineTranslation` in `StudentCurriculumCatalog` + `ActiveLessonBannerCard`.
+- `EditorUiState.isGuidedBeginnerMode` (persisted via `EditorRepository`): Toggles beginner stories, dictionary chips, line-by-line English guides, and auto-expanded error explanations globally across lessons and diagnostics.
 
 

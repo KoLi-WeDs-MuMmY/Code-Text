@@ -47,6 +47,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
@@ -1590,6 +1591,36 @@ fun CommandPaletteDropdownContent(
                     subtitle = "Test Kotlin, Compose, Flutter, Python, C++ & AI concepts",
                     icon = Icons.Default.School,
                     action = { onExecuteCommand("open_quiz") }
+                )
+            )
+            add(
+                PaletteEntry(
+                    id = "cmd_recent_files",
+                    category = CommandPaletteFilter.COMMANDS,
+                    title = "Recent Files Switcher (Ctrl+E)",
+                    subtitle = "Jump quickly between recently edited code & XML files",
+                    icon = Icons.Default.Description,
+                    action = { onExecuteCommand("recent_files") }
+                )
+            )
+            add(
+                PaletteEntry(
+                    id = "cmd_android_inspector",
+                    category = CommandPaletteFilter.COMMANDS,
+                    title = "Android Manifest, Resources & Gradle Inspector",
+                    subtitle = "Inspect AndroidManifest.xml, @string/@color swatches & build pipeline",
+                    icon = Icons.Default.Build,
+                    action = { onExecuteCommand("android_inspector") }
+                )
+            )
+            add(
+                PaletteEntry(
+                    id = "cmd_toggle_guided_mode",
+                    category = CommandPaletteFilter.COMMANDS,
+                    title = "Toggle Beginner-Friendly Guided Mode",
+                    subtitle = "Switch plain-English tips, stories & word meanings ON or OFF",
+                    icon = Icons.Default.School,
+                    action = { onExecuteCommand("toggle_guided_mode") }
                 )
             )
             add(

@@ -407,6 +407,7 @@ class AiSectionNamingService(
             LanguageType.CPP -> "Doxygen"
             LanguageType.DART -> "Dartdoc ///"
             LanguageType.RUST -> "Rustdoc ///"
+            LanguageType.XML -> "Android XML Comments"
         }
 
         val reservation = tryReserveRpmSlot()
@@ -562,6 +563,14 @@ class AiSectionNamingService(
                     mechanics.add("Invokes the compile-time checked `println!` macro for formatted standard output.")
                 }
             }
+            LanguageType.XML -> {
+                if (code.contains("<manifest")) {
+                    mechanics.add("Configures Android app identity, Activities, and runtime permissions in `AndroidManifest.xml`.")
+                }
+                if (code.contains("<LinearLayout") || code.contains("<ConstraintLayout") || code.contains("<TextView")) {
+                    mechanics.add("Declares an Android View hierarchy ready for live preview and `@string` / `@color` resource binding.")
+                }
+            }
         }
         if (errors > 0) {
             mechanics.add("Note: Static analyzer detected $errors syntax diagnostic(s) — tap 'Refactor & Fix' or the inline Quick Fix chip to repair automatically.")
@@ -591,6 +600,8 @@ class AiSectionNamingService(
                 "Use `final` or `const` constructors whenever possible and leverage Dart 3 sound null safety (`?`, `??`) to prevent runtime null errors."
             LanguageType.RUST ->
                 "Prefer immutable `let` bindings by default, borrow slices (`&str`, `&[T]`) instead of cloning, and handle `Result`/`Option` via `match` or `?`."
+            LanguageType.XML ->
+                "Keep user-visible strings inside `strings.xml` (`@string/...`) and colors inside `colors.xml` (`@color/...`), and prefer zero-permission Photo Picker over broad storage permissions."
         }
 
         return buildString {

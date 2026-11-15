@@ -42,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -87,6 +88,8 @@ fun ShortcutAndSettingsDialog(
     defaultLanguage: LanguageType = LanguageType.KOTLIN,
     toolchainPlugins: List<ToolchainPluginItem> = ToolchainPluginItem.defaultCatalog(),
     initialCategory: StudioSettingsCategory = StudioSettingsCategory.ALL,
+    isGuidedBeginnerMode: Boolean = true,
+    onToggleGuidedBeginnerMode: () -> Unit = {},
     onSelectDefaultLanguage: (LanguageType) -> Unit = {},
     onSelectShortcutLetter: (Char) -> Unit,
     onSelectThemeMode: (ThemeMode) -> Unit,
@@ -96,6 +99,7 @@ fun ShortcutAndSettingsDialog(
     onDismiss: () -> Unit
 ) {
     var selectedDefaultLang by remember(defaultLanguage) { mutableStateOf(defaultLanguage) }
+    var guidedEnabled by remember(isGuidedBeginnerMode) { mutableStateOf(isGuidedBeginnerMode) }
     var activeCategory by remember(initialCategory) { mutableStateOf(initialCategory) }
 
     val languageSdks = remember(toolchainPlugins) {
@@ -585,6 +589,42 @@ fun ShortcutAndSettingsDialog(
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
+                            }
+
+                            HorizontalDivider(thickness = 0.5.dp, color = Color(0xFF36312C))
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        guidedEnabled = !guidedEnabled
+                                        onToggleGuidedBeginnerMode()
+                                    },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                    Text(
+                                        text = "Beginner-Friendly Guided Mode",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFFC66D)
+                                    )
+                                    Text(
+                                        text = "Shows real-life stories, tap-a-word code dictionary, line-by-line English walkthroughs, and plain-English error tips.",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFFA39C93)
+                                    )
+                                }
+                                Switch(
+                                    checked = guidedEnabled,
+                                    onCheckedChange = {
+                                        guidedEnabled = it
+                                        onToggleGuidedBeginnerMode()
+                                    },
+                                    modifier = Modifier.testTag("settings_guided_mode_switch")
+                                )
                             }
                         }
                     }

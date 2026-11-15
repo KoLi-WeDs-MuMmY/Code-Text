@@ -84,12 +84,17 @@ import com.example.code.DiagnosticSeverity
 import com.example.code.DiffEngine
 import com.example.code.DiffLineKind
 import com.example.code.KotlinDiagnostic
+import com.example.codeassist.AndroidProjectToolkit
+import com.example.codeassist.BuildPipelineTask
+import com.example.codeassist.LocalGitCommit
 import com.example.compiler.CompilationArtifact
 import com.example.compiler.KotlinCompilerPlugin
 import com.example.compiler.ReplHistoryEntry
 import com.example.compiler.VmExecutionState
+import com.example.learning.ErrorPlainEnglishTranslator
 import com.example.model.BottomDrawerTab
 import com.example.model.CodeSectionUiModel
+import com.example.model.LanguageType
 import com.example.model.LocalCodeSnapshot
 import com.example.model.LogFilterLevel
 import com.example.model.ToolchainPluginItem
@@ -142,6 +147,17 @@ fun IdeBottomDrawer(
     onCreateSnapshot: () -> Unit = {},
     onRestoreSnapshot: (Long) -> Unit = {},
     onInsertUiSample: (String) -> Unit = {},
+    allSections: List<CodeSectionUiModel> = emptyList(),
+    isGuidedBeginnerMode: Boolean = true,
+    activeGitBranch: String = "main",
+    localGitCommits: List<LocalGitCommit> = emptyList(),
+    buildTasks: List<BuildPipelineTask> = emptyList(),
+    onExecuteShellCommand: (String) -> Unit = {},
+    onRunBuildPipeline: () -> Unit = {},
+    onCreateGitCommit: (String) -> Unit = {},
+    onSwitchGitBranch: (String) -> Unit = {},
+    onAddManifestPermission: (String) -> Unit = {},
+    onCreateStarterFile: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val adaptive = LocalAdaptiveThemeSpec.current
@@ -179,6 +195,16 @@ fun IdeBottomDrawer(
         } else {
             null
         }
+    }
+
+    val projectSections = remember(allSections, activeSection) {
+        if (allSections.isNotEmpty()) allSections else listOfNotNull(activeSection)
+    }
+    val manifestSummary = remember(projectSections) {
+        AndroidProjectToolkit.parseManifest(projectSections)
+    }
+    val resourceBundle = remember(projectSections) {
+        AndroidProjectToolkit.parseResources(projectSections)
     }
 
     val problemCount = diagnostics.count { it.severity == DiagnosticSeverity.ERROR }
@@ -278,6 +304,15 @@ fun IdeBottomDrawer(
                             badgeColor = Color(0xFF2A9D8F),
                             onClick = { onTabSelected(BottomDrawerTab.UI_PREVIEW) },
                             testTag = "drawer_tab_ui_preview"
+                        )
+
+                        BottomDrawerTabChip(
+                            label = "Android",
+                            badgeText = if (manifestSummary.policyWarnings.isNotEmpty()) "!" else "❖",
+                            isSelected = activeTab == BottomDrawerTab.ANDROID_STUDIO,
+                            badgeColor = if (manifestSummary.policyWarnings.isNotEmpty()) Color(0xFFFF5F56) else Color(0xFF10B981),
+                            onClick = { onTabSelected(BottomDrawerTab.ANDROID_STUDIO) },
+                            testTag = "drawer_tab_android_studio"
                         )
 
                         BottomDrawerTabChip(
@@ -663,7 +698,8 @@ fun IdeBottomDrawer(
                                 filterQuery = filterQuery,
                                 stdinInput = stdinInput,
                                 onUpdateStdinInput = onUpdateStdinInput,
-                                onRunWithInput = onRunCode
+                                onRunWithInput = onRunCode,
+                                onExecuteShellCommand = onExecuteShellCommand
                             )
                         }
                         BottomDrawerTab.MEMORY_STACK -> {
@@ -683,7 +719,20 @@ fun IdeBottomDrawer(
                             DeclarativeUiPreviewPanel(
                                 code = activeSection?.codeContent.orEmpty(),
                                 language = activeLanguage,
-                                onInsertTemplateSnippet = onInsertUiSample
+                                onInsertTemplateSnippet = onInsertUiSample,
+                                resourceBundle = resourceBundle
+                            )
+                        }
+                        BottomDrawerTab.ANDROID_STUDIO -> {
+                            AndroidStudioDrawerTabContent(
+                                sections = projectSections,
+                                manifestSummary = manifestSummary,
+                                resourceBundle = resourceBundle,
+                                buildTasks = buildTasks,
+                                onCreateStarterFile = onCreateStarterFile,
+                                onAddManifestPermission = onAddManifestPermission,
+                                onInsertSnippet = onInsertUiSample,
+                                onRunBuildPipeline = onRunBuildPipeline
                             )
                         }
                         BottomDrawerTab.REPL -> {
@@ -728,14 +777,21 @@ fun IdeBottomDrawer(
                         BottomDrawerTab.GIT_DIFF -> {
                             GitDiffTabContent(
                                 activeSection = activeSection,
+                                allSections = projectSections,
                                 snapshots = localSnapshots,
+                                activeBranch = activeGitBranch,
+                                commits = localGitCommits,
                                 onCreateSnapshot = onCreateSnapshot,
-                                onRestoreSnapshot = onRestoreSnapshot
+                                onRestoreSnapshot = onRestoreSnapshot,
+                                onSwitchBranch = onSwitchGitBranch,
+                                onCreateCommit = onCreateGitCommit
                             )
                         }
                         BottomDrawerTab.PROBLEMS -> {
                             ProblemsTabContent(
                                 diagnostics = diagnostics,
+                                activeLanguage = activeLanguage,
+                                isGuidedBeginnerMode = isGuidedBeginnerMode,
                                 filterLevel = logFilterLevel,
                                 filterQuery = filterQuery,
                                 onJumpToLine = onJumpToLine,
@@ -820,9 +876,11 @@ private fun TerminalTabContent(
     filterQuery: String,
     stdinInput: String = "",
     onUpdateStdinInput: (String) -> Unit = {},
-    onRunWithInput: () -> Unit = {}
+    onRunWithInput: () -> Unit = {},
+    onExecuteShellCommand: (String) -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
+    var shellInput by remember { mutableStateOf("") }
     val isError = output.contains("exit code 1") || output.contains("Error") || output.contains("error:")
 
     val filteredLines = remember(output, filterLevel, filterQuery) {
@@ -840,6 +898,121 @@ private fun TerminalTabContent(
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
+        // Virtual Sandbox Shell (`sh >`) + Quick Shell Chips
+        Surface(
+            color = Color(0xFF1A1614),
+            shape = RoundedCornerShape(10.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF342C28)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "sh >",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF10B981)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF13100F))
+                            .border(0.75.dp, Color(0xFF3A312C), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        BasicTextField(
+                            value = shellInput,
+                            onValueChange = { shellInput = it },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.5.sp,
+                                color = Color(0xFFE6E1DC)
+                            ),
+                            cursorBrush = SolidColor(Color(0xFF10B981)),
+                            decorationBox = { inner ->
+                                if (shellInput.isEmpty()) {
+                                    Text(
+                                        text = "Virtual shell: ls, cat, grep, manifest, res, gradle assembleDebug, help",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 10.sp,
+                                        color = Color(0xFF7D746C),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                inner()
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("virtual_shell_input")
+                        )
+                    }
+                    Surface(
+                        color = Color(0xFF10B981).copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF10B981)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                if (shellInput.isNotBlank()) {
+                                    onExecuteShellCommand(shellInput)
+                                    shellInput = ""
+                                }
+                            }
+                            .testTag("virtual_shell_run_button")
+                    ) {
+                        Text(
+                            text = "Exec",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF10B981),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    listOf("ls", "cat", "manifest", "res", "gradle assembleDebug", "help", "clear").forEach { quickCmd ->
+                        Surface(
+                            color = Color(0xFF26201D),
+                            shape = RoundedCornerShape(999.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF3E3530)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .clickable { onExecuteShellCommand(quickCmd) }
+                        ) {
+                            Text(
+                                text = quickCmd,
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 9.sp,
+                                color = Color(0xFFC5BEB6),
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Interactive Standard Input (stdin) Bar for readln() / input() / Scanner / std::cin
         Surface(
             color = Color(0xFF1C1816),
@@ -1654,9 +1827,11 @@ private fun DebuggerTabContent(
 @Composable
 private fun ProblemsTabContent(
     diagnostics: List<KotlinDiagnostic>,
+    activeLanguage: LanguageType,
+    isGuidedBeginnerMode: Boolean,
     filterLevel: LogFilterLevel,
     filterQuery: String,
-    onJumpToLine: (Int) -> Unit,
+    onJumpToLine: (Int) -> Unit = {},
     onApplyQuickFixCode: (String) -> Unit = {}
 ) {
     val filtered = remember(diagnostics, filterLevel, filterQuery) {
@@ -1701,6 +1876,9 @@ private fun ProblemsTabContent(
         ) {
             items(filtered) { diag ->
                 val isErr = diag.severity == DiagnosticSeverity.ERROR
+                val friendly = remember(diag.message, activeLanguage, isGuidedBeginnerMode) {
+                    if (isGuidedBeginnerMode) ErrorPlainEnglishTranslator.translate(diag.message, activeLanguage) else null
+                }
                 Surface(
                     color = if (isErr) Color(0xFF2B1817) else Color(0xFF282319),
                     shape = RoundedCornerShape(10.dp),
@@ -1712,54 +1890,85 @@ private fun ProblemsTabContent(
                         .fillMaxWidth()
                         .clickable { onJumpToLine(diag.line) }
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Row(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.weight(1f)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(
-                                text = if (isErr) "✕ Error" else "▲ Fix/Warn",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isErr) Color(0xFFFF5F56) else Color(0xFFFFBD2E)
-                            )
-                            Text(
-                                text = "Ln ${diag.line}: ${diag.message}",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 11.sp,
-                                color = Color(0xFFE6E1DC),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        if (diag.quickFixLabel != null) {
-                            Surface(
-                                color = Color(0xFFD4883A).copy(alpha = 0.25f),
-                                shape = RoundedCornerShape(999.dp),
-                                border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFD4883A)),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .clickable {
-                                        diag.fixedCode?.let(onApplyQuickFixCode)
-                                    }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
                             ) {
                                 Text(
-                                    text = diag.quickFixLabel,
+                                    text = if (isErr) "✕ Error" else "▲ Fix/Warn",
                                     fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 9.5.sp,
-                                    color = Color(0xFFFFC66D),
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    color = if (isErr) Color(0xFFFF5F56) else Color(0xFFFFBD2E)
                                 )
+                                Text(
+                                    text = "Ln ${diag.line}: ${diag.message}",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFE6E1DC),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            if (diag.quickFixLabel != null) {
+                                Surface(
+                                    color = Color(0xFFD4883A).copy(alpha = 0.25f),
+                                    shape = RoundedCornerShape(999.dp),
+                                    border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFD4883A)),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .clickable {
+                                            diag.fixedCode?.let(onApplyQuickFixCode)
+                                        }
+                                ) {
+                                    Text(
+                                        text = diag.quickFixLabel,
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 9.5.sp,
+                                        color = Color(0xFFFFC66D),
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (friendly != null) {
+                            Surface(
+                                color = Color(0xFF1E1A18),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(7.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = "In Simple Words: ${friendly.headline}",
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF38BDF8)
+                                    )
+                                    Text(
+                                        text = "${friendly.simpleMeaning} How to fix: ${friendly.howToFix}",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFFD5CEC6),
+                                        lineHeight = 14.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -2291,9 +2500,14 @@ private fun AstBytecodeTabContent(
 @Composable
 private fun GitDiffTabContent(
     activeSection: CodeSectionUiModel?,
+    allSections: List<CodeSectionUiModel>,
     snapshots: List<LocalCodeSnapshot>,
+    activeBranch: String,
+    commits: List<LocalGitCommit>,
     onCreateSnapshot: () -> Unit,
-    onRestoreSnapshot: (Long) -> Unit
+    onRestoreSnapshot: (Long) -> Unit,
+    onSwitchBranch: (String) -> Unit,
+    onCreateCommit: (String) -> Unit
 ) {
     var selectedSnapshotId by remember(activeSection?.id, snapshots.size) {
         mutableStateOf(snapshots.firstOrNull()?.id)
@@ -2304,12 +2518,22 @@ private fun GitDiffTabContent(
         val base = selectedSnapshot?.codeContent ?: currentCode
         DiffEngine.computeLineDiff(base, currentCode)
     }
+    val workingTreeStatus = remember(allSections, commits) {
+        AndroidProjectToolkit.computeWorkingTreeStatus(allSections, commits.firstOrNull())
+    }
     val timeFormatter = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
 
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        GitVcsExtendedHeader(
+            activeBranch = activeBranch,
+            commits = commits,
+            workingTreeStatus = workingTreeStatus,
+            onSwitchBranch = onSwitchBranch,
+            onCreateCommit = onCreateCommit
+        )
         // Snapshot & Revision Header Controls
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -2619,6 +2843,12 @@ fun IdeBottomStatusBar(
                     activeColor = Color(0xFF2A9D8F),
                     isActive = isDrawerOpen && activeTab == BottomDrawerTab.UI_PREVIEW,
                     onClick = { onToggleDrawer(BottomDrawerTab.UI_PREVIEW) }
+                )
+                StatusBarQuickPill(
+                    label = "❖ Android",
+                    activeColor = Color(0xFF10B981),
+                    isActive = isDrawerOpen && activeTab == BottomDrawerTab.ANDROID_STUDIO,
+                    onClick = { onToggleDrawer(BottomDrawerTab.ANDROID_STUDIO) }
                 )
                 StatusBarQuickPill(
                     label = "λ REPL",

@@ -228,7 +228,15 @@ fun KtScribeApp(
                         onRunAndGradeLesson = editorViewModel::runAndGradeActiveLesson,
                         onLoadLessonSolution = editorViewModel::loadActiveLessonSolution,
                         onCloseLessonMode = editorViewModel::closeActiveLessonMode,
-                        onOpenQuiz = editorViewModel::openQuizForTrack
+                        onOpenQuiz = editorViewModel::openQuizForTrack,
+                        onToggleGuidedBeginnerMode = editorViewModel::toggleGuidedBeginnerMode,
+                        onToggleRecentFilesDialog = editorViewModel::toggleRecentFilesDialog,
+                        onExecuteShellCommand = editorViewModel::executeVirtualShellCommand,
+                        onRunAndroidBuildPipeline = editorViewModel::runAndroidBuildPipeline,
+                        onCreateGitCommit = editorViewModel::createGitCommit,
+                        onSwitchGitBranch = editorViewModel::switchGitBranch,
+                        onAddManifestPermission = editorViewModel::addManifestPermission,
+                        onCreateStarterFile = editorViewModel::createAndroidStarterFile
                     )
                 }
             }
@@ -252,6 +260,8 @@ fun KtScribeApp(
                     remainingAiQuota = uiState.remainingAiRpmQuota,
                     defaultLanguage = uiState.defaultLanguageForNewFiles,
                     toolchainPlugins = uiState.toolchainPlugins,
+                    isGuidedBeginnerMode = uiState.isGuidedBeginnerMode,
+                    onToggleGuidedBeginnerMode = editorViewModel::toggleGuidedBeginnerMode,
                     onSelectDefaultLanguage = editorViewModel::setDefaultLanguageForNewFiles,
                     onSelectShortcutLetter = editorViewModel::setShortcutLetter,
                     onSelectThemeMode = editorViewModel::setThemeMode,

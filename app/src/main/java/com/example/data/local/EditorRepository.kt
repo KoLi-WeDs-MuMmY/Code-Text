@@ -143,6 +143,14 @@ class EditorRepository(
         prefs.edit().putString(KEY_APP_THEME_ID, theme.name).apply()
     }
 
+    fun getGuidedBeginnerMode(): Boolean {
+        return prefs.getBoolean(KEY_GUIDED_BEGINNER_MODE, true)
+    }
+
+    fun setGuidedBeginnerMode(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_GUIDED_BEGINNER_MODE, enabled).apply()
+    }
+
     suspend fun loadDocumentDetail(documentId: Long): DocumentDetailUiModel? {
         val record = dao.getDocumentWithSectionsOnce(documentId) ?: return null
         return record.toDetailUiModel()
@@ -476,5 +484,6 @@ class EditorRepository(
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_APP_THEME_ID = "app_theme_id"
         private const val KEY_INSTALLED_PLUGINS = "installed_toolchain_plugins"
+        private const val KEY_GUIDED_BEGINNER_MODE = "guided_beginner_mode"
     }
 }

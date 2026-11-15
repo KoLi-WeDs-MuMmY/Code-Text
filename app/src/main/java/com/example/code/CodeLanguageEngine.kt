@@ -135,6 +135,10 @@ object CodeLanguageEngine {
         """(//[^\n]*|/\*[\s\S]*?\*/)|("(?:\\.|[^"\\])*")|('(?:\\.|[^'\\])*')|(\b(?:as|async|await|break|const|continue|crate|dyn|else|enum|extern|false|fn|for|if|impl|in|let|loop|match|mod|move|mut|pub|ref|return|self|Self|static|struct|super|trait|true|type|unsafe|use|where|while)\b)|(\b[A-Z][A-Za-z0-9_]*\b)|(\b\d+(?:\.\d+)?\b)|(#[A-Za-z0-9_!]+)"""
     )
 
+    private val XML_TOKEN_REGEX = Regex(
+        """(<!--[\s\S]*?-->)|("(?:\\.|[^"\\])*")|('(?:\\.|[^'\\])*')|(</?[A-Za-z0-9_.:-]+|/>|>)|(\b[A-Za-z0-9_]+:[A-Za-z0-9_]+\b)|(\b\d+(?:\.\d+)?(?:dp|sp|px)?\b)|(@[A-Za-z0-9_/]+)"""
+    )
+
     /**
      * Highlights code syntax according to the active language type.
      */
@@ -154,6 +158,7 @@ object CodeLanguageEngine {
             LanguageType.DART -> DART_TOKEN_REGEX
             LanguageType.CPP -> CPP_TOKEN_REGEX
             LanguageType.RUST -> RUST_TOKEN_REGEX
+            LanguageType.XML -> XML_TOKEN_REGEX
             LanguageType.KOTLIN -> JAVA_TOKEN_REGEX
         }
 
@@ -222,6 +227,13 @@ object CodeLanguageEngine {
             LanguageType.DART -> DART_SUGGESTIONS
             LanguageType.CPP -> CPP_SUGGESTIONS
             LanguageType.RUST -> RUST_SUGGESTIONS
+            LanguageType.XML -> listOf(
+                KotlinSuggestion("<LinearLayout", "<LinearLayout android:orientation=\"vertical\">\n    |\n</LinearLayout>", "Tag", "LinearLayout container"),
+                KotlinSuggestion("<TextView", "<TextView android:text=\"@string/welcome_title\" />", "Tag", "Text label view"),
+                KotlinSuggestion("<Button", "<Button android:text=\"@string/btn_start\" />", "Tag", "Clickable button"),
+                KotlinSuggestion("<EditText", "<EditText android:hint=\"Enter text...\" />", "Tag", "Input field"),
+                KotlinSuggestion("<uses-permission", "<uses-permission android:name=\"android.permission.INTERNET\" />", "Manifest", "App permission")
+            )
             LanguageType.KOTLIN -> emptyList()
         }
 
@@ -365,6 +377,64 @@ object CodeLanguageEngine {
         var parenCount = 0
         var braceCount = 0
         var bracketCount = 0
+
+        if (language == LanguageType.XML) {
+            var angleBalance = 0
+            var lastOpenAngleLine = 1
+            var inXmlComment = false
+            lines.forEachIndexed { idx, rawLine ->
+                val lineNum = idx + 1
+                var i = 0
+                var inQuote: Char? = null
+                while (i < rawLine.length) {
+                    if (inXmlComment) {
+                        if (rawLine.startsWith("-->", i)) {
+                            inXmlComment = false
+                            i += 3
+                            continue
+                        }
+                        i++
+                        continue
+                    }
+                    val ch = rawLine[i]
+                    if (inQuote != null) {
+                        if (ch == inQuote) inQuote = null
+                        i++
+                        continue
+                    }
+                    if (rawLine.startsWith("<!--", i)) {
+                        inXmlComment = true
+                        i += 4
+                        continue
+                    }
+                    when (ch) {
+                        '"', '\'' -> inQuote = ch
+                        '<' -> {
+                            angleBalance++
+                            lastOpenAngleLine = lineNum
+                        }
+                        '>' -> {
+                            angleBalance = (angleBalance - 1).coerceAtLeast(0)
+                        }
+                    }
+                    i++
+                }
+            }
+            if (angleBalance > 0) {
+                diagnostics.add(
+                    KotlinDiagnostic(
+                        line = lastOpenAngleLine,
+                        startOffset = 0,
+                        endOffset = lines.getOrNull(lastOpenAngleLine - 1)?.trim()?.length ?: 1,
+                        message = "Unclosed XML tag: missing '>' at end of tag",
+                        severity = DiagnosticSeverity.ERROR,
+                        quickFixLabel = "Close '/>'",
+                        fixedCode = (lines.getOrNull(lastOpenAngleLine - 1) ?: "") + " />"
+                    )
+                )
+            }
+            return diagnostics
+        }
 
         lines.forEachIndexed { idx, rawLine ->
             val lineNum = idx + 1
@@ -513,7 +583,7 @@ object CodeLanguageEngine {
                         )
                     }
                 }
-                LanguageType.KOTLIN -> Unit
+                LanguageType.KOTLIN, LanguageType.XML -> Unit
             }
         }
 
@@ -564,6 +634,7 @@ object CodeLanguageEngine {
             LanguageType.CPP -> "Clang/LLVM 18 & LLDB Debugger"
             LanguageType.DART -> "Dart SDK & VM Observatory"
             LanguageType.RUST -> "Rust Cargo & Rust-GDB Toolchain"
+            LanguageType.XML -> "Android AAPT2 & Layout Preview Engine"
         }
 
         val stdinLines = stdinInput.lines().filter { it.isNotEmpty() }.toMutableList()
@@ -685,6 +756,11 @@ object CodeLanguageEngine {
                         appendLine("$fileName:${firstErr.line}:1: ${firstErr.message}")
                         appendLine("\nProcess finished with exit code 1 (compilation failed)")
                     }
+                    LanguageType.XML -> {
+                        appendLine("$ aapt2 compile $fileName")
+                        appendLine("$fileName:${firstErr.line}: error: ${firstErr.message}")
+                        appendLine("\nProcess finished with exit code 1 (resource check failed)")
+                    }
                 }
             }
             val logcat = buildList {
@@ -794,6 +870,7 @@ object CodeLanguageEngine {
             LanguageType.DART -> "$ dart run ${language.defaultFileName}"
             LanguageType.CPP -> "$ g++ ${language.defaultFileName} -o main && ./main"
             LanguageType.RUST -> "$ rustc ${language.defaultFileName} && ./main"
+            LanguageType.XML -> "$ aapt2 validate ${language.defaultFileName}"
         }
 
         val output = buildString {
@@ -802,7 +879,30 @@ object CodeLanguageEngine {
                 appendLine("[stdin] ${stdinLines.joinToString(" | ")}")
             }
             appendLine(cmdHeader)
-            if (interpreterResult.runtimeError != null) {
+            if (language == LanguageType.XML) {
+                val parsedNodes = com.example.learning.DeclarativeUiPreviewParser.parse(code)
+                val widgetSummary = buildList {
+                    fun walk(node: com.example.learning.PreviewUiNode) {
+                        when (node) {
+                            is com.example.learning.PreviewUiNode.ColumnNode -> { add("Column"); node.children.forEach(::walk) }
+                            is com.example.learning.PreviewUiNode.RowNode -> { add("Row"); node.children.forEach(::walk) }
+                            is com.example.learning.PreviewUiNode.CardNode -> { add("CardView"); node.children.forEach(::walk) }
+                            is com.example.learning.PreviewUiNode.TextNode -> add("TextView(${node.text})")
+                            is com.example.learning.PreviewUiNode.ButtonNode -> add("Button(${node.label})")
+                            is com.example.learning.PreviewUiNode.TextFieldNode -> add("EditText(${node.hint})")
+                            is com.example.learning.PreviewUiNode.SwitchNode -> add("Switch(${node.label})")
+                            else -> Unit
+                        }
+                    }
+                    parsedNodes.forEach(::walk)
+                }.joinToString(", ")
+                appendLine("Validated Android XML (${code.lines().size} lines, ${parsedNodes.sumOf { it.nodeCount() }} widget node(s)).")
+                if (widgetSummary.isNotBlank()) {
+                    appendLine("Widgets: $widgetSummary")
+                }
+                appendLine("Open UI Preview or Android drawer tab to inspect live layout & @string/@color resources.")
+                append("\nProcess finished with exit code 0 (XML verified)")
+            } else if (interpreterResult.runtimeError != null) {
                 appendLine("Runtime Error: ${interpreterResult.runtimeError}")
                 append("\nProcess finished with exit code 1 (${interpreterResult.stepsExecuted} steps)")
             } else {
@@ -824,7 +924,7 @@ object CodeLanguageEngine {
             diagnostics.filter { it.severity == DiagnosticSeverity.WARNING }.forEach { warn ->
                 add("W/Linter: Ln ${warn.line}: ${warn.message}")
             }
-            if (interpreterResult.runtimeError != null) {
+            if (interpreterResult.runtimeError != null && language != LanguageType.XML) {
                 add("E/Runtime: ${interpreterResult.runtimeError}")
             } else {
                 add("I/Process: Process finished with exit code 0")
@@ -833,8 +933,8 @@ object CodeLanguageEngine {
 
         return DebugSessionInfo(
             output = output,
-            hasErrors = interpreterResult.runtimeError != null,
-            exitCode = if (interpreterResult.runtimeError != null) 1 else 0,
+            hasErrors = interpreterResult.runtimeError != null && language != LanguageType.XML,
+            exitCode = if (interpreterResult.runtimeError != null && language != LanguageType.XML) 1 else 0,
             variables = mergedVariables,
             diagnostics = diagnostics,
             callStack = mergedCallStack,
@@ -862,6 +962,7 @@ object CodeLanguageEngine {
             LanguageType.CPP -> "g++ \"$cleanName\" -std=c++20 -o main && ./main"
             LanguageType.DART -> "dart run \"$cleanName\""
             LanguageType.RUST -> "rustc \"$cleanName\" -o main && ./main"
+            LanguageType.XML -> "xmllint --noout \"$cleanName\" && echo \"XML valid\""
         }
         return "cat << 'KTSCRIBE_EOF' > \"$cleanName\"\n$code\nKTSCRIBE_EOF\n$runStep"
     }
@@ -962,6 +1063,7 @@ object CodeLanguageEngine {
             LanguageType.CPP -> CPP_AUTO_IMPORTS
             LanguageType.DART -> DART_AUTO_IMPORTS
             LanguageType.RUST -> RUST_AUTO_IMPORTS
+            LanguageType.XML -> emptyMap()
         }
         val lines = code.lines()
         val results = mutableListOf<AutoImportQuickFix>()
@@ -1024,6 +1126,7 @@ object CodeLanguageEngine {
                 LanguageType.PYTHON -> trimmed.startsWith("import ") || trimmed.startsWith("from ")
                 LanguageType.CPP -> trimmed.startsWith("#include")
                 LanguageType.RUST -> trimmed.startsWith("use ")
+                LanguageType.XML -> false
             }
         }
 
@@ -1437,6 +1540,13 @@ object CodeLanguageEngine {
             KotlinLiveTemplate("rs_match", "match", "match", "match | {\n    _ => (),\n}"),
             KotlinLiveTemplate("rs_struct", "struct", "struct", "#[derive(Debug, Clone)]\nstruct | {\n    \n}"),
             KotlinLiveTemplate("rs_for", "for", "for in", "for item in | {\n    println!(\"{:?}\", item);\n}")
+        )
+        LanguageType.XML -> listOf(
+            KotlinLiveTemplate("xml_tv", "tv", "TextView", "<TextView\n    android:text=\"|\"\n    android:textStyle=\"bold\" />"),
+            KotlinLiveTemplate("xml_btn", "btn", "Button", "<Button\n    android:text=\"|\" />"),
+            KotlinLiveTemplate("xml_card", "card", "CardView", "<CardView>\n    <LinearLayout android:orientation=\"vertical\">\n        |\n    </LinearLayout>\n</CardView>"),
+            KotlinLiveTemplate("xml_str", "str", "<string>", "<string name=\"|\">Value</string>"),
+            KotlinLiveTemplate("xml_perm", "perm", "Permission", "<uses-permission android:name=\"android.permission.|\" />")
         )
     }
 }

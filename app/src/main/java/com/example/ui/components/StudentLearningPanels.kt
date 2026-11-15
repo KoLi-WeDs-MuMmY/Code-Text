@@ -28,16 +28,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.AlertDialog
@@ -69,12 +75,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.codeassist.AndroidProjectToolkit
+import com.example.codeassist.AndroidResourceBundle
 import com.example.compiler.VmExecutionState
 import com.example.learning.AutoGradeResult
 import com.example.learning.CodingLesson
 import com.example.learning.ConceptQuizQuestion
 import com.example.learning.DeclarativeUiPreviewParser
+import com.example.learning.ErrorPlainEnglishTranslator
 import com.example.learning.PreviewUiNode
+import com.example.learning.WordMeaning
 import com.example.model.LanguageType
 import com.example.ui.theme.JetBrainsMonoFontFamily
 
@@ -295,7 +305,7 @@ fun MemoryStackVisualizerPanel(
                                             )
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 if (valStr.contains("@")) {
-                                                    Icon(Icons.Default.ArrowForward, contentDescription = "Heap Pointer", tint = Color(0xFF38BDF8), modifier = Modifier.size(11.dp))
+                                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Heap Pointer", tint = Color(0xFF38BDF8), modifier = Modifier.size(11.dp))
                                                 }
                                                 Text(
                                                     text = valStr,
@@ -418,9 +428,12 @@ fun DeclarativeUiPreviewPanel(
     code: String,
     language: LanguageType,
     onInsertTemplateSnippet: (String) -> Unit,
+    resourceBundle: AndroidResourceBundle? = null,
     modifier: Modifier = Modifier
 ) {
-    val parsedNodes = remember(code) { DeclarativeUiPreviewParser.parse(code) }
+    val parsedNodes = remember(code, resourceBundle) {
+        DeclarativeUiPreviewParser.parse(code, resourceBundle)
+    }
     val nodeTotal = remember(parsedNodes) { parsedNodes.sumOf { it.nodeCount() } }
     var tapCount by remember { mutableIntStateOf(0) }
     var switchState by remember { mutableStateOf(true) }
@@ -449,7 +462,11 @@ fun DeclarativeUiPreviewPanel(
                 ) {
                     Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(12.dp))
                     Text(
-                        text = if (language == LanguageType.DART) "Flutter AST Live ($nodeTotal nodes)" else "Compose Live ($nodeTotal nodes)",
+                        text = when {
+                            language == LanguageType.DART -> "Flutter AST Live ($nodeTotal nodes)"
+                            language == LanguageType.XML || code.trimStart().startsWith("<") -> "Android XML Live ($nodeTotal nodes)"
+                            else -> "Compose Live ($nodeTotal nodes)"
+                        },
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 9.5.sp,
                         fontWeight = FontWeight.Bold,
@@ -470,6 +487,8 @@ fun DeclarativeUiPreviewPanel(
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 9.5.sp,
                         color = Color(0xFF10B981),
+                        maxLines = 1,
+                        softWrap = false,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
@@ -482,17 +501,20 @@ fun DeclarativeUiPreviewPanel(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .clickable {
-                        val snippet = if (language == LanguageType.DART) {
-                            "\nWidget buildSample() {\n  return Scaffold(\n    appBar: AppBar(title: Text('Flutter Live')),\n    body: Column(\n      children: [\n        Text('Hello Student UI!'),\n        ElevatedButton(child: Text('Tap Me')),\n      ],\n    ),\n  );\n}\n"
-                        } else {
-                            "\n@Composable\nfun PreviewDemo() {\n    Card {\n        Column {\n            Text(\"Compose Student Card\")\n            Button(onClick = {}) {\n                Text(\"Click Me\")\n            }\n        }\n    }\n}\n"
+                        val snippet = when {
+                            language == LanguageType.DART ->
+                                "\nWidget buildSample() {\n  return Scaffold(\n    appBar: AppBar(title: Text('Flutter Live')),\n    body: Column(\n      children: [\n        Text('Hello Student UI!'),\n        ElevatedButton(child: Text('Tap Me')),\n      ],\n    ),\n  );\n}\n"
+                            language == LanguageType.XML || code.trimStart().startsWith("<") ->
+                                "\n" + AndroidProjectToolkit.defaultActivityMainXml() + "\n"
+                            else ->
+                                "\n@Composable\nfun PreviewDemo() {\n    Card {\n        Column {\n            Text(\"Compose Student Card\")\n            Button(onClick = {}) {\n                Text(\"Click Me\")\n            }\n        }\n    }\n}\n"
                         }
                         onInsertTemplateSnippet(snippet)
                     }
                     .testTag("ui_preview_insert_sample_button")
             ) {
                 Text(
-                    text = "+ Sample UI",
+                    text = if (language == LanguageType.XML) "+ XML Layout" else "+ Sample UI",
                     fontFamily = JetBrainsMonoFontFamily,
                     fontSize = 9.5.sp,
                     fontWeight = FontWeight.Bold,
@@ -533,7 +555,7 @@ fun DeclarativeUiPreviewPanel(
                         ) {
                             Icon(Icons.Default.Code, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
                             Text(
-                                text = "Write Compose (`Card`, `Column`, `Text`, `Button`) or Flutter (`Scaffold`, `Column`, `ElevatedButton`) to preview live.",
+                                text = "Write Compose (`Card`, `Column`, `Text`, `Button`), Flutter (`Scaffold`, `ElevatedButton`), or Android XML (`<LinearLayout>`, `<TextView>`, `<Button>`) to preview live.",
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = 10.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -657,14 +679,16 @@ private fun RenderPreviewUiNode(
                 text = node.text,
                 style = if (node.isTitle) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
                 fontWeight = if (node.isBold || node.isTitle) FontWeight.Bold else FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface
+                color = node.colorArgb?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface
             )
         }
         is PreviewUiNode.ButtonNode -> {
             Button(
                 onClick = onButtonTap,
                 shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = node.backgroundArgb?.let { Color(it) } ?: MaterialTheme.colorScheme.primary
+                )
             ) {
                 Text(node.label, fontWeight = FontWeight.Bold)
             }
@@ -678,6 +702,38 @@ private fun RenderPreviewUiNode(
                 Switch(checked = switchChecked, onCheckedChange = onToggleSwitch)
             }
         }
+        is PreviewUiNode.TextFieldNode -> {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = node.value.ifBlank { node.hint },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (node.value.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)
+                )
+            }
+        }
+        is PreviewUiNode.ImagePlaceholderNode -> {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(10.dp)
+                ) {
+                    Icon(Icons.Default.Image, contentDescription = node.label, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Text(node.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
         is PreviewUiNode.SpacerNode -> Spacer(modifier = Modifier.height(node.heightDp.dp))
         PreviewUiNode.DividerNode -> HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
@@ -688,6 +744,8 @@ private fun RenderPreviewUiNode(
 fun ActiveLessonBannerCard(
     lesson: CodingLesson,
     gradeResult: AutoGradeResult?,
+    isGuidedBeginnerMode: Boolean = true,
+    onToggleGuidedMode: () -> Unit = {},
     onRunAndGrade: () -> Unit,
     onOpenQuiz: () -> Unit,
     onLoadSolution: () -> Unit,
@@ -695,6 +753,12 @@ fun ActiveLessonBannerCard(
     modifier: Modifier = Modifier
 ) {
     var showHint by remember(lesson.id) { mutableStateOf(false) }
+    var showLineByLine by remember(lesson.id) { mutableStateOf(false) }
+    var selectedWord by remember(lesson.id) { mutableStateOf<WordMeaning?>(null) }
+
+    val mergedDictionary = remember(lesson.id) {
+        (lesson.wordDictionary + ErrorPlainEnglishTranslator.globalGlossary).distinctBy { it.term }
+    }
 
     ElevatedCard(
         shape = RoundedCornerShape(16.dp),
@@ -707,7 +771,7 @@ fun ActiveLessonBannerCard(
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -745,14 +809,54 @@ fun ActiveLessonBannerCard(
                     )
                 }
 
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Exit Guided Lesson",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .size(18.dp)
-                        .clickable(onClick = onCloseLessonMode)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Surface(
+                        color = if (isGuidedBeginnerMode) Color(0xFF10B981).copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(999.dp),
+                        border = BorderStroke(
+                            0.75.dp,
+                            if (isGuidedBeginnerMode) Color(0xFF10B981) else MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable(onClick = onToggleGuidedMode)
+                            .testTag("lesson_guided_mode_toggle")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.School,
+                                contentDescription = "Toggle Beginner Guided Mode",
+                                tint = if (isGuidedBeginnerMode) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = if (isGuidedBeginnerMode) "Guided: ON" else "Pro Mode",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isGuidedBeginnerMode) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Exit Guided Lesson",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clickable(onClick = onCloseLessonMode)
+                    )
+                }
             }
 
             Text(
@@ -761,6 +865,208 @@ fun ActiveLessonBannerCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 16.sp
             )
+
+            // BEGINNER-FRIENDLY GUIDED MODE: Real-Life Story + Tap-a-Word Dictionary + Line-by-Line English
+            AnimatedVisibility(visible = isGuidedBeginnerMode) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // 1. Real-Life Analogy Story Card
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("guided_real_life_story_card")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(Icons.Default.AutoStories, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                                Text(
+                                    text = "Real-Life Story: ${lesson.realLifeAnalogy.headline}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Text(
+                                text = lesson.realLifeAnalogy.story,
+                                fontSize = 11.5.sp,
+                                lineHeight = 16.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Code <-> Life: ${lesson.realLifeAnalogy.mappingSummary}",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 9.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // 2. Tap-a-Word Dictionary Strip
+                    if (mergedDictionary.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Icon(Icons.Default.MenuBook, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(13.dp))
+                                Text(
+                                    text = "Tap any coding word to see its everyday meaning:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF38BDF8)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                mergedDictionary.forEach { word ->
+                                    val isSelected = selectedWord?.term == word.term
+                                    Surface(
+                                        color = if (isSelected) Color(0xFF38BDF8).copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        shape = RoundedCornerShape(999.dp),
+                                        border = BorderStroke(
+                                            0.75.dp,
+                                            if (isSelected) Color(0xFF38BDF8) else MaterialTheme.colorScheme.outlineVariant
+                                        ),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .clickable {
+                                                selectedWord = if (isSelected) null else word
+                                            }
+                                    ) {
+                                        Text(
+                                            text = word.term,
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 10.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) Color(0xFF38BDF8) else MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            AnimatedVisibility(visible = selectedWord != null) {
+                                selectedWord?.let { w ->
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = BorderStroke(0.75.dp, Color(0xFF38BDF8).copy(alpha = 0.45f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("word_dictionary_popup")
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(9.dp),
+                                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Text(
+                                                text = "${w.term}  •  ${w.partOfSpeech}",
+                                                fontFamily = JetBrainsMonoFontFamily,
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF38BDF8)
+                                            )
+                                            Text(
+                                                text = w.simpleMeaning,
+                                                fontSize = 11.sp,
+                                                lineHeight = 15.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = "Example: ${w.everydayExample}",
+                                                fontSize = 10.5.sp,
+                                                lineHeight = 15.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 3. Collapsible Line-by-Line English Guide
+                    if (lesson.lineWalkthrough.isNotEmpty()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showLineByLine = !showLineByLine },
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Line-by-Line Plain English (${lesson.lineWalkthrough.size} steps)",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Icon(
+                                        imageVector = if (showLineByLine) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = "Toggle Line Walkthrough",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                AnimatedVisibility(visible = showLineByLine) {
+                                    Column(
+                                        modifier = Modifier.padding(top = 6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        lesson.lineWalkthrough.forEach { step ->
+                                            Surface(
+                                                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(7.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Ln ${step.lineNumber}: ${step.codeLine}",
+                                                        fontFamily = JetBrainsMonoFontFamily,
+                                                        fontSize = 9.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    Text(
+                                                        text = step.plainEnglish,
+                                                        fontSize = 11.sp,
+                                                        lineHeight = 15.sp,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             AnimatedVisibility(visible = showHint) {
                 Surface(

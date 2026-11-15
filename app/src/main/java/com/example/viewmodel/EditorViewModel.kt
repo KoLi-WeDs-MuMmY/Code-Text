@@ -107,7 +107,14 @@ data class EditorUiState(
     val conceptMastery: List<com.example.learning.ConceptMasteryState> = emptyList(),
     val lessonProgressById: Map<String, com.example.learning.LessonProgressState> = emptyMap(),
     val activeQuizTrack: com.example.learning.LearningTrack? = null,
-    val isQuizDialogOpen: Boolean = false
+    val isQuizDialogOpen: Boolean = false,
+    // Beginner-Friendly Guided Mode & CodeAssist Project / VCS / Shell State
+    val isGuidedBeginnerMode: Boolean = true,
+    val recentSectionIds: List<Long> = emptyList(),
+    val showRecentFilesDialog: Boolean = false,
+    val activeGitBranch: String = "main",
+    val localGitCommits: List<com.example.codeassist.LocalGitCommit> = emptyList(),
+    val latestBuildTasks: List<com.example.codeassist.BuildPipelineTask> = emptyList()
 ) {
     fun isLanguageSdkInstalled(language: com.example.model.LanguageType): Boolean {
         val sdkId = com.example.model.ToolchainPluginItem.sdkIdForLanguage(language)
@@ -223,7 +230,8 @@ class EditorViewModel(
             activeAppTheme = repository.getActiveAppTheme(),
             toolchainPlugins = com.example.model.ToolchainPluginItem.defaultCatalog(
                 repository.getInstalledPluginIds()
-            )
+            ),
+            isGuidedBeginnerMode = repository.getGuidedBeginnerMode()
         )
     )
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
@@ -279,7 +287,8 @@ class EditorViewModel(
                     },
                     vaultInspection = vaultInfo,
                     showVaultRecoveryDialog = vaultInfo.isFirstLaunchGatePending,
-                    remainingAiRpmQuota = quota
+                    remainingAiRpmQuota = quota,
+                    recentSectionIds = listOfNotNull(firstSec?.id)
                 )
             }
         }
@@ -763,6 +772,7 @@ class EditorViewModel(
                     } else {
                         com.example.model.BottomDrawerTab.TERMINAL
                     },
+                    recentSectionIds = listOfNotNull(firstSec?.id),
                     aiStatusMessage = "Started lesson: ${lesson.title}"
                 )
             }
@@ -842,6 +852,217 @@ class EditorViewModel(
                     aiStatusMessage = if (correct) "✓ Quiz correct! +35 XP to ${question.conceptTag}" else "Review explanation for ${question.conceptTag}"
                 )
             }
+        }
+    }
+
+    fun toggleGuidedBeginnerMode() {
+        val next = !_uiState.value.isGuidedBeginnerMode
+        repository.setGuidedBeginnerMode(next)
+        _uiState.update {
+            it.copy(
+                isGuidedBeginnerMode = next,
+                aiStatusMessage = if (next) {
+                    "Guided Mode ON: Real-life stories, word dictionary & simple error tips enabled"
+                } else {
+                    "Pro Mode ON: Compact expert IDE layout active"
+                }
+            )
+        }
+    }
+
+    fun toggleRecentFilesDialog(show: Boolean? = null) {
+        _uiState.update { current ->
+            val target = show ?: !current.showRecentFilesDialog
+            current.copy(showRecentFilesDialog = target)
+        }
+    }
+
+    fun executeVirtualShellCommand(command: String) {
+        val state = _uiState.value
+        val doc = state.activeDocument ?: return
+        val activeSec = doc.sections.find { it.id == state.focusedSectionId } ?: doc.sections.firstOrNull()
+        val manifestSummary = com.example.codeassist.AndroidProjectToolkit.parseManifest(
+            doc.sections,
+            doc.title.ifBlank { "KtScribeApp" }
+        )
+        val resourceBundle = com.example.codeassist.AndroidProjectToolkit.parseResources(doc.sections)
+        val shellRes = com.example.codeassist.AndroidProjectToolkit.executeShellCommand(
+            rawCommand = command,
+            sections = doc.sections,
+            activeSection = activeSec,
+            manifestSummary = manifestSummary,
+            resourceBundle = resourceBundle
+        )
+        val isBuildCmd = command.trim().lowercase().let {
+            it.startsWith("gradle") || it.startsWith("./gradlew") || it.startsWith("build")
+        }
+        val tasks = if (isBuildCmd) {
+            com.example.codeassist.AndroidProjectToolkit.runBuildPipeline(doc.sections, activeSec)
+        } else {
+            state.latestBuildTasks
+        }
+        _uiState.update { current ->
+            val nextOutput = if (shellRes.clearedTerminal) {
+                ""
+            } else {
+                val prev = current.terminalExecutionOutput.orEmpty()
+                if (prev.isBlank()) shellRes.outputText else "$prev\n\n${shellRes.outputText}"
+            }
+            current.copy(
+                terminalExecutionOutput = nextOutput,
+                latestBuildTasks = tasks,
+                isBottomDrawerOpen = true,
+                activeBottomDrawerTab = com.example.model.BottomDrawerTab.TERMINAL
+            )
+        }
+    }
+
+    fun runAndroidBuildPipeline() {
+        val state = _uiState.value
+        val doc = state.activeDocument ?: return
+        val activeSec = doc.sections.find { it.id == state.focusedSectionId } ?: doc.sections.firstOrNull()
+        val tasks = com.example.codeassist.AndroidProjectToolkit.runBuildPipeline(doc.sections, activeSec)
+        val allOk = tasks.all { it.succeeded }
+        val logText = buildString {
+            appendLine("$ gradle assembleDebug")
+            tasks.forEach { t ->
+                val tag = if (t.succeeded) "OK" else "FAILED"
+                appendLine("> Task ${t.taskPath} [$tag] (${t.durationMs}ms)")
+                appendLine("  ${t.summary}")
+            }
+            appendLine(
+                if (allOk) "\nBUILD SUCCESSFUL in ${tasks.sumOf { it.durationMs }}ms"
+                else "\nBUILD FAILED — fix errors in Problems tab"
+            )
+        }
+        _uiState.update {
+            it.copy(
+                latestBuildTasks = tasks,
+                terminalExecutionOutput = logText,
+                aiStatusMessage = if (allOk) "✓ Android Build Pipeline succeeded" else "⚠ Build failed in compileDebugKotlin"
+            )
+        }
+    }
+
+    fun createGitCommit(message: String) {
+        val state = _uiState.value
+        val doc = state.activeDocument ?: return
+        val cleanMsg = message.trim().ifBlank { "Update project workspace" }
+        val now = System.currentTimeMillis()
+        val hash = ((now xor cleanMsg.hashCode().toLong()) and 0xFFFFFFL).toString(16).padStart(6, '0')
+        val snapshots = doc.sections.associate { it.id to it.codeContent }
+        val commit = com.example.codeassist.LocalGitCommit(
+            id = now,
+            shortHash = hash,
+            branch = state.activeGitBranch,
+            message = cleanMsg,
+            timestampMs = now,
+            snapshotsBySectionId = snapshots
+        )
+        val updatedSnapMap = state.localSnapshotsBySectionId.toMutableMap()
+        doc.sections.forEach { sec ->
+            val existing = updatedSnapMap[sec.id].orEmpty()
+            val snap = com.example.model.LocalCodeSnapshot(
+                id = now + sec.id,
+                sectionId = sec.id,
+                label = "git[$hash]: $cleanMsg",
+                codeContent = sec.codeContent,
+                timestampMs = now
+            )
+            updatedSnapMap[sec.id] = (listOf(snap) + existing).take(15)
+        }
+        _uiState.update {
+            it.copy(
+                localGitCommits = listOf(commit) + it.localGitCommits,
+                localSnapshotsBySectionId = updatedSnapMap,
+                aiStatusMessage = "✓ Committed [$hash] on ${state.activeGitBranch}: $cleanMsg"
+            )
+        }
+    }
+
+    fun switchGitBranch(branch: String) {
+        val clean = branch.trim().ifBlank { "main" }
+        _uiState.update {
+            it.copy(
+                activeGitBranch = clean,
+                aiStatusMessage = "⎇ Switched Git branch to $clean"
+            )
+        }
+    }
+
+    fun addManifestPermission(permissionFullName: String) {
+        val doc = _uiState.value.activeDocument ?: return
+        val existingManifest = doc.sections.firstOrNull {
+            it.sectionTitle.contains("AndroidManifest", ignoreCase = true) ||
+                it.codeContent.contains("<manifest", ignoreCase = true)
+        }
+        if (existingManifest != null) {
+            val patched = com.example.codeassist.AndroidProjectToolkit.insertPermissionIntoManifest(
+                existingManifest.codeContent,
+                permissionFullName
+            )
+            updateSectionCode(existingManifest.id, patched)
+            _uiState.update {
+                it.copy(aiStatusMessage = "✓ Added ${permissionFullName.substringAfterLast('.')} to AndroidManifest.xml")
+            }
+        } else {
+            val xml = com.example.codeassist.AndroidProjectToolkit.insertPermissionIntoManifest(
+                com.example.codeassist.AndroidProjectToolkit.defaultManifestXml(doc.title.ifBlank { "KtScribeApp" }),
+                permissionFullName
+            )
+            createAndroidStarterFile("AndroidManifest.xml", xml)
+        }
+    }
+
+    fun createAndroidStarterFile(fileName: String, content: String) {
+        val currentDoc = _uiState.value.activeDocument ?: return
+        val existing = currentDoc.sections.firstOrNull {
+            it.nativeFileName.equals(fileName, ignoreCase = true) ||
+                it.sectionTitle.equals(fileName, ignoreCase = true)
+        }
+        if (existing != null) {
+            jumpToSectionConcept(existing.id)
+            return
+        }
+        viewModelScope.launch {
+            recordUndoSnapshot(currentDoc)
+            val newOrderIndex = currentDoc.sections.size
+            val inheritedStyle = _uiState.value.activeFormattingStyle
+            val newSectionId = repository.insertEmptySectionInDb(
+                documentId = currentDoc.id,
+                orderIndex = newOrderIndex,
+                defaultStyle = inheritedStyle
+            )
+            val newSection = CodeSectionUiModel(
+                id = newSectionId,
+                documentId = currentDoc.id,
+                orderIndex = newOrderIndex,
+                sectionTitle = fileName,
+                isAiNamed = false,
+                codeContent = content,
+                explanationText = "Android resource/manifest configuration file ($fileName).",
+                explanationStyle = inheritedStyle.copy(learnedConceptTag = "Android XML & Resources"),
+                showDivider = true,
+                language = com.example.model.LanguageType.XML
+            )
+            val updatedDoc = currentDoc.copy(
+                sections = currentDoc.sections + newSection,
+                updatedAt = System.currentTimeMillis()
+            )
+            _uiState.update { state ->
+                val updatedRecent = (listOf(newSectionId) + state.recentSectionIds.filter { it != newSectionId }).take(10)
+                state.copy(
+                    activeDocument = updatedDoc,
+                    activeTarget = ActiveEditorTarget.SectionCode(newSectionId, newOrderIndex),
+                    isFocusedSingleSectionMode = true,
+                    focusedSectionId = newSectionId,
+                    closedTabSectionIds = state.closedTabSectionIds - newSectionId,
+                    recentSectionIds = updatedRecent,
+                    hasUnsavedChanges = true,
+                    aiStatusMessage = "✓ Created $fileName in project"
+                )
+            }
+            persistActiveDocumentInternal("Saved $fileName to Vault")
         }
     }
 
@@ -1143,7 +1364,9 @@ class EditorViewModel(
                     saveStatusBanner = "Synced to Vault",
                     aiErrorBanner = null,
                     canUndo = false,
-                    canRedo = false
+                    canRedo = false,
+                    recentSectionIds = listOfNotNull(firstSec?.id),
+                    showRecentFilesDialog = false
                 )
             }
         }
@@ -1485,11 +1708,14 @@ class EditorViewModel(
         val doc = _uiState.value.activeDocument ?: return
         val targetSec = doc.sections.find { it.id == sectionId } ?: return
         _uiState.update { state ->
+            val updatedRecent = (listOf(targetSec.id) + state.recentSectionIds.filter { it != targetSec.id }).take(10)
             state.copy(
                 activeTarget = ActiveEditorTarget.SectionCode(targetSec.id, targetSec.orderIndex),
                 isFocusedSingleSectionMode = true,
                 focusedSectionId = targetSec.id,
                 closedTabSectionIds = state.closedTabSectionIds - targetSec.id,
+                recentSectionIds = updatedRecent,
+                showRecentFilesDialog = false,
                 activeIslandDropdown = IslandDropdownMenu.NONE,
                 aiStatusMessage = "Switched to §${targetSec.orderIndex + 1} [${targetSec.effectiveLearnedConceptTag}]"
             )
@@ -1637,6 +1863,7 @@ class EditorViewModel(
                     isFocusedSingleSectionMode = true,
                     focusedSectionId = newSectionId,
                     newlyInsertedSectionId = newSectionId,
+                    recentSectionIds = (listOf(newSectionId) + it.recentSectionIds.filter { id -> id != newSectionId }).take(15),
                     activeIslandDropdown = IslandDropdownMenu.NONE,
                     hasUnsavedChanges = true,
                     secondsUntilAutoSave = EditorUiState.AUTO_SAVE_INTERVAL_SECONDS,

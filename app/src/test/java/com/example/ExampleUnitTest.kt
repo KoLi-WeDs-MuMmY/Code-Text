@@ -778,7 +778,124 @@ class ExampleUnitTest {
             assertTrue(quiz.explanation.isNotBlank())
         }
     }
+
+    @Test
+    fun `AndroidProjectToolkit parses manifest Play warnings resources shell commands and build pipeline`() {
+        val manifestSec = CodeSectionUiModel(
+            id = 1L,
+            sectionTitle = "AndroidManifest.xml",
+            language = LanguageType.XML,
+            codeContent = com.example.codeassist.AndroidProjectToolkit.insertPermissionIntoManifest(
+                com.example.codeassist.AndroidProjectToolkit.defaultManifestXml("StudyBuddy"),
+                "android.permission.READ_MEDIA_IMAGES"
+            )
+        )
+        val stringsSec = CodeSectionUiModel(
+            id = 2L,
+            sectionTitle = "strings.xml",
+            language = LanguageType.XML,
+            codeContent = """<resources><string name="app_name">StudyBuddy</string><string name="hero_title">Learn Android!</string></resources>"""
+        )
+        val colorsSec = CodeSectionUiModel(
+            id = 3L,
+            sectionTitle = "colors.xml",
+            language = LanguageType.XML,
+            codeContent = """<resources><color name="brand_gold">#FFD54F</color></resources>"""
+        )
+        val mainSec = CodeSectionUiModel(
+            id = 4L,
+            sectionTitle = "Main.kt",
+            language = LanguageType.KOTLIN,
+            codeContent = "fun main() {\n    println(\"Hello\")\n}"
+        )
+        val sections = listOf(manifestSec, stringsSec, colorsSec, mainSec)
+
+        val manifestSummary = com.example.codeassist.AndroidProjectToolkit.parseManifest(sections)
+        assertTrue(manifestSummary.hasSourceFile)
+        assertEquals("StudyBuddy", manifestSummary.appLabel)
+        assertTrue(manifestSummary.permissions.any { it.shortName == "INTERNET" })
+        assertTrue(manifestSummary.permissions.any { it.shortName == "READ_MEDIA_IMAGES" && it.isPlayRestricted })
+        assertTrue(manifestSummary.policyWarnings.isNotEmpty())
+
+        val resBundle = com.example.codeassist.AndroidProjectToolkit.parseResources(sections)
+        assertEquals("Learn Android!", resBundle.resolveString("@string/hero_title"))
+        assertEquals(0xFFFFD54FL, resBundle.resolveColorHex("@color/brand_gold"))
+
+        val pipeline = com.example.codeassist.AndroidProjectToolkit.runBuildPipeline(sections, mainSec)
+        assertEquals(6, pipeline.size)
+        assertTrue(pipeline.all { it.succeeded })
+
+        val lsOut = com.example.codeassist.AndroidProjectToolkit.executeShellCommand(
+            "ls", sections, mainSec, manifestSummary, resBundle
+        )
+        assertTrue(lsOut.outputText.contains("Main.kt"))
+        assertTrue(lsOut.outputText.contains("AndroidManifest.xml"))
+
+        val grepOut = com.example.codeassist.AndroidProjectToolkit.executeShellCommand(
+            "grep Hello", sections, mainSec, manifestSummary, resBundle
+        )
+        assertTrue(grepOut.outputText.contains("Main.kt:2"))
+    }
+
+    @Test
+    fun `DeclarativeUiPreviewParser renders Android XML layout tags and resolves string and color resources`() {
+        val resBundle = com.example.codeassist.AndroidProjectToolkit.parseResources(
+            listOf(
+                CodeSectionUiModel(
+                    sectionTitle = "strings.xml",
+                    language = LanguageType.XML,
+                    codeContent = """<resources><string name="welcome_title">Hello Student!</string></resources>"""
+                )
+            )
+        )
+        val layoutXml = """
+            <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical">
+                <TextView android:text="@string/welcome_title" android:textColor="@color/primary" />
+                <EditText android:hint="Type your name" />
+                <Button android:text="Enroll Now" />
+                <Switch android:text="Guided Mode" android:checked="true" />
+                <ImageView android:contentDescription="Hero Graphic" />
+            </LinearLayout>
+        """.trimIndent()
+
+        val nodes = DeclarativeUiPreviewParser.parse(layoutXml, resBundle)
+        assertEquals(1, nodes.size)
+        val rootCol = nodes.first() as PreviewUiNode.ColumnNode
+        assertTrue(rootCol.children.any { it is PreviewUiNode.TextNode && it.text == "Hello Student!" && it.colorArgb != null })
+        assertTrue(rootCol.children.any { it is PreviewUiNode.TextFieldNode && it.hint == "Type your name" })
+        assertTrue(rootCol.children.any { it is PreviewUiNode.ButtonNode && it.label == "Enroll Now" })
+        assertTrue(rootCol.children.any { it is PreviewUiNode.SwitchNode && it.label == "Guided Mode" && it.initialChecked })
+        assertTrue(rootCol.children.any { it is PreviewUiNode.ImagePlaceholderNode && it.label == "Hero Graphic" })
+    }
+
+    @Test
+    fun `ErrorPlainEnglishTranslator and Guided curriculum provide analogies dictionary and XML lesson`() {
+        val translated = com.example.learning.ErrorPlainEnglishTranslator.translate(
+            "Missing ';' at end of statement",
+            LanguageType.JAVA
+        )
+        assertTrue(translated.headline.contains("`;`"))
+        assertTrue(translated.simpleMeaning.contains("period"))
+        assertTrue(com.example.learning.ErrorPlainEnglishTranslator.globalGlossary.isNotEmpty())
+
+        val xmlLesson = StudentCurriculumCatalog.lessonById("xml_android_layout")
+        assertNotNull(xmlLesson)
+        assertEquals(LanguageType.XML, xmlLesson!!.language)
+        assertNotNull(xmlLesson.realLifeAnalogy)
+        assertTrue(xmlLesson.wordDictionary.isNotEmpty())
+        assertTrue(xmlLesson.lineWalkthrough.isNotEmpty())
+
+        val xmlGrade = LessonAutoGrader.grade(xmlLesson, xmlLesson.solutionCode)
+        assertTrue("Expected XML lesson solution to pass auto-grader: ${xmlGrade.testResults}", xmlGrade.isAllPassed)
+
+        StudentCurriculumCatalog.lessons.forEach { lesson ->
+            assertNotNull("Lesson ${lesson.id} should include a real-life analogy", lesson.realLifeAnalogy)
+            assertTrue("Lesson ${lesson.id} should include word dictionary entries", lesson.wordDictionary.isNotEmpty())
+            assertTrue("Lesson ${lesson.id} should include line walkthroughs", lesson.lineWalkthrough.isNotEmpty())
+        }
+    }
 }
+
 
 
 

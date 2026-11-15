@@ -165,6 +165,7 @@ enum class WindowPresetTier(val label: String, val badge: String) {
  */
 enum class BottomDrawerTab(val label: String, val badge: String) {
     TERMINAL("Build & Run", ">_"),
+    ANDROID_STUDIO("Android", "❖"),
     MEMORY_STACK("Memory", "⊞"),
     UI_PREVIEW("UI Preview", "◧"),
     REPL("REPL", "λ"),
@@ -359,7 +360,7 @@ data class ToolchainPluginItem(
         )
 
         fun sdkIdForLanguage(language: LanguageType): String = when (language) {
-            LanguageType.KOTLIN -> "sdk_kotlin"
+            LanguageType.KOTLIN, LanguageType.XML -> "sdk_kotlin"
             LanguageType.JAVA -> "sdk_java"
             LanguageType.PYTHON -> "sdk_python"
             LanguageType.CPP -> "sdk_cpp"
@@ -530,6 +531,17 @@ enum class LanguageType(
         directoryPath = "src/rust/",
         runCommandPrefix = "rustc",
         starterCode = "fn main() {\n    println!(\"Hello Rust!\");\n}"
+    ),
+    XML(
+        id = "xml",
+        displayName = "Android XML",
+        nativeExtension = ".xml",
+        containerExtension = ".xmlscribe",
+        badgeLabel = "XML",
+        defaultFileName = "activity_main.xml",
+        directoryPath = "src/main/res/layout/",
+        runCommandPrefix = "aapt2",
+        starterCode = "<LinearLayout android:orientation=\"vertical\">\n    <TextView android:text=\"@string/welcome_title\" android:textStyle=\"bold\" />\n    <Button android:text=\"@string/btn_start\" />\n</LinearLayout>"
     );
 
     val extension: String get() = nativeExtension
@@ -542,6 +554,7 @@ enum class LanguageType(
         DART -> androidx.compose.ui.graphics.Color(0xFF2A9D8F)
         CPP -> androidx.compose.ui.graphics.Color(0xFF8338EC)
         RUST -> androidx.compose.ui.graphics.Color(0xFFE63946)
+        XML -> androidx.compose.ui.graphics.Color(0xFF10B981)
     }
 
     companion object {
@@ -553,6 +566,8 @@ enum class LanguageType(
                 lower.endsWith(".dart") || lower.endsWith(".dartscribe") -> DART
                 lower.endsWith(".cpp") || lower.endsWith(".cc") || lower.endsWith(".cxx") || lower.endsWith(".cppscribe") -> CPP
                 lower.endsWith(".rs") || lower.endsWith(".rustscribe") -> RUST
+                lower.endsWith(".xml") || lower.endsWith(".xmlscribe") ||
+                    lower.contains("manifest") || lower.contains("strings") || lower.contains("colors") -> XML
                 else -> KOTLIN
             }
         }
@@ -586,11 +601,12 @@ data class CodeSectionUiModel(
                 raw.endsWith(".py", ignoreCase = true) ||
                 raw.endsWith(".dart", ignoreCase = true) ||
                 raw.endsWith(".cpp", ignoreCase = true) ||
-                raw.endsWith(".rs", ignoreCase = true)
+                raw.endsWith(".rs", ignoreCase = true) ||
+                raw.endsWith(".xml", ignoreCase = true)
             if (hasNativeExt) return raw
 
             val stripped = raw
-                .replace(Regex("\\.(?:ktscribe|javascribe|pyscribe|dartscribe|cppscribe|rustscribe)$", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("\\.(?:ktscribe|javascribe|pyscribe|dartscribe|cppscribe|rustscribe|xmlscribe)$", RegexOption.IGNORE_CASE), "")
                 .replace(Regex("^Section\\s*\\d+\\s*[•\\-:]?\\s*", RegexOption.IGNORE_CASE), "")
                 .replace(Regex("[^A-Za-z0-9_\\-]"), "")
                 .take(22)

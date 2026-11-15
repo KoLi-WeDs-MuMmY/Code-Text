@@ -167,4 +167,27 @@
   - Added `ConceptMasteryEntity`, `LessonProgressEntity`, and `QuizAttemptEntity` to Room (`EditorDatabase` version 2) to persist lesson completion, XP, quiz accuracy, and mastery percentages across app restarts.
   - Added `StudentQuizModalDialog` accessible from both the Home Learn Hub (`Quiz Me`) and the Command Palette (`open_quiz`) for multi-track concept micro-quizzes with instant explanations.
 
+---
+
+## 15. CodeAssist Android IDE Suite & Beginner-Friendly Guided Mode
+
+- **Beginner-Friendly Guided Mode Toggle (`EditorRepository`, `EditorViewModel`, `StudentLearningPanels.kt`, `ShortcutAndSettingsDialog.kt`)**:
+  - Dedicated toggle (`Guided: ON` / `Pro Mode`, persisted in `SharedPreferences` and also reachable from `⌘P` and Settings) tailored for first-time student coders.
+  - **Real-Life Story Cards**: Every coding lesson opens with an everyday story (`RealLifeAnalogy` — e.g., a lunchbox variable, a stamp machine loop, an apartment building `LinearLayout`) connecting abstract code to real life.
+  - **Tap-a-Word Dictionary**: Interactive chips for key code words (`fun`, `val`/`var`, `for`, `LinearLayout`, `@string/`) that reveal plain-English definitions and everyday examples on tap.
+  - **Line-by-Line English Guide**: Explains every key line in plain English right inside the Lesson Banner.
+- **Contextual Quick-Fix Lightbulb (`💡`) & Plain-English Error Translator (`learning/ErrorPlainEnglishTranslator.kt`, `KotlinCodeSectionCard.kt`, `IdeBottomDrawer.kt`)**:
+  - Compiler errors and warnings in `KotlinCodeSectionCard` and the `Problems` drawer display an inline `💡 Explain` toggle (expanded automatically when Guided Mode is ON) translating compiler jargon into *"In Simple Words"*, a real-life tip, and how to fix it—alongside 1-tap Quick-Fix code patches.
+- **Android Manifest, Resources & Layout XML Live Previewer (`codeassist/AndroidProjectToolkit.kt`, `DeclarativeUiPreviewParser.kt`, `CodeAssistDrawerPanels.kt`)**:
+  - **Layout XML Live Preview (`LanguageType.XML`, `BottomDrawerTab.UI_PREVIEW`)**: Renders `LinearLayout`, `ConstraintLayout`, `FrameLayout`, `CardView`, `TextView`, `Button`, `EditText`, `Switch`, and `ImageView` directly inside the in-app UI Previewer while resolving `@string/` and `@color/` tokens from workspace resource files.
+  - **`AndroidManifest.xml` Visual Inspector & Google Play Policy Checker (`BottomDrawerTab.ANDROID_STUDIO`)**: Parses package, SDK levels, launcher activities, and declared `<uses-permission>` tags with plain-English meanings, Play policy warnings (e.g., advising `PickVisualMedia` instead of `READ_EXTERNAL_STORAGE`/`READ_MEDIA_IMAGES`), and 1-tap safe permission insertion.
+  - **Values & Resources Explorer**: Indexes `<string>` and `<color>` entries with live color swatch previews, drawable listings, and starter XML file creation (`AndroidManifest.xml`, `activity_main.xml`, `strings.xml`, `colors.xml`).
+  - **Gradle Dependency Browser & Multi-Stage Build Pipeline Log**: Searchable catalog of Jetpack Compose, Room, Coroutines, Retrofit, Coil, Vico, and Firebase libraries with 1-tap `implementation(...)` copy plus `:app:preBuild -> :app:processDebugManifest -> :app:mergeDebugResources -> :app:compileDebugKotlin -> :app:dexBuilderDebug -> :app:packageDebug` task runner.
+- **Virtual Sandbox Terminal Shell (`AndroidProjectToolkit.executeShellCommand`, `IdeBottomDrawer.kt`)**:
+  - Adds a `sh >` sandbox command prompt and quick chips (`ls`, `pwd`, `cat`, `grep`, `wc`, `manifest`, `res`, `gradle assembleDebug`, `help`, `clear`) alongside interactive `stdin >` execution.
+- **Local Git Branches, Staging & Commit History (`CodeAssistDrawerPanels.kt`, `IdeBottomDrawer.kt`)**:
+  - Upgrades `± Git Diff` with `main` / `practice-branch` pills, working-tree file badges (`M`/`A`/`✓`), commit message bar, and local commit snapshot history.
+- **Recent Files Switcher (`Ctrl+E`) & Adaptive Landscape Bar Fix (`DocumentEditorScreen.kt`)**:
+  - `RecentFilesModalDialog` tracks `recentSectionIds` and opens via `Ctrl+E`, Top Bar overflow menu, Command Palette, or Zero-State `Recent Files`, while adding weighted balance on the Landscape Top Bar so `"✓ Indexed"` stays crisp on a single line.
+
 

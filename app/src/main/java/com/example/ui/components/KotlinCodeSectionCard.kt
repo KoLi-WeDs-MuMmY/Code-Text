@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HorizontalRule
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Palette
@@ -216,6 +217,7 @@ fun KotlinCodeSectionCard(
     localSnapshots: List<com.example.model.LocalCodeSnapshot> = emptyList(),
     onCreateSnapshot: () -> Unit = {},
     onRestoreSnapshot: (Long) -> Unit = {},
+    isGuidedBeginnerMode: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val defaultSyntaxColors = com.example.ui.theme.LocalKotlinSyntaxColors.current
@@ -633,9 +635,9 @@ fun KotlinCodeSectionCard(
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                         modifier = Modifier
                             .weight(1f)
+                            .padding(end = 6.dp)
                             .clipToBounds()
                             .horizontalScroll(rememberScrollState())
-                            .padding(end = 6.dp)
                     ) {
                         val breadcrumbSegments = remember(section.language, section.nativeFileName) {
                             listOf("app") +
@@ -2636,83 +2638,178 @@ fun KotlinCodeSectionCard(
                 }
 
                 // =========================================================================
-                // I. REAL-TIME SYNTAX DIAGNOSTICS & 1-TAP QUICK-FIX PANEL
+                // I. REAL-TIME SYNTAX DIAGNOSTICS, LIGHTBULB EXPLAINER & 1-TAP QUICK-FIX
                 // =========================================================================
                 AnimatedVisibility(visible = diagnostics.isNotEmpty()) {
+                    var expandedExplainLines by remember(section.id) { mutableStateOf<Set<String>>(emptySet()) }
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(Color(0xFF281A19))
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                             .testTag("syntax_diagnostics_panel_${section.orderIndex}"),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
-                        diagnostics.take(3).forEach { diag ->
+                        diagnostics.take(3).forEachIndexed { diagIdx, diag ->
                             val isErr = diag.severity == DiagnosticSeverity.ERROR
                             val accent = if (isErr) IdeInlineErrorPillText else MacTrafficYellow
-                            Row(
+                            val diagKey = "${diag.line}_${diag.message}"
+                            val isExplainOpen = diagKey in expandedExplainLines || (isGuidedBeginnerMode && diagIdx == 0)
+                            val friendly = remember(diag.message, section.language) {
+                                com.example.learning.ErrorPlainEnglishTranslator.translate(diag.message, section.language)
+                            }
+                            Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Row(
+                                    modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Icon(
-                                        imageVector = if (isErr) {
-                                            Icons.Default.ErrorOutline
-                                        } else {
-                                            Icons.Default.WarningAmber
-                                        },
-                                        contentDescription = null,
-                                        tint = accent,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Ln ${diag.line}: ${diag.message}",
-                                        fontFamily = JetBrainsMonoFontFamily,
-                                        fontSize = 11.sp,
-                                        color = DarculaBrightText
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isErr) {
+                                                Icons.Default.ErrorOutline
+                                            } else {
+                                                Icons.Default.WarningAmber
+                                            },
+                                            contentDescription = null,
+                                            tint = accent,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Ln ${diag.line}: ${diag.message}",
+                                            fontFamily = JetBrainsMonoFontFamily,
+                                            fontSize = 11.sp,
+                                            color = DarculaBrightText
+                                        )
+                                    }
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        // Contextual Quick-Fix Lightbulb button
+                                        Surface(
+                                            color = if (isExplainOpen) Color(0xFF3E3219) else Color(0xFF2A2420),
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .border(
+                                                    0.8.dp,
+                                                    if (isExplainOpen) Color(0xFFFFC66D) else DarculaBorder,
+                                                    RoundedCornerShape(6.dp)
+                                                )
+                                                .clickable {
+                                                    expandedExplainLines = if (diagKey in expandedExplainLines) {
+                                                        expandedExplainLines - diagKey
+                                                    } else {
+                                                        expandedExplainLines + diagKey
+                                                    }
+                                                }
+                                                .testTag("quick_fix_lightbulb_${section.orderIndex}_$diagIdx")
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Lightbulb,
+                                                    contentDescription = "Explain Error in Plain English",
+                                                    tint = Color(0xFFFFC66D),
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(3.dp))
+                                                Text(
+                                                    text = if (isExplainOpen) "Hide Tip" else "Explain",
+                                                    fontFamily = JetBrainsMonoFontFamily,
+                                                    fontSize = 9.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFFFC66D),
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
+                                            }
+                                        }
+
+                                        if (diag.quickFixLabel != null && diag.fixedCode != null) {
+                                            Surface(
+                                                color = Color(0xFF3A2818),
+                                                shape = RoundedCornerShape(6.dp),
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .border(1.dp, DarculaWarmAmber.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                                                    .clickable {
+                                                        val fixed = diag.fixedCode
+                                                        codeFieldValue = TextFieldValue(
+                                                            text = fixed,
+                                                            selection = TextRange(fixed.length)
+                                                        )
+                                                        onCodeChange(fixed)
+                                                    }
+                                                    .testTag("quick_fix_button_${section.orderIndex}")
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Build,
+                                                        contentDescription = null,
+                                                        tint = DarculaWarmAmber,
+                                                        modifier = Modifier.size(11.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = diag.quickFixLabel,
+                                                        fontFamily = JetBrainsMonoFontFamily,
+                                                        fontSize = 10.5.sp,
+                                                        color = DarculaWarmAmber,
+                                                        fontWeight = FontWeight.Bold,
+                                                        maxLines = 1,
+                                                        softWrap = false
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
 
-                                if (diag.quickFixLabel != null && diag.fixedCode != null) {
+                                AnimatedVisibility(visible = isExplainOpen) {
                                     Surface(
-                                        color = Color(0xFF3A2818),
-                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color(0xFF1F1C18),
+                                        shape = RoundedCornerShape(8.dp),
                                         modifier = Modifier
-                                            .padding(start = 8.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .border(1.dp, DarculaWarmAmber.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                                            .clickable {
-                                                val fixed = diag.fixedCode
-                                                codeFieldValue = TextFieldValue(
-                                                    text = fixed,
-                                                    selection = TextRange(fixed.length)
-                                                )
-                                                onCodeChange(fixed)
-                                            }
-                                            .testTag("quick_fix_button_${section.orderIndex}")
+                                            .fillMaxWidth()
+                                            .border(0.8.dp, Color(0xFF5A482A), RoundedCornerShape(8.dp))
                                     ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Build,
-                                                contentDescription = null,
-                                                tint = DarculaWarmAmber,
-                                                modifier = Modifier.size(11.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
                                             Text(
-                                                text = diag.quickFixLabel,
+                                                text = "💡 In Simple Words: ${friendly.headline}",
                                                 fontFamily = JetBrainsMonoFontFamily,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFFFC66D)
+                                            )
+                                            Text(
+                                                text = friendly.simpleMeaning,
                                                 fontSize = 10.5.sp,
-                                                color = DarculaWarmAmber,
-                                                fontWeight = FontWeight.Bold
+                                                lineHeight = 14.sp,
+                                                color = DarculaBrightText
+                                            )
+                                            Text(
+                                                text = "Fix: ${friendly.howToFix} • (${friendly.realLifeTip})",
+                                                fontSize = 10.sp,
+                                                lineHeight = 13.5.sp,
+                                                color = Color(0xFF81C784)
                                             )
                                         }
                                     }

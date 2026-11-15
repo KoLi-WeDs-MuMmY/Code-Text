@@ -15,7 +15,7 @@ enum class LearningTrack(
         id = "kotlin_android",
         title = "Kotlin & Android Compose",
         shortBadge = "Kotlin",
-        subtitle = "Functions, collections, KtVM bytecode & Compose UI",
+        subtitle = "Functions, Compose, XML & KtVM bytecode",
         accentHex = 0xFFD4883A,
         defaultLanguage = LanguageType.KOTLIN
     ),
@@ -55,6 +55,25 @@ enum class LearningTrack(
     val accentColor: Color get() = Color(accentHex)
 }
 
+data class RealLifeAnalogy(
+    val headline: String,
+    val story: String,
+    val mappingSummary: String
+)
+
+data class WordMeaning(
+    val term: String,
+    val partOfSpeech: String,
+    val simpleMeaning: String,
+    val everydayExample: String
+)
+
+data class LineTranslation(
+    val lineNumber: Int,
+    val codeLine: String,
+    val plainEnglish: String
+)
+
 sealed interface LessonTestAssertion {
     val label: String
 
@@ -92,7 +111,14 @@ data class CodingLesson(
     val stdinInput: String = "",
     val assertions: List<LessonTestAssertion>,
     val xpReward: Int = 50,
-    val supportsUiPreview: Boolean = false
+    val supportsUiPreview: Boolean = false,
+    val realLifeAnalogy: RealLifeAnalogy = RealLifeAnalogy(
+        headline = "Everyday Mental Model",
+        story = "Code breaks big tasks into tiny clear steps just like following a cooking recipe.",
+        mappingSummary = "Each statement executes in order from top to bottom."
+    ),
+    val wordDictionary: List<WordMeaning> = emptyList(),
+    val lineWalkthrough: List<LineTranslation> = emptyList()
 )
 
 data class LessonTestCaseResult(

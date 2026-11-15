@@ -91,6 +91,7 @@ object KotlinCompilerPlugin {
             LanguageType.CPP -> "C++-to-KtVM AST Frontend"
             LanguageType.DART -> "Dart-to-KtVM AST Frontend"
             LanguageType.RUST -> "Rust-to-KtVM AST Frontend"
+            LanguageType.XML -> "Android XML & Manifest AST Parser"
             LanguageType.KOTLIN -> "KtScribe Built-in Kotlin Compiler Plugin v2.2"
         }
 
