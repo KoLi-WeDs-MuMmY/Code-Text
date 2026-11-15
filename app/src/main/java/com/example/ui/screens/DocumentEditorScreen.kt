@@ -232,6 +232,10 @@ fun DocumentEditorScreen(
     onEvaluateRepl: (String) -> Unit = {},
     onClearRepl: () -> Unit = {},
     onReorderEditorTab: (Long, Int) -> Unit = { _, _ -> },
+    onRunAndGradeLesson: () -> Unit = {},
+    onLoadLessonSolution: () -> Unit = {},
+    onCloseLessonMode: () -> Unit = {},
+    onOpenQuiz: (com.example.learning.LearningTrack?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -570,6 +574,21 @@ fun DocumentEditorScreen(
                             )
                         }
                     )
+
+                    val activeLesson = remember(uiState.activeLessonId) {
+                        com.example.learning.StudentCurriculumCatalog.lessonById(uiState.activeLessonId)
+                    }
+                    if (activeLesson != null) {
+                        com.example.ui.components.ActiveLessonBannerCard(
+                            lesson = activeLesson,
+                            gradeResult = uiState.lastAutoGradeResult,
+                            onRunAndGrade = onRunAndGradeLesson,
+                            onOpenQuiz = { onOpenQuiz(activeLesson.track) },
+                            onLoadSolution = onLoadLessonSolution,
+                            onCloseLessonMode = onCloseLessonMode,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
 
                     // Main Code Canvas OR CodeAssist "No file open" Zero-State Screen
                     Box(
@@ -1151,6 +1170,16 @@ fun DocumentEditorScreen(
                                         onSetBottomDrawerTab(BottomDrawerTab.GIT_DIFF)
                                         if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.GIT_DIFF)
                                     }
+                                    "memory_stack" -> {
+                                        onCompileActiveSection(false)
+                                        onSetBottomDrawerTab(BottomDrawerTab.MEMORY_STACK)
+                                        if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.MEMORY_STACK)
+                                    }
+                                    "ui_preview" -> {
+                                        onSetBottomDrawerTab(BottomDrawerTab.UI_PREVIEW)
+                                        if (!uiState.isBottomDrawerOpen) onToggleBottomDrawer(BottomDrawerTab.UI_PREVIEW)
+                                    }
+                                    "open_quiz" -> onOpenQuiz(null)
                                     "display_profile" -> onShowStatusToast(
                                         "Screen: ${adaptive.profile.widthDp}x${adaptive.profile.heightDp}dp (${adaptive.profile.aspectRatioLabel}) -> ${adaptive.themeFileLabel}"
                                     )
@@ -1273,6 +1302,11 @@ fun DocumentEditorScreen(
                 onClearRepl = onClearRepl,
                 onCreateSnapshot = { activeSection?.let { onCreateLocalSnapshot(it.id) } },
                 onRestoreSnapshot = { snapId -> activeSection?.let { onRestoreLocalSnapshot(it.id, snapId) } },
+                onInsertUiSample = { snippet ->
+                    activeSection?.let { sec ->
+                        onUpdateSectionCode(sec.id, sec.codeContent + snippet)
+                    }
+                },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }

@@ -123,12 +123,16 @@ fun KtScribeApp(
                         shortcutLetter = uiState.shortcutLetter,
                         themeMode = uiState.themeMode,
                         toolchainPlugins = uiState.toolchainPlugins,
+                        conceptMastery = uiState.conceptMastery,
+                        lessonProgressById = uiState.lessonProgressById,
                         onSearchQueryChange = editorViewModel::updateSearchQuery,
                         onOpenDocument = editorViewModel::openDocument,
                         onCreateDocument = { editorViewModel.createAndOpenNewDocument() },
                         onCreateDocumentWithTemplate = { title, lang ->
                             editorViewModel.createAndOpenNewDocument(title, lang)
                         },
+                        onStartLesson = editorViewModel::startCodingLesson,
+                        onOpenQuiz = editorViewModel::openQuizForTrack,
                         onDeleteDocument = editorViewModel::deleteDocument,
                         onRenameDocument = editorViewModel::renameFolderById,
                         onCycleThemeMode = cycleThemeMode,
@@ -220,7 +224,11 @@ fun KtScribeApp(
                         onDebugReset = editorViewModel::debugReset,
                         onEvaluateRepl = editorViewModel::evaluateRepl,
                         onClearRepl = editorViewModel::clearRepl,
-                        onReorderEditorTab = editorViewModel::reorderEditorTab
+                        onReorderEditorTab = editorViewModel::reorderEditorTab,
+                        onRunAndGradeLesson = editorViewModel::runAndGradeActiveLesson,
+                        onLoadLessonSolution = editorViewModel::loadActiveLessonSolution,
+                        onCloseLessonMode = editorViewModel::closeActiveLessonMode,
+                        onOpenQuiz = editorViewModel::openQuizForTrack
                     )
                 }
             }
@@ -251,6 +259,14 @@ fun KtScribeApp(
                     onInstallOrTogglePlugin = editorViewModel::installOrTogglePlugin,
                     onInstallAllSdks = editorViewModel::installAllLanguageSdks,
                     onDismiss = { showSettingsDialog = false }
+                )
+            }
+
+            if (uiState.isQuizDialogOpen) {
+                com.example.ui.components.StudentQuizModalDialog(
+                    questions = com.example.learning.StudentCurriculumCatalog.quizzesForTrack(uiState.activeQuizTrack),
+                    onAnswerSubmitted = editorViewModel::submitQuizAnswer,
+                    onDismiss = editorViewModel::dismissQuizDialog
                 )
             }
         }

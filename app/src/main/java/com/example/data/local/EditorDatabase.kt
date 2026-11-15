@@ -6,8 +6,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [DocumentEntity::class, CodeSectionEntity::class],
-    version = 1,
+    entities = [
+        DocumentEntity::class,
+        CodeSectionEntity::class,
+        ConceptMasteryEntity::class,
+        LessonProgressEntity::class,
+        QuizAttemptEntity::class
+    ],
+    version = 2,
     exportSchema = false
 )
 abstract class EditorDatabase : RoomDatabase() {

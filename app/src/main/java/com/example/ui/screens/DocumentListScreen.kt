@@ -121,10 +121,14 @@ fun DocumentListScreen(
     shortcutLetter: Char,
     themeMode: ThemeMode,
     toolchainPlugins: List<ToolchainPluginItem> = emptyList(),
+    conceptMastery: List<com.example.learning.ConceptMasteryState> = emptyList(),
+    lessonProgressById: Map<String, com.example.learning.LessonProgressState> = emptyMap(),
     onSearchQueryChange: (String) -> Unit,
     onOpenDocument: (Long) -> Unit,
     onCreateDocument: () -> Unit,
     onCreateDocumentWithTemplate: (String, LanguageType) -> Unit = { _, _ -> onCreateDocument() },
+    onStartLesson: (com.example.learning.CodingLesson) -> Unit = {},
+    onOpenQuiz: (com.example.learning.LearningTrack?) -> Unit = {},
     onDeleteDocument: (Long) -> Unit,
     onRenameDocument: (Long, String) -> Unit = { _, _ -> },
     onCycleThemeMode: () -> Unit,
@@ -437,6 +441,17 @@ fun DocumentListScreen(
                             totalSdkCount = totalSdkCount,
                             onOpenSdkManager = onOpenSettings,
                             onInstallAllSdks = onInstallAllSdks
+                        )
+                    }
+
+                    // 1.5 Student Learn Hub, Interactive Tracks & Mastery XP
+                    item {
+                        StudentLearnHubCard(
+                            adaptive = adaptive,
+                            conceptMastery = conceptMastery,
+                            lessonProgressById = lessonProgressById,
+                            onStartLesson = onStartLesson,
+                            onOpenQuiz = onOpenQuiz
                         )
                     }
 
@@ -1434,3 +1449,200 @@ private fun EmptyDocumentsCard(onCreateDocument: () -> Unit) {
         }
     }
 }
+
+@Composable
+private fun StudentLearnHubCard(
+    adaptive: AdaptiveThemeSpec,
+    conceptMastery: List<com.example.learning.ConceptMasteryState>,
+    lessonProgressById: Map<String, com.example.learning.LessonProgressState>,
+    onStartLesson: (com.example.learning.CodingLesson) -> Unit,
+    onOpenQuiz: (com.example.learning.LearningTrack?) -> Unit
+) {
+    var selectedTrack by remember { mutableStateOf<com.example.learning.LearningTrack?>(null) }
+    val lessons = remember(selectedTrack) {
+        if (selectedTrack == null) com.example.learning.StudentCurriculumCatalog.lessons
+        else com.example.learning.StudentCurriculumCatalog.lessons.filter { it.track == selectedTrack }
+    }
+    val totalXp = remember(conceptMastery) { conceptMastery.sumOf { it.xp } }
+    val completedCount = remember(lessonProgressById) { lessonProgressById.values.count { it.isCompleted } }
+    val totalLessonCount = com.example.learning.StudentCurriculumCatalog.lessons.size
+
+    ElevatedCard(
+        shape = RoundedCornerShape(adaptive.cardCornerRadius),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f)
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = adaptive.cardElevation),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(0.8.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(adaptive.cardCornerRadius))
+            .testTag("student_learn_hub_card")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(adaptive.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Student Learn Hub & Guided Tracks",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "$completedCount/$totalLessonCount Lessons Completed • $totalXp XP Earned",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Surface(
+                    color = Color(0xFFC084FC).copy(alpha = 0.18f),
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(0.75.dp, Color(0xFFC084FC).copy(alpha = 0.6f)),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable { onOpenQuiz(selectedTrack) }
+                        .testTag("home_open_quiz_button")
+                ) {
+                    Text(
+                        text = "Quiz Me",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE0BAFF),
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            // Track filter row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val allSelected = selectedTrack == null
+                Surface(
+                    color = if (allSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(999.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable { selectedTrack = null }
+                ) {
+                    Text(
+                        text = "All Tracks",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (allSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+
+                com.example.learning.LearningTrack.entries.forEach { track ->
+                    val active = selectedTrack == track
+                    Surface(
+                        color = if (active) track.accentColor.copy(alpha = 0.24f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(999.dp),
+                        border = if (active) BorderStroke(0.8.dp, track.accentColor) else null,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable { selectedTrack = if (active) null else track }
+                    ) {
+                        Text(
+                            text = track.shortBadge,
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (active) track.accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
+
+            // Horizontal carousel of lessons
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                lessons.forEach { lesson ->
+                    val done = lessonProgressById[lesson.id]?.isCompleted == true
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(
+                            width = 0.85.dp,
+                            color = if (done) Color(0xFF10B981) else lesson.track.accentColor.copy(alpha = 0.45f)
+                        ),
+                        modifier = Modifier
+                            .width(210.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { onStartLesson(lesson) }
+                            .testTag("start_lesson_${lesson.id}")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${lesson.language.badgeLabel} • ${lesson.difficulty}",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = lesson.track.accentColor
+                                )
+                                Text(
+                                    text = if (done) "✓ Done" else "+${lesson.xpReward} XP",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (done) Color(0xFF81C784) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                text = lesson.title,
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = if (lesson.supportsUiPreview) "${lesson.conceptTag} • Live UI" else lesson.conceptTag,
+                                fontSize = 9.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

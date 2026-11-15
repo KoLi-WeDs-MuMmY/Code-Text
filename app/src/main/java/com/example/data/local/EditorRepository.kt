@@ -368,6 +368,104 @@ class EditorRepository(
         prefs.edit().putStringSet(KEY_INSTALLED_PLUGINS, ids).apply()
     }
 
+    val allConceptMastery: Flow<List<com.example.learning.ConceptMasteryState>> =
+        dao.observeAllConceptMastery().map { list ->
+            list.map {
+                com.example.learning.ConceptMasteryState(
+                    conceptTag = it.conceptTag,
+                    trackId = it.trackId,
+                    xp = it.xp,
+                    masteryPercent = it.masteryPercent,
+                    completedLessons = it.completedLessons,
+                    passedQuizzes = it.passedQuizzes
+                )
+            }
+        }
+
+    val allLessonProgress: Flow<Map<String, com.example.learning.LessonProgressState>> =
+        dao.observeAllLessonProgress().map { list ->
+            list.associate { entity ->
+                entity.lessonId to com.example.learning.LessonProgressState(
+                    lessonId = entity.lessonId,
+                    trackId = entity.trackId,
+                    passedTests = entity.passedTests,
+                    totalTests = entity.totalTests,
+                    isCompleted = entity.isCompleted,
+                    lastCodeContent = entity.lastCodeContent
+                )
+            }
+        }
+
+    suspend fun recordLessonGrade(
+        lesson: com.example.learning.CodingLesson,
+        gradeResult: com.example.learning.AutoGradeResult,
+        studentCode: String
+    ) {
+        val prevLesson = dao.getLessonProgressOnce(lesson.id)
+        val newlyCompleted = gradeResult.isAllPassed && prevLesson?.isCompleted != true
+        dao.upsertLessonProgress(
+            LessonProgressEntity(
+                lessonId = lesson.id,
+                trackId = lesson.track.id,
+                passedTests = maxOf(prevLesson?.passedTests ?: 0, gradeResult.passedCount),
+                totalTests = gradeResult.totalCount,
+                isCompleted = (prevLesson?.isCompleted == true) || gradeResult.isAllPassed,
+                lastCodeContent = studentCode,
+                completedAt = System.currentTimeMillis()
+            )
+        )
+
+        val prevMastery = dao.getConceptMasteryOnce(lesson.conceptTag)
+        val addedXp = if (newlyCompleted) gradeResult.earnedXp else if (gradeResult.passedCount > 0 && prevMastery == null) 15 else 0
+        val newLessonsCount = (prevMastery?.completedLessons ?: 0) + if (newlyCompleted) 1 else 0
+        val testRatioPercent = if (gradeResult.totalCount > 0) (gradeResult.passedCount * 100) / gradeResult.totalCount else 0
+        val newPercent = maxOf(prevMastery?.masteryPercent ?: 0, if (gradeResult.isAllPassed) 70 else (testRatioPercent / 2)).coerceIn(0, 100)
+
+        dao.upsertConceptMastery(
+            ConceptMasteryEntity(
+                conceptTag = lesson.conceptTag,
+                trackId = lesson.track.id,
+                xp = (prevMastery?.xp ?: 0) + addedXp,
+                masteryPercent = newPercent,
+                completedLessons = newLessonsCount,
+                passedQuizzes = prevMastery?.passedQuizzes ?: 0,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun recordQuizAttempt(
+        question: com.example.learning.ConceptQuizQuestion,
+        selectedIndex: Int
+    ): Boolean {
+        val isCorrect = selectedIndex == question.correctIndex
+        dao.insertQuizAttempt(
+            QuizAttemptEntity(
+                questionId = question.id,
+                conceptTag = question.conceptTag,
+                selectedIndex = selectedIndex,
+                isCorrect = isCorrect,
+                answeredAt = System.currentTimeMillis()
+            )
+        )
+        if (isCorrect) {
+            val prev = dao.getConceptMasteryOnce(question.conceptTag)
+            val updatedPercent = ((prev?.masteryPercent ?: 35) + 30).coerceIn(0, 100)
+            dao.upsertConceptMastery(
+                ConceptMasteryEntity(
+                    conceptTag = question.conceptTag,
+                    trackId = question.track.id,
+                    xp = (prev?.xp ?: 0) + 35,
+                    masteryPercent = updatedPercent,
+                    completedLessons = prev?.completedLessons ?: 0,
+                    passedQuizzes = (prev?.passedQuizzes ?: 0) + 1,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        }
+        return isCorrect
+    }
+
     private fun countWords(text: String): Int {
         if (text.isBlank()) return 0
         return text.trim().split(Regex("\\s+")).count { it.isNotBlank() }

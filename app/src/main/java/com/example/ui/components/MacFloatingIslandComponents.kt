@@ -1564,6 +1564,36 @@ fun CommandPaletteDropdownContent(
             )
             add(
                 PaletteEntry(
+                    id = "cmd_memory_stack",
+                    category = CommandPaletteFilter.COMMANDS,
+                    title = "Visual Memory & Call-Stack Diagram",
+                    subtitle = "Step through live call frames, locals, and heap objects",
+                    icon = Icons.Default.Code,
+                    action = { onExecuteCommand("memory_stack") }
+                )
+            )
+            add(
+                PaletteEntry(
+                    id = "cmd_ui_preview",
+                    category = CommandPaletteFilter.COMMANDS,
+                    title = "Live Compose & Flutter UI Previewer",
+                    subtitle = "Preview Column, Card, Scaffold, Text & Buttons in real time",
+                    icon = Icons.Default.Description,
+                    action = { onExecuteCommand("ui_preview") }
+                )
+            )
+            add(
+                PaletteEntry(
+                    id = "cmd_open_quiz",
+                    category = CommandPaletteFilter.COMMANDS,
+                    title = "Take Concept Mastery Micro-Quiz",
+                    subtitle = "Test Kotlin, Compose, Flutter, Python, C++ & AI concepts",
+                    icon = Icons.Default.School,
+                    action = { onExecuteCommand("open_quiz") }
+                )
+            )
+            add(
+                PaletteEntry(
                     id = "cmd_vault",
                     category = CommandPaletteFilter.COMMANDS,
                     title = "Hidden Vault ('xyz') Recovery & Storage Settings",

@@ -165,6 +165,8 @@ enum class WindowPresetTier(val label: String, val badge: String) {
  */
 enum class BottomDrawerTab(val label: String, val badge: String) {
     TERMINAL("Build & Run", ">_"),
+    MEMORY_STACK("Memory", "⊞"),
+    UI_PREVIEW("UI Preview", "◧"),
     REPL("REPL", "λ"),
     DEBUGGER("Debugger", "🪲"),
     AST_BYTECODE("Bytecode", "⛁"),

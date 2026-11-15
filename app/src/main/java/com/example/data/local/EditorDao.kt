@@ -68,4 +68,25 @@ interface EditorDao {
             insertSection(ordered)
         }
     }
+
+    @Query("SELECT * FROM concept_mastery ORDER BY xp DESC")
+    fun observeAllConceptMastery(): Flow<List<ConceptMasteryEntity>>
+
+    @Query("SELECT * FROM concept_mastery WHERE conceptTag = :conceptTag LIMIT 1")
+    suspend fun getConceptMasteryOnce(conceptTag: String): ConceptMasteryEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertConceptMastery(entity: ConceptMasteryEntity)
+
+    @Query("SELECT * FROM lesson_progress")
+    fun observeAllLessonProgress(): Flow<List<LessonProgressEntity>>
+
+    @Query("SELECT * FROM lesson_progress WHERE lessonId = :lessonId LIMIT 1")
+    suspend fun getLessonProgressOnce(lessonId: String): LessonProgressEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertLessonProgress(entity: LessonProgressEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertQuizAttempt(attempt: QuizAttemptEntity)
 }

@@ -73,7 +73,8 @@ enum class StudioSettingsCategory(val id: String, val label: String, val icon: I
     APPEARANCE("appearance", "Appearance", Icons.Default.Palette),
     EDITOR("editor", "Editor & Caret", Icons.Default.Code),
     SHORTCUTS("shortcuts", "Shortcuts", Icons.Default.Keyboard),
-    VAULT_AI("vault_ai", "Vault & AI", Icons.Default.Security)
+    VAULT_AI("vault_ai", "Vault & AI", Icons.Default.Security),
+    ABOUT_GPL("about_gpl", "GPL-3.0 & Open Source", Icons.Default.CheckCircle)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -653,6 +654,41 @@ fun ShortcutAndSettingsDialog(
                                 fontSize = 10.5.sp,
                                 color = Color(0xFFD4883A),
                                 fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                // =========================================================================
+                // GROUP 6: GPL-3.0 OPEN-SOURCE LICENSE & ATTRIBUTIONS
+                // =========================================================================
+                if (activeCategory == StudioSettingsCategory.ALL || activeCategory == StudioSettingsCategory.ABOUT_GPL) {
+                    IosSettingsGroupCard(
+                        headerTitle = "OPEN-SOURCE LICENSE (GNU GPL-3.0) & LEGAL COMPLIANCE",
+                        headerSubtitle = "Student-first open-source hybrid architecture with transparent upstream attribution"
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text(
+                                text = "• License: GNU General Public License v3.0 or later (GPL-3.0-or-later).",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF81C784)
+                            )
+                            Text(
+                                text = "• Architecture: Native Material 3 Jetpack Compose UI + Screen-Ratio Theme Engine + built-in KotlinCompilerPlugin & KtBytecodeVm (zero remote compiler server required).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFC5BEB6)
+                            )
+                            Text(
+                                text = "• Play Store Safety: Zero dynamic .jar/.dex/.so binary downloads (W^X & DCL compliant). Optional bare-metal builds use Termux/desktop project export.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFC5BEB6)
+                            )
+                            Text(
+                                text = "• Attribution Policy: Any CodeAssist (tyron12233/CodeAssist, GPL-3.0) SPI or compiler modules included in full source releases retain original copyright headers and public GPL-3.0 source.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFA39C93)
                             )
                         }
                     }

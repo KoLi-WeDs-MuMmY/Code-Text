@@ -100,7 +100,14 @@ data class EditorUiState(
     val vmDebugState: com.example.compiler.VmExecutionState? = null,
     val vmTrace: List<com.example.compiler.VmExecutionState> = emptyList(),
     val vmTraceIndex: Int = -1,
-    val replHistory: List<com.example.compiler.ReplHistoryEntry> = emptyList()
+    val replHistory: List<com.example.compiler.ReplHistoryEntry> = emptyList(),
+    // Student Learning Hub, Auto-Grader, Memory Diagram & Concept Mastery State
+    val activeLessonId: String? = null,
+    val lastAutoGradeResult: com.example.learning.AutoGradeResult? = null,
+    val conceptMastery: List<com.example.learning.ConceptMasteryState> = emptyList(),
+    val lessonProgressById: Map<String, com.example.learning.LessonProgressState> = emptyMap(),
+    val activeQuizTrack: com.example.learning.LearningTrack? = null,
+    val isQuizDialogOpen: Boolean = false
 ) {
     fun isLanguageSdkInstalled(language: com.example.model.LanguageType): Boolean {
         val sdkId = com.example.model.ToolchainPluginItem.sdkIdForLanguage(language)
@@ -274,6 +281,16 @@ class EditorViewModel(
                     showVaultRecoveryDialog = vaultInfo.isFirstLaunchGatePending,
                     remainingAiRpmQuota = quota
                 )
+            }
+        }
+        viewModelScope.launch {
+            repository.allConceptMastery.collect { list ->
+                _uiState.update { it.copy(conceptMastery = list) }
+            }
+        }
+        viewModelScope.launch {
+            repository.allLessonProgress.collect { progressMap ->
+                _uiState.update { it.copy(lessonProgressById = progressMap) }
             }
         }
         startThirtySecondAutoSaveTicker()
@@ -692,6 +709,139 @@ class EditorViewModel(
             val item = list.removeAt(idx)
             list.add(targetIdx, item)
             doc.copy(sections = list.mapIndexed { i, s -> s.copy(orderIndex = i) })
+        }
+    }
+
+    fun startCodingLesson(lesson: com.example.learning.CodingLesson) {
+        viewModelScope.launch {
+            val savedCode = _uiState.value.lessonProgressById[lesson.id]?.lastCodeContent
+                ?.takeIf { it.isNotBlank() } ?: lesson.starterCode
+            val docId = repository.createNewDocument(
+                title = "Lesson: ${lesson.title}",
+                withStarterSection = true
+            )
+            val loaded = repository.loadDocumentDetail(docId) ?: return@launch
+            val starterFileName = if (lesson.language == com.example.model.LanguageType.JAVA) "Main.java" else "main${lesson.language.nativeExtension}"
+            val updatedSections = loaded.sections.mapIndexed { idx, sec ->
+                if (idx == 0) {
+                    sec.copy(
+                        sectionTitle = starterFileName,
+                        codeContent = savedCode,
+                        explanationText = "Concept: ${lesson.conceptTag}\n\n${lesson.instructions}",
+                        language = lesson.language,
+                        explanationStyle = sec.explanationStyle.copy(learnedConceptTag = lesson.conceptTag)
+                    )
+                } else {
+                    sec
+                }
+            }
+            val preparedDoc = loaded.copy(
+                introText = lesson.instructions,
+                sections = updatedSections
+            )
+            repository.saveDocumentDetail(preparedDoc)
+            val savedDoc = repository.loadDocumentDetail(docId) ?: preparedDoc
+            val firstSec = savedDoc.sections.firstOrNull()
+            undoStack.clear()
+            redoStack.clear()
+            _uiState.update { current ->
+                current.copy(
+                    activeDocument = savedDoc,
+                    focusedSectionId = firstSec?.id,
+                    isFocusedSingleSectionMode = firstSec != null,
+                    activeTarget = if (firstSec != null) {
+                        ActiveEditorTarget.SectionCode(firstSec.id, 0)
+                    } else {
+                        ActiveEditorTarget.Intro
+                    },
+                    activeLessonId = lesson.id,
+                    lastAutoGradeResult = null,
+                    terminalStdinInput = lesson.stdinInput,
+                    isBottomDrawerOpen = lesson.supportsUiPreview,
+                    activeBottomDrawerTab = if (lesson.supportsUiPreview) {
+                        com.example.model.BottomDrawerTab.UI_PREVIEW
+                    } else {
+                        com.example.model.BottomDrawerTab.TERMINAL
+                    },
+                    aiStatusMessage = "Started lesson: ${lesson.title}"
+                )
+            }
+        }
+    }
+
+    fun runAndGradeActiveLesson() {
+        val state = _uiState.value
+        val lesson = com.example.learning.StudentCurriculumCatalog.lessonById(state.activeLessonId) ?: return
+        val doc = state.activeDocument ?: return
+        val activeSec = doc.sections.find { it.id == state.focusedSectionId } ?: doc.sections.firstOrNull() ?: return
+
+        val gradeResult = com.example.learning.LessonAutoGrader.grade(lesson, activeSec.codeContent)
+
+        // Also capture KtVM compilation + trace so Memory & Call-Stack Visualizer is populated immediately
+        var artifact = state.latestCompilation
+        var vmState = state.vmDebugState
+        var vmTrace = state.vmTrace
+        var vmIdx = state.vmTraceIndex
+        if (lesson.language == com.example.model.LanguageType.KOTLIN) {
+            val compiled = com.example.compiler.KotlinCompilerPlugin.compile(activeSec.codeContent, lesson.language)
+            artifact = compiled
+            if (compiled.success) {
+                val stdinLines = if (lesson.stdinInput.isBlank()) emptyList() else lesson.stdinInput.lines()
+                val session = com.example.compiler.KtBytecodeVm.DebugSession(compiled, stdinLines)
+                val finalState = session.runToEnd()
+                val trace = session.getTrace()
+                activeDebugSession = session
+                vmState = trace.lastOrNull() ?: finalState
+                vmTrace = trace
+                vmIdx = if (trace.isNotEmpty()) trace.lastIndex else -1
+            }
+        }
+
+        _uiState.update { current ->
+            current.copy(
+                lastAutoGradeResult = gradeResult,
+                terminalExecutionOutput = gradeResult.stdoutPreview.ifBlank { gradeResult.summaryBanner },
+                latestCompilation = artifact,
+                vmDebugState = vmState,
+                vmTrace = vmTrace,
+                vmTraceIndex = vmIdx,
+                aiStatusMessage = gradeResult.summaryBanner
+            )
+        }
+
+        viewModelScope.launch {
+            repository.recordLessonGrade(lesson, gradeResult, activeSec.codeContent)
+        }
+    }
+
+    fun loadActiveLessonSolution() {
+        val state = _uiState.value
+        val lesson = com.example.learning.StudentCurriculumCatalog.lessonById(state.activeLessonId) ?: return
+        val targetId = state.focusedSectionId ?: state.activeDocument?.sections?.firstOrNull()?.id ?: return
+        updateSectionCode(targetId, lesson.solutionCode)
+        _uiState.update { it.copy(aiStatusMessage = "Loaded reference solution for ${lesson.title}") }
+    }
+
+    fun closeActiveLessonMode() {
+        _uiState.update { it.copy(activeLessonId = null, lastAutoGradeResult = null) }
+    }
+
+    fun openQuizForTrack(track: com.example.learning.LearningTrack? = null) {
+        _uiState.update { it.copy(activeQuizTrack = track, isQuizDialogOpen = true) }
+    }
+
+    fun dismissQuizDialog() {
+        _uiState.update { it.copy(isQuizDialogOpen = false) }
+    }
+
+    fun submitQuizAnswer(question: com.example.learning.ConceptQuizQuestion, selectedIndex: Int) {
+        viewModelScope.launch {
+            val correct = repository.recordQuizAttempt(question, selectedIndex)
+            _uiState.update {
+                it.copy(
+                    aiStatusMessage = if (correct) "✓ Quiz correct! +35 XP to ${question.conceptTag}" else "Review explanation for ${question.conceptTag}"
+                )
+            }
         }
     }
 

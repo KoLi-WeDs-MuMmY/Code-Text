@@ -141,6 +141,7 @@ fun IdeBottomDrawer(
     onClearRepl: () -> Unit = {},
     onCreateSnapshot: () -> Unit = {},
     onRestoreSnapshot: (Long) -> Unit = {},
+    onInsertUiSample: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val adaptive = LocalAdaptiveThemeSpec.current
@@ -259,6 +260,24 @@ fun IdeBottomDrawer(
                             badgeColor = Color(0xFFD4883A),
                             onClick = { onTabSelected(BottomDrawerTab.TERMINAL) },
                             testTag = "drawer_tab_terminal"
+                        )
+
+                        BottomDrawerTabChip(
+                            label = "Memory",
+                            badgeText = if (vmTrace.isNotEmpty()) "${vmTrace.size}" else "⊞",
+                            isSelected = activeTab == BottomDrawerTab.MEMORY_STACK,
+                            badgeColor = Color(0xFF38BDF8),
+                            onClick = { onTabSelected(BottomDrawerTab.MEMORY_STACK) },
+                            testTag = "drawer_tab_memory"
+                        )
+
+                        BottomDrawerTabChip(
+                            label = "UI Preview",
+                            badgeText = "◧",
+                            isSelected = activeTab == BottomDrawerTab.UI_PREVIEW,
+                            badgeColor = Color(0xFF2A9D8F),
+                            onClick = { onTabSelected(BottomDrawerTab.UI_PREVIEW) },
+                            testTag = "drawer_tab_ui_preview"
                         )
 
                         BottomDrawerTabChip(
@@ -645,6 +664,26 @@ fun IdeBottomDrawer(
                                 stdinInput = stdinInput,
                                 onUpdateStdinInput = onUpdateStdinInput,
                                 onRunWithInput = onRunCode
+                            )
+                        }
+                        BottomDrawerTab.MEMORY_STACK -> {
+                            MemoryStackVisualizerPanel(
+                                vmDebugState = vmDebugState,
+                                vmTrace = vmTrace,
+                                vmTraceIndex = vmTraceIndex,
+                                fallbackVariables = debugInfo?.variables.orEmpty(),
+                                fallbackCallStack = debugInfo?.callStack.orEmpty(),
+                                onStartOrResumeTrace = onDebugResumeVm,
+                                onStepNext = onDebugStepOverVm,
+                                onResetTrace = onDebugResetVm,
+                                onJumpToLine = onJumpToLine
+                            )
+                        }
+                        BottomDrawerTab.UI_PREVIEW -> {
+                            DeclarativeUiPreviewPanel(
+                                code = activeSection?.codeContent.orEmpty(),
+                                language = activeLanguage,
+                                onInsertTemplateSnippet = onInsertUiSample
                             )
                         }
                         BottomDrawerTab.REPL -> {
@@ -2568,6 +2607,18 @@ fun IdeBottomStatusBar(
                     activeColor = Color(0xFFD4883A),
                     isActive = isDrawerOpen && activeTab == BottomDrawerTab.TERMINAL,
                     onClick = { onToggleDrawer(BottomDrawerTab.TERMINAL) }
+                )
+                StatusBarQuickPill(
+                    label = "⊞ Memory",
+                    activeColor = Color(0xFF38BDF8),
+                    isActive = isDrawerOpen && activeTab == BottomDrawerTab.MEMORY_STACK,
+                    onClick = { onToggleDrawer(BottomDrawerTab.MEMORY_STACK) }
+                )
+                StatusBarQuickPill(
+                    label = "◧ UI Preview",
+                    activeColor = Color(0xFF2A9D8F),
+                    isActive = isDrawerOpen && activeTab == BottomDrawerTab.UI_PREVIEW,
+                    onClick = { onToggleDrawer(BottomDrawerTab.UI_PREVIEW) }
                 )
                 StatusBarQuickPill(
                     label = "λ REPL",

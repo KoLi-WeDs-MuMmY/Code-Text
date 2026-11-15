@@ -11,6 +11,10 @@ import com.example.compiler.KotlinCompilerPlugin
 import com.example.compiler.KtBytecodeVm
 import com.example.compiler.OpCode
 import com.example.data.local.VaultStorageManager
+import com.example.learning.DeclarativeUiPreviewParser
+import com.example.learning.LessonAutoGrader
+import com.example.learning.PreviewUiNode
+import com.example.learning.StudentCurriculumCatalog
 import com.example.model.CodeSectionUiModel
 import com.example.model.EditorFontChoice
 import com.example.model.LanguageType
@@ -685,6 +689,96 @@ class ExampleUnitTest {
         assertEquals("ExpandedTabletTheme.kt", tabletSpec.themeFileLabel)
         assertEquals(3, tabletSpec.gridColumns)
     }
+
+    @Test
+    fun `LessonAutoGrader passes solution code and flags incomplete starter code across tracks`() {
+        val ktLesson = StudentCurriculumCatalog.lessonById("kt_loops_stack")!!
+        val ktStarterGrade = LessonAutoGrader.grade(ktLesson, ktLesson.starterCode)
+        assertFalse(ktStarterGrade.isAllPassed)
+        assertEquals(0, ktStarterGrade.earnedXp)
+
+        val ktSolutionGrade = LessonAutoGrader.grade(ktLesson, ktLesson.solutionCode)
+        assertTrue(
+            "Expected Kotlin lesson solution to pass all checks: ${ktSolutionGrade.testResults}",
+            ktSolutionGrade.isAllPassed
+        )
+        assertEquals(ktLesson.xpReward, ktSolutionGrade.earnedXp)
+
+        val pyLesson = StudentCurriculumCatalog.lessonById("py_even_sum")!!
+        val pyStarterGrade = LessonAutoGrader.grade(pyLesson, pyLesson.starterCode)
+        assertFalse(pyStarterGrade.isAllPassed)
+
+        val pySolutionGrade = LessonAutoGrader.grade(pyLesson, pyLesson.solutionCode)
+        assertTrue(
+            "Expected Python lesson solution with stdin=8 to pass: ${pySolutionGrade.testResults}",
+            pySolutionGrade.isAllPassed
+        )
+        assertEquals(pyLesson.xpReward, pySolutionGrade.earnedXp)
+    }
+
+    @Test
+    fun `DeclarativeUiPreviewParser parses Jetpack Compose and Flutter widget trees`() {
+        val composeCode = """
+            @Composable
+            fun Demo() {
+                Card {
+                    Column {
+                        Text("Student Profile")
+                        Button(onClick = {}) {
+                            Text("Enroll")
+                        }
+                        Switch(checked = true, onCheckedChange = {})
+                    }
+                }
+            }
+        """.trimIndent()
+        val composeTree = DeclarativeUiPreviewParser.parse(composeCode)
+        assertTrue(composeTree.isNotEmpty())
+        val cardNode = composeTree.first() as PreviewUiNode.CardNode
+        val colNode = cardNode.children.first() as PreviewUiNode.ColumnNode
+        assertTrue(colNode.children.any { it is PreviewUiNode.TextNode && it.text == "Student Profile" })
+        assertTrue(colNode.children.any { it is PreviewUiNode.ButtonNode && it.label == "Enroll" })
+        assertTrue(colNode.children.any { it is PreviewUiNode.SwitchNode && it.initialChecked })
+
+        val flutterCode = """
+            Widget buildApp() {
+              return Scaffold(
+                appBar: AppBar(title: Text('Study App')),
+                body: Column(
+                  children: [
+                    Text('Module 1'),
+                    ElevatedButton(child: Text('Start')),
+                  ],
+                ),
+              );
+            }
+        """.trimIndent()
+        val flutterTree = DeclarativeUiPreviewParser.parse(flutterCode)
+        assertTrue(flutterTree.isNotEmpty())
+        val scaffoldNode = flutterTree.first() as PreviewUiNode.ScaffoldNode
+        assertEquals("Study App", scaffoldNode.title)
+        assertTrue(scaffoldNode.nodeCount() >= 4)
+    }
+
+    @Test
+    fun `StudentCurriculumCatalog lessons and concept quizzes have valid metadata and assertions`() {
+        assertTrue(StudentCurriculumCatalog.lessons.size >= 5)
+        StudentCurriculumCatalog.lessons.forEach { lesson ->
+            assertTrue("Lesson ${lesson.id} must have assertions", lesson.assertions.isNotEmpty())
+            assertTrue("Lesson ${lesson.id} must have positive XP", lesson.xpReward > 0)
+            assertTrue("Lesson ${lesson.id} solution must be non-blank", lesson.solutionCode.isNotBlank())
+        }
+
+        assertTrue(StudentCurriculumCatalog.quizzes.size >= 5)
+        StudentCurriculumCatalog.quizzes.forEach { quiz ->
+            assertTrue(
+                "Quiz ${quiz.id} correctIndex out of range",
+                quiz.correctIndex in quiz.options.indices
+            )
+            assertTrue(quiz.explanation.isNotBlank())
+        }
+    }
 }
+
 
 

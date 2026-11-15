@@ -50,3 +50,35 @@ data class DocumentWithSections(
     )
     val sections: List<CodeSectionEntity>
 )
+
+@Entity(tableName = "concept_mastery")
+data class ConceptMasteryEntity(
+    @PrimaryKey val conceptTag: String,
+    val trackId: String,
+    val xp: Int = 0,
+    val masteryPercent: Int = 0,
+    val completedLessons: Int = 0,
+    val passedQuizzes: Int = 0,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "lesson_progress")
+data class LessonProgressEntity(
+    @PrimaryKey val lessonId: String,
+    val trackId: String,
+    val passedTests: Int = 0,
+    val totalTests: Int = 0,
+    val isCompleted: Boolean = false,
+    val lastCodeContent: String = "",
+    val completedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "quiz_attempts")
+data class QuizAttemptEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val questionId: String,
+    val conceptTag: String,
+    val selectedIndex: Int,
+    val isCorrect: Boolean,
+    val answeredAt: Long = System.currentTimeMillis()
+)

@@ -23,40 +23,53 @@ KtScribe is a desktop-grade mobile IDE and dual-layer code editor built with Jet
 ## 2. Directory Structure & Component Responsibilities
 
 ```
+LICENSE                                  # GNU General Public License v3.0 (GPL-3.0-or-later)
+OPEN_SOURCE_NOTICES.md                   # Clean-room attribution & third-party open-source license inventory
 app/src/main/java/com/example/
 ├── compiler/
-│   ├── CompilerModels.kt         # Lexer tokens, AST nodes, KtVM opcodes, CompilationArtifact & ReplHistoryEntry
-│   ├── KotlinCompilerPlugin.kt   # Bundled 4-stage Kotlin compiler (Lexer -> Parser -> Semantic -> Bytecode Emitter)
-│   └── KtBytecodeVm.kt           # Stack-based KtVM, DebugSession (breakpoints/step/trace), & persistent ReplSession
+│   ├── CompilerModels.kt                # Lexer tokens, AST nodes, KtVM opcodes, CompilationArtifact & ReplHistoryEntry
+│   ├── KotlinCompilerPlugin.kt          # Bundled 4-stage Kotlin compiler (Lexer -> Parser -> Semantic -> Bytecode Emitter)
+│   └── KtBytecodeVm.kt                  # Stack-based KtVM, DebugSession (breakpoints/step/trace), & persistent ReplSession
+├── learning/
+│   ├── LearningModels.kt                # LearningTrack, CodingLesson, LessonTestAssertion, AutoGradeResult, ConceptQuizQuestion
+│   ├── StudentCurriculumCatalog.kt      # Multi-track student lessons (Kotlin/Compose, Flutter/Dart, Python, C++, AI Logic) & quizzes
+│   ├── LessonAutoGrader.kt              # On-device auto-grader running Kotlin via KtBytecodeVm & other langs via CodeLanguageEngine
+│   └── DeclarativeUiPreviewParser.kt    # Safe Compose & Flutter/Dart widget tree AST parser for live in-app UI preview
+├── data/local/
+│   ├── EditorEntities.kt                # Room v2 entities: Documents, CodeSections, ConceptMasteryEntity, LessonProgressEntity, QuizAttemptEntity
+│   ├── EditorDao.kt                     # Room DAOs for project folders/sections and student concept mastery/quizzes
+│   ├── EditorDatabase.kt                # Room database (v2) registering workspace & learning persistence tables
+│   └── EditorRepository.kt              # Repository coordinating local vault storage, Room CRUD & XP/mastery tracking
 ├── model/
-│   └── EditorModels.kt           # Domain models, LanguageType, WindowPresetTier, BottomDrawerTab, LocalCodeSnapshot
+│   └── EditorModels.kt                  # Domain models, LanguageType, WindowPresetTier, BottomDrawerTab, LocalCodeSnapshot
 ├── viewmodel/
-│   └── EditorViewModel.kt        # Central state holder (EditorUiState), KtVM debug/REPL/diff actions, tab reorder
+│   └── EditorViewModel.kt               # Central state holder (EditorUiState), compiler/VM/REPL/diff + lesson grading & quiz state
 ├── code/
-│   ├── CodeLanguageEngine.kt     # Multi-language diagnostics, formatting, snippets & AST/VM execution bridge
-│   ├── KotlinCodeEngine.kt       # Deep Kotlin lexer, syntax diagnostics (diagnoseKotlinSyntax), symbols
-│   ├── BracketPairColorizer.kt   # Depth-aware rainbow bracket colorizer + cursor pair & unmatched highlights
-│   ├── DiffEngine.kt             # Pure Kotlin LCS line diff engine powering Visual Git Diff & History
-│   └── OnDeviceInterpreter.kt    # Companion multi-language AST statement/expression interpreter
+│   ├── CodeLanguageEngine.kt            # Multi-language diagnostics, formatting, snippets & AST/VM execution bridge
+│   ├── KotlinCodeEngine.kt              # Deep Kotlin lexer, syntax diagnostics (diagnoseKotlinSyntax), symbols
+│   ├── BracketPairColorizer.kt          # Depth-aware rainbow bracket colorizer + cursor pair & unmatched highlights
+│   ├── DiffEngine.kt                    # Pure Kotlin LCS line diff engine powering Visual Git Diff & History
+│   └── OnDeviceInterpreter.kt           # Companion multi-language AST statement/expression interpreter
 ├── ui/
 │   ├── components/
-│   │   ├── KotlinCodeSectionCard.kt   # Core code editor, TextLayoutResult-locked gutter, bracket coloring, autocomplete
-│   │   ├── IdeBottomDrawer.kt         # Bottom drawer (Terminal, Problems, Debugger, Logcat, REPL, Bytecode/AST, Git Diff)
+│   │   ├── KotlinCodeSectionCard.kt     # Core code editor, TextLayoutResult-locked gutter, bracket coloring, autocomplete
+│   │   ├── IdeBottomDrawer.kt           # Bottom drawer (Terminal, Problems, Debugger, Logcat, REPL, Bytecode/AST, Git Diff, Memory/Stack, UI Preview)
+│   │   ├── StudentLearningPanels.kt     # MemoryStackVisualizerPanel, DeclarativeUiPreviewPanel, ActiveLessonBannerCard, StudentQuizModalDialog
 │   │   ├── MacFloatingIslandComponents.kt # Top bar pills, Left circular IDE rail, viewport-clamped MIUI floating windows
-│   │   ├── FileSettingsDialog.kt      # File settings (confirmation-guarded language switcher, Android Share/Copy export)
-│   │   ├── ShortcutAndSettingsDialog.kt # Categorized M3 Settings, Built-in Kotlin Compiler Plugin status, Display Profile
+│   │   ├── FileSettingsDialog.kt        # File settings (confirmation-guarded language switcher, Android Share/Copy export)
+│   │   ├── ShortcutAndSettingsDialog.kt # Categorized M3 Settings, Built-in Kotlin Compiler Plugin, Screen Profile & GPL-3.0 Attribution
 │   │   └── ModernFloatingMeshBackground.kt # Adaptive ambient background
 │   ├── screens/
-│   │   ├── DocumentListScreen.kt      # Adaptive Project Home (M3 NavigationRail on wide screens, ModalBottomSheet/grid)
-│   │   └── DocumentEditorScreen.kt    # Main workspace, portrait overflow/sheet adaptation, Fuzzy Command Palette
+│   │   ├── DocumentListScreen.kt        # Adaptive Project Home + StudentLearnHubCard (tracks, XP, Quiz Me)
+│   │   └── DocumentEditorScreen.kt      # Main workspace, portrait overflow/sheet adaptation, Fuzzy Command Palette & Lesson Banner
 │   └── theme/
-│       ├── ScreenProfile.kt           # Zero-permission WindowMetrics/DisplayMetrics classifier & AdaptiveThemeSpec
-│       ├── CompactPortraitTheme.kt    # Narrow portrait phone theme specs
-│       ├── CompactLandscapeTheme.kt   # Landscape phone theme specs
-│       ├── MediumFoldableTheme.kt     # Foldable / 600dp+ medium theme specs
-│       ├── ExpandedTabletTheme.kt     # Tablet / 840dp+ expanded theme specs
+│       ├── ScreenProfile.kt             # Zero-permission WindowMetrics/DisplayMetrics classifier & AdaptiveThemeSpec
+│       ├── CompactPortraitTheme.kt      # Narrow portrait phone theme specs
+│       ├── CompactLandscapeTheme.kt     # Landscape phone theme specs
+│       ├── MediumFoldableTheme.kt       # Foldable / 600dp+ medium theme specs
+│       ├── ExpandedTabletTheme.kt       # Tablet / 840dp+ expanded theme specs
 │       ├── Theme.kt, AppThemeId.kt, Color.kt & Type.kt # M3 tonal dark/light schemes + 6 IDE palettes
-└── MainActivity.kt                    # Entry point, BoxWithConstraints ScreenRatioClassifier, Compose navigation
+└── MainActivity.kt                      # Entry point, BoxWithConstraints ScreenRatioClassifier, Compose navigation & Quiz dialog
 ```
 
 ---
@@ -66,17 +79,20 @@ app/src/main/java/com/example/
 | File | What It Does | When to Modify |
 |---|---|---|
 | `compiler/KotlinCompilerPlugin.kt` & `KtBytecodeVm.kt` | Bundled 4-stage Kotlin compiler (`compile`) + stack VM (`DebugSession`, `ReplSession`). | Extending Kotlin syntax parsing, bytecode opcodes, or VM debugging/REPL. |
+| `learning/StudentCurriculumCatalog.kt` & `LessonAutoGrader.kt` | 5-track student curriculum, concept quizzes, and deterministic on-device auto-grader. | Adding lessons, test assertions, tracks, or quiz questions. |
+| `learning/DeclarativeUiPreviewParser.kt` & `ui/components/StudentLearningPanels.kt` | Compose/Flutter AST preview parser, Memory & Call-Stack visualizer, Lesson banner, & Quiz modal. | Extending supported UI preview widgets or memory/stack diagram visuals. |
+| `data/local/EditorDatabase.kt` & `EditorRepository.kt` | Room v2 database storing documents, sections, `ConceptMasteryEntity`, `LessonProgressEntity`, & `QuizAttemptEntity`. | Adding persistent tables or changing Room schema version. |
 | `code/BracketPairColorizer.kt` & `DiffEngine.kt` | Depth-aware bracket pair highlighting & LCS line diffing (`computeLineDiff`). | Adjusting bracket depth colors or snapshot diff visualization. |
 | `ui/theme/ScreenProfile.kt` & `*Theme.kt` | Zero-permission aspect-ratio classifier + 4 screen-size theme files (`CompactPortrait`, `CompactLandscape`, `MediumFoldable`, `ExpandedTablet`). | Tuning responsive padding, rail vs bottom sheet behavior, or typography scaling per screen tier. |
 | `model/EditorModels.kt` | Defines `CodeSectionUiModel`, `DocumentDetailUiModel`, `LanguageType`, `WindowPresetTier`, `BottomDrawerTab`, `LocalCodeSnapshot`. | Adding new languages, extensions, window presets, or bundle formats. |
-| `viewmodel/EditorViewModel.kt` | Manages `EditorUiState`, undo/redo, KtVM debug/REPL/compile state, snapshot restore, tab reordering, and status toasts. | Adding new state mutations, actions, or document commands. |
+| `viewmodel/EditorViewModel.kt` | Manages `EditorUiState`, undo/redo, KtVM debug/REPL/compile state, lesson grading, quiz submission, snapshot restore, tab reordering, and status toasts. | Adding new state mutations, actions, or document commands. |
 | `code/CodeLanguageEngine.kt` | Multi-language syntax parsing, autocomplete, formatting, and AST/VM execution bridge. | Adding snippets, syntax rules, or compiler diagnostic logic. |
 | `code/KotlinCodeEngine.kt` | Tokenizer and Kotlin-specific syntax rules, bracket counting, and diagnostic generation (`diagnoseKotlinSyntax`). | Improving Kotlin syntax analysis or symbol detection. |
 | `ui/components/KotlinCodeSectionCard.kt` | Text editing surface with `BasicTextField`, `TextLayoutResult`-synchronized gutter, bracket colorizer, inline breadcrumb + `Ln/Col`, and suggestions. | Adjusting font metrics, cursor positions, or gutter alignment. |
 | `ui/components/FileSettingsDialog.kt` | File Settings modal with confirmation-guarded language switching (`pendingLanguageChange`) and `exportOrCopyCodePayload`. | Updating per-file settings, export formats, or language switch warnings. |
-| `ui/components/IdeBottomDrawer.kt` | Sliding bottom drawer containing Terminal, Problems, Debugger, Logcat, REPL, Bytecode/AST, and Git Diff tabs. | Adding debugger features, bytecode views, or REPL/diff controls. |
+| `ui/components/IdeBottomDrawer.kt` | Sliding bottom drawer containing Terminal, Problems, Debugger, Logcat, REPL, Bytecode/AST, Git Diff, Memory/Stack, and UI Preview tabs. | Adding debugger features, bytecode views, or REPL/diff/learning controls. |
 | `ui/components/MacFloatingIslandComponents.kt` | Top Bar primary pills, Left Circular IDE Rail, and viewport-clamped MIUI floating windows. | Tweaking top bar pills, left rail tools, or floating window geometry. |
-| `ui/screens/DocumentEditorScreen.kt` | Adaptive workspace with portrait overflow menu + `ModalBottomSheet`, reorderable tabs, Fuzzy Command Palette, and bottom drawer. | Changing overall screen layout, adding dialogs, or keyboard shortcuts. |
+| `ui/screens/DocumentEditorScreen.kt` | Adaptive workspace with portrait overflow menu + `ModalBottomSheet`, reorderable tabs, Fuzzy Command Palette, Lesson Banner, and bottom drawer. | Changing overall screen layout, adding dialogs, or keyboard shortcuts. |
 | `IDE.md` | Feature registry tracking implemented and upcoming IDE features. | **Must be updated every time IDE features are added or planned.** |
 
 ---
@@ -183,4 +199,21 @@ app/src/main/java/com/example/
 - `BracketPairColorizer`: Rainbow depth styling + cursor pair highlight + unmatched red highlighting while preserving 1:1 `TextLayoutResult` gutter synchronization.
 - `DocumentEditorScreen`: Subsequence fuzzy `⌘P` Command Palette + reorderable multi-file project tabs (`◀`/`▶` + `+` language menu).
 - `IdeBottomDrawer`: `REPL`, `AST_BYTECODE` (Bytecode vs AST/Symbols segmented viewer), and `GIT_DIFF` (`DiffEngine.computeLineDiff` LCS visual diff against `LocalCodeSnapshot`s with create/restore controls).
+
+---
+
+## 14. GPL-3.0 Hybrid Student Learning Suite & Clean-Room Compliance
+
+### 14.1 GNU GPL-3.0-or-Later & Play-Safe Hybrid Architecture
+- KtScribe adopts **GNU GPL-3.0-or-later** (`/LICENSE` + `/OPEN_SOURCE_NOTICES.md` + `StudioSettingsCategory.ABOUT_GPL`) and keeps a **Modular Hybrid Architecture**: Compose M3 UI, screen-ratio theme engine, `KtBytecodeVm`, and bundled multi-language AST engines remain KtScribe-native rather than wholesale-copying legacy XML `CodeAssist` views or downloading Play-restricted `.dex`/`.jar` binaries.
+
+### 14.2 Interactive Curriculum, On-Device Auto-Grader & Concept Mastery (`learning/`, `data/local/`)
+- `StudentCurriculumCatalog`: 5 learning tracks (`KOTLIN_ANDROID`, `FLUTTER_DART`, `PYTHON_DSA`, `SYSTEMS_CPP_RUST`, `AI_PROMPT_LOGIC`) with interactive starter/solution code, hints, assertions, and micro-quizzes.
+- `LessonAutoGrader`: Grades Kotlin submissions via `KotlinCompilerPlugin` + `KtBytecodeVm.DebugSession` and other languages via `CodeLanguageEngine.executeAndDebug`.
+- `EditorDatabase` (v2): Stores `ConceptMasteryEntity`, `LessonProgressEntity`, and `QuizAttemptEntity` via `EditorDao` and `EditorRepository` (`recordLessonGrade`, `recordQuizAttempt`).
+
+### 14.3 Memory/Call-Stack Diagram & Live UI Preview (`StudentLearningPanels.kt`)
+- `MemoryStackVisualizerPanel` (`BottomDrawerTab.MEMORY_STACK`): Visualizes active Call Stack frames, live stack variables, and tracked Heap objects from `DebugSession` / interpreter runs.
+- `DeclarativeUiPreviewParser` + `DeclarativeUiPreviewPanel` (`BottomDrawerTab.UI_PREVIEW`): Safely renders Jetpack Compose and Flutter/Dart UI widget trees (`Scaffold`, `AppBar`, `Card`, `Column`, `Row`, `Box`, `Text`, `Button`, `Switch`, `Divider`, `Spacer`) in-app as live Material 3 previews.
+
 

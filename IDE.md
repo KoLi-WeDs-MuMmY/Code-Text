@@ -63,12 +63,12 @@
 
 ## 🔮 Upcoming Features Queue (Next to Implement)
 
-1. **Interactive Call-Graph & Memory Allocation Flame Chart**:
-   - Visual timeline of function entry/exit depth and heap object allocations produced by `KtBytecodeVm`.
-2. **Gradle / Kotlin Multiplatform Project Export (.zip)**:
-   - Export multi-file `.xScribe` project folders as ready-to-build Gradle Kotlin projects.
-3. **Snippet & Live-Template Cloud/File Sharing**:
-   - Import/export custom user-defined live templates and syntax themes via `.json` via the Android Photo/File Picker.
+1. **Gradle / Kotlin Multiplatform & Flutter Project Export (.zip)**:
+   - Export multi-file `.xScribe` project folders as ready-to-build Gradle Kotlin or Flutter templates.
+2. **Snippet & Live-Template Sharing**:
+   - Import/export custom user-defined live templates and syntax themes via `.json` using the zero-permission Android Photo/File Picker.
+3. **Interactive Call-Graph Flame Timeline**:
+   - Zoomable horizontal flame timeline charting cumulative loop iterations and nested call-frame durations from `KtBytecodeVm`.
 
 
 ---
@@ -146,4 +146,25 @@
   - **Live Kotlin REPL Console (`IdeBottomDrawer.kt`, `KtBytecodeVm.ReplSession`)**: Persistent interactive Kotlin REPL drawer tab (`λ REPL`) retaining variables, functions, and data classes across evaluations with inferred return types and compiled op counts.
   - **AST & Bytecode Inspector (`IdeBottomDrawer.kt`)**: Inspects compiled `KtVM` instructions (`pc`, `OpCode`, operand, line), constant pool, `ProgramAst` summary, and typed symbol table with live `activePc` highlighting and click-to-jump-line navigation.
   - **Multi-File Reorderable Tabs & Visual Git Diff History (`DocumentEditorScreen.kt`, `IdeBottomDrawer.kt`, `DiffEngine.kt`)**: Tab bar supports `◀`/`▶` reordering and `+` language quick-picker; `± Git Diff` tab runs LCS line diffing (`DiffEngine.computeLineDiff`) between `LocalCodeSnapshot` revisions and the active editor buffer with 1-tap snapshot creation and restore.
+
+---
+
+## 14. GPL-3.0 Hybrid Student Learning Suite (Auto-Grader, Memory/Stack Visualizer, Live UI Preview & Mastery Quizzes)
+
+- **GNU GPL-3.0 Open-Source Licensing & Attribution Architecture (`/LICENSE`, `/OPEN_SOURCE_NOTICES.md`, `ShortcutAndSettingsDialog.kt`)**:
+  - Adopts a **Modular Hybrid Architecture on KtScribe** licensed under **GNU GPL-3.0-or-later** rather than wholesale-copying legacy XML `CodeAssist` views, preserving KtScribe's Compose/M3 adaptive UI, zero-server `KtBytecodeVm`, and Google Play dynamic-code-loading safety.
+  - Added root `LICENSE`, `OPEN_SOURCE_NOTICES.md`, and an in-app **`GPL-3.0 & Open-Source Attribution`** category (`StudioSettingsCategory.ABOUT_GPL`) inside Studio Settings displaying license terms, dependency notices, and Termux export safety guidance.
+- **Multi-Track Student Curriculum & On-Device Auto-Grader (`learning/LearningModels.kt`, `learning/StudentCurriculumCatalog.kt`, `learning/LessonAutoGrader.kt`)**:
+  - Ships curated interactive lessons across **5 student tracks**: Kotlin/Android Compose (`kt_loops_stack`, `kt_compose_ui_card`), Flutter/Dart (`dart_flutter_widget`), Python DSA (`py_even_sum`), C++/Systems (`cpp_factorial_loop`), and On-Device AI Logic (`ai_classifier_rule`).
+  - `LessonAutoGrader` compiles and executes Kotlin submissions through `KotlinCompilerPlugin` + `KtBytecodeVm` and companion languages through `CodeLanguageEngine`, checking `ExitCodeZero`, `ContainsStdout`, `VariableEquals`, and `NonEmptyOutput` assertions with per-assertion feedback and XP awards.
+  - Workspace displays `ActiveLessonBannerCard` above the editor with collapsible hints, `Grade Solution`, `Solution`, and `Quiz Me` controls, plus `StudentLearnHubCard` on `DocumentListScreen` with track filters, XP counter, and completed lesson badges.
+- **Visual Memory & Call-Stack Diagram (`BottomDrawerTab.MEMORY_STACK`, `StudentLearningPanels.kt`)**:
+  - Interactive diagram panel visualizing live **Call Stack Frames**, **Stack Variables / Operands**, and **Heap Objects** captured from the active debug/run trace, complete with step/run controls and variable badges.
+- **Live In-App Jetpack Compose & Flutter/Dart UI Previewer (`learning/DeclarativeUiPreviewParser.kt`, `BottomDrawerTab.UI_PREVIEW`, `StudentLearningPanels.kt`)**:
+  - `DeclarativeUiPreviewParser` converts Kotlin `@Composable` (`Card`, `Column`, `Row`, `Box`, `Text`, `Button`, `Switch`, `Divider`, `Spacer`) and Flutter/Dart (`Scaffold`, `AppBar`, `Column`, `Row`, `ElevatedButton`, `Text`, `Container`) code into interactive Material 3 `PreviewUiNode` trees directly inside the editor drawer—zero APK rebuilds or dynamic binary loading required.
+  - Includes 1-tap `Compose Sample` and `Flutter Sample` insertion pills for rapid UI experimentation.
+- **Student Progress Quizzes & Persistent Room Mastery (`data/local/EditorEntities.kt`, `EditorDao.kt`, `EditorDatabase.kt` v2, `EditorRepository.kt`)**:
+  - Added `ConceptMasteryEntity`, `LessonProgressEntity`, and `QuizAttemptEntity` to Room (`EditorDatabase` version 2) to persist lesson completion, XP, quiz accuracy, and mastery percentages across app restarts.
+  - Added `StudentQuizModalDialog` accessible from both the Home Learn Hub (`Quiz Me`) and the Command Palette (`open_quiz`) for multi-track concept micro-quizzes with instant explanations.
+
 
